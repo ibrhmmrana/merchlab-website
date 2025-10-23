@@ -5,7 +5,7 @@ export async function getCategories(): Promise<string[]> {
   const supabase = createServerClient();
   const { data } = await supabase.rpc("get_catalog_facets");
   const facets = Array.isArray(data) ? data[0] : data;
-  const cats = (facets?.categories ?? []) as any[];
+  const cats = (facets?.categories ?? []) as (string | { value?: string; count?: number })[];
   
   // Handle both string arrays and object arrays with {count, value} structure
   const processedCats = cats.map(cat => {

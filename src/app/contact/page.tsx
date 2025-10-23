@@ -3,8 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, Settings, UserCheck, Hexagon, ChevronDown } from 'lucide-react';
-import SmartImage from '@/components/SmartImage';
+import { Hexagon, ChevronDown } from 'lucide-react';
 
 export default function ContactPage() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -76,8 +75,8 @@ export default function ContactPage() {
 
             {/* Closing Statement */}
             <p className="text-lg text-gray-700">
-              We'd love to learn more about your business and how we can support you. Book a call or complete the form, 
-              and we'll be in touch shortly.
+              We&apos;d love to learn more about your business and how we can support you. Book a call or complete the form, 
+              and we&apos;ll be in touch shortly.
             </p>
           </div>
 

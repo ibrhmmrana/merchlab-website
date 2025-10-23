@@ -43,7 +43,7 @@ export default function SuccessNotification() {
         </h3>
         
         <p className="text-sm text-gray-500 mb-6">
-          Thank you for your interest! We've received your quote request and will be in touch shortly with pricing and availability.
+          Thank you for your interest! We&apos;ve received your quote request and will be in touch shortly with pricing and availability.
         </p>
         
         <button

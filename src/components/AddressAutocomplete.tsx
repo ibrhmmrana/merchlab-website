@@ -64,8 +64,8 @@ export default function AddressAutocomplete({ value, onChange, onAddressParsed, 
 
             try {
               // Create a more comprehensive mapping of all address components
-              const comps = new Map();
-              place.address_components.forEach((component: any) => {
+              const comps = new Map<string, string>();
+              place.address_components.forEach((component: google.maps.places.PlaceResult['address_components'][0]) => {
                 component.types.forEach((type: string) => {
                   comps.set(type, component.long_name);
                 });

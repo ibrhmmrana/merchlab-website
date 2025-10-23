@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 
 interface CategoryChipsProps {
-  categories: any[];
+  categories: (string | { value?: string; name?: string })[];
   selected: string | null;
   onSelect: (category: string | null) => void;
 }

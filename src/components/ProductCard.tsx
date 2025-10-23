@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import type { ProductGroup, Variant } from "@/lib/data/types";
 import { getVariantsForGroup, getColourImagesForGroup } from "@/lib/data/products";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/store/cart";
 import VariantModal from "@/components/VariantModal";
 import ColorSwatch from "@/components/ColorSwatch";
@@ -67,35 +66,8 @@ function generateColorSvg(colorName: string): string {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
-function buildColourOptions(variants: Variant[]): ColourOption[] {
-  const map = new Map<string, ColourOption>();
-  for (const v of variants) {
-    const key = (v.colour || "default").trim();
-    const cur = map.get(key);
-    if (cur) {
-      if (v.size && !cur.sizes.includes(v.size)) cur.sizes.push(v.size);
-      // prefer a non-null image_url
-      if (!cur.image_url && v.image_url) cur.image_url = v.image_url;
-    } else {
-      map.set(key, { name: key, image_url: v.image_url ?? null, sizes: v.size ? [v.size] : [] });
-    }
-  }
-  
-  // Sort sizes for each color option
-  const options = Array.from(map.values());
-  options.forEach(option => {
-    option.sizes = sortSizes(option.sizes);
-  });
-  
-  return options.sort((a, b) => a.name.localeCompare(b.name));
-}
 
 export default function ProductCard({ group }: Props) {
-  // Don't render if product has no stock
-  if (group.in_stock <= 0) {
-    return null;
-  }
-
   const [variants, setVariants] = useState<Variant[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -118,7 +90,6 @@ export default function ProductCard({ group }: Props) {
   const [preview, setPreview] = useState<string | null>(group.representative_image_url ?? null);
   const colorContainerRef = useRef<HTMLDivElement>(null);
   const sizeContainerRef = useRef<HTMLDivElement>(null);
-  const [scrollPosition, setScrollPosition] = useState(0);
   const [showToast, setShowToast] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -150,6 +121,11 @@ export default function ProductCard({ group }: Props) {
     }
   }, [sizesForSelected, selectedSize]);
 
+  // Don't render if product has no stock - moved after all hooks
+  if (group.in_stock <= 0) {
+    return null;
+  }
+
   async function loadColours() {
     if (colourMap || coloursLoading) return;
     setColoursLoading(true);
@@ -165,7 +141,7 @@ export default function ProductCard({ group }: Props) {
       console.error("Failed to load color images, generating fallback colors:", e);
       // Fallback: generate color-specific images from group.colours
       if (group.colours && group.colours.length > 0) {
-        const fallbackOpts = group.colours.map((color, index) => ({
+        const fallbackOpts = group.colours.map((color) => ({
           name: typeof color === 'string' ? color : (color?.value || color?.name || String(color)),
           image_url: generateColorSvg(typeof color === 'string' ? color : (color?.value || color?.name || String(color))),
           sizes: sortSizes(group.sizes || [])

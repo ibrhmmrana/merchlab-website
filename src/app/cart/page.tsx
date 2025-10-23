@@ -3,7 +3,6 @@ import { useCartStore, getCartItemKey } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { Minus, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useHasHydrated } from "@/lib/hooks/useHasHydrated";
 import SmartImage from "@/components/SmartImage";
@@ -238,8 +237,9 @@ export default function CartPage() {
       
       // Redirect to home page
       window.location.href = '/';
-    } catch (e: any) {
-      setMsg(e.message || "Something went wrong.");
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : "Something went wrong.";
+      setMsg(errorMessage);
     } finally {
       setSubmitting(false);
     }

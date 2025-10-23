@@ -12,7 +12,7 @@ export default function PrivacyPage() {
 
           <div className="prose prose-lg max-w-none">
             <p className="text-gray-700 leading-relaxed mb-8">
-              Thank you for being part of the MerchLab community. We are committed to protecting your privacy and ensuring your personal information is handled properly, lawfully, and transparently. This notice explains how MerchLab obtains, uses, and discloses your personal information, in accordance with the Protection of Personal Information Act ("POPIA") and GDPR.
+              Thank you for being part of the MerchLab community. We are committed to protecting your privacy and ensuring your personal information is handled properly, lawfully, and transparently. This notice explains how MerchLab obtains, uses, and discloses your personal information, in accordance with the Protection of Personal Information Act (&quot;POPIA&quot;) and GDPR.
             </p>
 
             <section className="mb-8">
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
                 What Information We Collect
               </h2>
               <p className="text-gray-700 leading-relaxed mb-4">
-                We collect personal information directly from you when you register through our online portal, place orders, or interact with our services. We'll let you know what information is required and what is optional.
+                We collect personal information directly from you when you register through our online portal, place orders, or interact with our services. We&apos;ll let you know what information is required and what is optional.
               </p>
               <p className="text-gray-700 leading-relaxed mb-4">
                 We may also collect website usage information using cookies.
@@ -88,7 +88,7 @@ export default function PrivacyPage() {
                     Online Identifiers:
                   </h3>
                   <p className="text-gray-700">
-                    IP addresses, cookie identifiers, device's geolocation, and other similar data used for analytics and marketing.
+                    IP addresses, cookie identifiers, device&apos;s geolocation, and other similar data used for analytics and marketing.
                   </p>
                 </div>
               </div>

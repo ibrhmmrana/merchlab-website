@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 export default function DebugPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {

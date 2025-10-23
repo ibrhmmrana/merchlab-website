@@ -21,8 +21,8 @@ export default function SmartImage({ src, alt, className, ...rest }: Props){
     return <div className={`w-full h-full grid place-items-center text-xs text-gray-400 ${className||""}`}>No image</div>;
   }
   if (allowed && !fallback) {
-    // @ts-ignore onError passes to underlying <img>
-    return <NextImage src={src} alt={alt} onError={()=>setFallback(true)} className={className} {...rest} />;
+    return <NextImage src={src} alt={alt} className={className} {...rest} />;
   }
+  // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} alt={alt} className={`object-cover ${className||""}`} style={{width:"100%",height:"100%"}} onError={()=>setFallback(true)} />;
 }

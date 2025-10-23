@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const hasKey = Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    let rpcOk: Record<string, any> = {};
+    const rpcOk: Record<string, { ok: boolean; error?: string; sample?: string[]; count?: number }> = {};
 
     const supabase = createServerClient();
 
@@ -40,7 +40,8 @@ export async function GET() {
       },
       rpc: rpcOk
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || String(e) }, { status: 500 });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

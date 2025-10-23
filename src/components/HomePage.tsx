@@ -7,13 +7,13 @@ import { usePageLoading } from "@/components/LoadingNavigation";
 import { useState, useEffect } from "react";
 
 // Cache for categories and images
-let categoriesCache: any[] | null = null;
+let categoriesCache: string[] | null = null;
 let categoryImagesCache: Record<string, string> = {};
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export function HomePage() {
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [categoryImages, setCategoryImages] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   
@@ -61,7 +61,7 @@ export function HomePage() {
     loadData();
   }, []);
 
-  const loadCategoryImages = async (categoriesToLoad: any[]) => {
+  const loadCategoryImages = async (categoriesToLoad: string[]) => {
     const newImages: Record<string, string> = {};
     
     // Load images in parallel for better performance

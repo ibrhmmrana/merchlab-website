@@ -140,7 +140,7 @@ export async function getVariantsForGroup(stock_header_id: number): Promise<Vari
 export async function getColourImagesForGroup(stock_header_id: number): Promise<{ colour: string; image_url: string | null; sizes: string[] }[]> {
   const { data, error } = await supabase.rpc("get_colour_images_for_group", { p_stock_header_id: stock_header_id });
   if (error) throw error;
-  return (data ?? []) as any[];
+  return (data ?? []) as { colour: string; image_url: string | null; sizes: string[] }[];
 }
 
 export async function getCatalogFacets(): Promise<Facets> {

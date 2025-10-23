@@ -21,13 +21,27 @@ type IncomingItem = {
   weight_per_unit: number | null;
   royalty_factor: number | null;
   color_status: string | null;
+  // Camel case aliases for compatibility
+  stockId?: number;
+  stockHeaderId?: number;
+};
+
+type EnquiryData = {
+  items: IncomingItem[];
+  [key: string]: unknown;
+};
+
+type WebhookPayload = {
+  fullEnquiryJson: string;
+  timestamp: string;
+  merchant_order_no: string;
 };
 
 function normColour(c?: string | null): string {
   return (c ?? '').toLowerCase().split('/')[0].trim();
 }
 
-async function ensureStockIds(items: any[]): Promise<any[]> {
+async function ensureStockIds(items: IncomingItem[]): Promise<IncomingItem[]> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
@@ -103,7 +117,7 @@ export async function POST(req: Request) {
     }, null, 2));
     
     // Parse the fullEnquiryJson to get items and fix stock_ids
-    let enquiryData;
+    let enquiryData: EnquiryData;
     try {
       enquiryData = JSON.parse(fullEnquiryJson);
     } catch (e) {
@@ -141,7 +155,7 @@ export async function POST(req: Request) {
     const webhookUrl = "https://ai.intakt.co.za/webhook/merchlab-enquiries";
     
     // Prepare the payload with the fixed data
-    const payload = {
+    const payload: WebhookPayload = {
       fullEnquiryJson: JSON.stringify(enquiryData),
       timestamp,
       merchant_order_no
@@ -152,16 +166,16 @@ export async function POST(req: Request) {
     
     // Additional webhook items log
     try {
-      const enquiryData = JSON.parse(payload.fullEnquiryJson);
+      const enquiryData = JSON.parse(payload.fullEnquiryJson) as EnquiryData;
       console.log('SERVER WEBHOOK OUT', JSON.stringify(
-        enquiryData.items?.map((i: any) => ({
+        enquiryData.items?.map((i: IncomingItem) => ({
           sid: i.stockId, 
           sh: i.stockHeaderId, 
           c: i.colour, 
           s: i.size
         })), null, 2
       ));
-    } catch (e) {
+    } catch {
       console.log('Could not parse webhook items for logging');
     }
 
@@ -192,10 +206,11 @@ export async function POST(req: Request) {
       message: "Quote submitted successfully",
       merchant_order_no 
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("Quote submission error:", e);
+    const errorMessage = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ 
-      error: e.message || "Unknown error" 
+      error: errorMessage
     }, { status: 500 });
   }
 }

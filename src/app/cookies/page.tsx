@@ -16,7 +16,7 @@ export default function CookiesPage() {
                 1. About This Cookies Policy
               </h2>
               <p className="text-gray-700 leading-relaxed">
-                This Cookies Policy explains how Merch Lab (Pty) Ltd ("we", "us", "our") uses cookies and similar technologies on our website, www.merchlab.io ("Site"). This policy is part of our commitment to protecting your privacy and complying with relevant data protection laws, including POPIA and GDPR.
+                This Cookies Policy explains how Merch Lab (Pty) Ltd (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) uses cookies and similar technologies on our website, www.merchlab.io (&quot;Site&quot;). This policy is part of our commitment to protecting your privacy and complying with relevant data protection laws, including POPIA and GDPR.
               </p>
             </section>
 
@@ -58,7 +58,7 @@ export default function CookiesPage() {
                     Strictly Necessary Cookies:
                   </h3>
                   <p className="text-gray-700">
-                    These cookies are essential for the Site's basic functions to operate, such as enabling you to log in, add items to your shopping cart, and make secure payments.
+                    These cookies are essential for the Site&apos;s basic functions to operate, such as enabling you to log in, add items to your shopping cart, and make secure payments.
                   </p>
                 </div>
 
