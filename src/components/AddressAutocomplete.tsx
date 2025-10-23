@@ -28,18 +28,19 @@ export default function AddressAutocomplete({ value, onChange, onAddressParsed, 
       try {
         // Configure the global loader **before** importing libraries
         setOptions({
-          apiKey,
           key: apiKey,
           v: 'weekly',
+          language: 'en',
+          region: 'ZA',
         });
 
         // Load the Places library
-        await importLibrary('places');
+        const { Autocomplete } = (await importLibrary('places')) as google.maps.PlacesLibrary;
 
         if (cancelled || !inputRef.current) return;
 
         // Create the Autocomplete instance
-        const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+        const autocomplete = new Autocomplete(inputRef.current, {
           fields: ['address_components', 'formatted_address', 'geometry'],
           types: ['address'],
           componentRestrictions: { country: 'za' }
@@ -65,7 +66,7 @@ export default function AddressAutocomplete({ value, onChange, onAddressParsed, 
             try {
               // Create a more comprehensive mapping of all address components
               const comps = new Map<string, string>();
-              place.address_components.forEach((component: google.maps.places.PlaceResult['address_components'][0]) => {
+              place.address_components.forEach((component: google.maps.GeocoderAddressComponent) => {
                 component.types.forEach((type: string) => {
                   comps.set(type, component.long_name);
                 });

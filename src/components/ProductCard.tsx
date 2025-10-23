@@ -142,8 +142,8 @@ export default function ProductCard({ group }: Props) {
       // Fallback: generate color-specific images from group.colours
       if (group.colours && group.colours.length > 0) {
         const fallbackOpts = group.colours.map((color) => ({
-          name: typeof color === 'string' ? color : (color?.value || color?.name || String(color)),
-          image_url: generateColorSvg(typeof color === 'string' ? color : (color?.value || color?.name || String(color))),
+          name: color,
+          image_url: generateColorSvg(color),
           sizes: sortSizes(group.sizes || [])
         }));
         setColourMap(fallbackOpts);

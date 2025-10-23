@@ -158,15 +158,17 @@ export async function getCatalogFacets(): Promise<Facets> {
     if (error) {
       console.error("getCatalogFacets error:", error);
       // Return empty facets instead of throwing
-      const emptyFacets = {
+      const emptyFacets: Facets = {
         categories: [],
         types: [],
         brands: [],
         colours: [],
         sizes: [],
         genders: [],
-        garment_types: []
-      } as Facets;
+        garment_types: [],
+        stock_min: 0,
+        stock_max: 0
+      };
       facetsCache = emptyFacets;
       facetsCacheTime = now;
       return emptyFacets;
@@ -179,15 +181,17 @@ export async function getCatalogFacets(): Promise<Facets> {
   } catch (error) {
     console.error("getCatalogFacets exception:", error);
     // Return empty facets on any error
-    const emptyFacets = {
+    const emptyFacets: Facets = {
       categories: [],
       types: [],
       brands: [],
       colours: [],
       sizes: [],
       genders: [],
-      garment_types: []
-    } as Facets;
+      garment_types: [],
+      stock_min: 0,
+      stock_max: 0
+    };
     facetsCache = emptyFacets;
     facetsCacheTime = now;
     return emptyFacets;

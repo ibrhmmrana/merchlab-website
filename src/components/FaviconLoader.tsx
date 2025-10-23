@@ -47,7 +47,7 @@ export function FaviconLoader() {
   const { isPageLoading } = useLoadingStore();
 
   useEffect(() => {
-    let animationId: number;
+    let animationId: number | undefined;
     let faviconLink: HTMLLinkElement | null = null;
 
     // Find or create favicon link

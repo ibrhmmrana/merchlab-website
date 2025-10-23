@@ -66,7 +66,7 @@ export function HomePage() {
     
     // Load images in parallel for better performance
     const imagePromises = categoriesToLoad.map(async (category) => {
-      const categoryName = typeof category === 'string' ? category : (category?.value || category?.name || String(category));
+      const categoryName = category;
       try {
         const products = await listProductGroups({ 
           categories: [categoryName], 
@@ -162,7 +162,7 @@ export function HomePage() {
               ))
             ) : (
               categories.slice(0, 8).map((category, index) => {
-                const categoryName = typeof category === 'string' ? category : (category?.value || category?.name || String(category));
+                const categoryName = category;
                 const categoryKey = `category-${index}-${categoryName}`;
                 const categoryImage = categoryImages[categoryName];
                 

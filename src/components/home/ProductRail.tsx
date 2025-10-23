@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
 import SmartImage from "@/components/SmartImage";
-import type { RailItem } from "@/lib/data/home";
+import type { ProductGroup } from "@/lib/data/types";
 
-export default function ProductRail({ items, title }: { items: RailItem[]; title: string }) {
+export default function ProductRail({ items, title }: { items: ProductGroup[]; title: string }) {
   if (!items?.length) return null;
   return (
     <section className="max-w-7xl mx-auto px-4 py-10">
