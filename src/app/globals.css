@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.5rem;
+  
+  /* MerchLab Brand Colors */
+  --brand: #1062FF;
+  --brand-ink: #0d4ed8;
+  
+  /* Neutral Colors */
+  --ink: #111827;
+  --muted: #6B7280;
+  --border: #E5E7EB;
+  --bg: #ffffff;
+  --bg-soft: #F9FAFB;
+  
+  /* Shadcn/ui compatible variables */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--bg);
+  --card-foreground: var(--ink);
+  --popover: var(--bg);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-soft);
+  --secondary-foreground: var(--ink);
+  --muted: var(--muted);
+  --muted-foreground: var(--muted);
+  --accent: var(--bg-soft);
+  --accent-foreground: var(--ink);
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: var(--border);
+  --input: var(--border);
+  --ring: var(--brand);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  
+  /* Brand color utilities */
+  .text-brand {
+    color: var(--brand);
+  }
+  
+  .bg-brand {
+    background-color: var(--brand);
+  }
+  
+  .border-brand {
+    border-color: var(--brand);
+  }
+  
+  .text-brand-ink {
+    color: var(--brand-ink);
+  }
+  
+  .bg-brand-ink {
+    background-color: var(--brand-ink);
+  }
+  
+  /* Hide scrollbar for color swatches */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Auto-scrolling animation */
+  @keyframes scroll {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-500%);
+    }
+  }
+  
+  .animate-scroll {
+    animation: scroll 20s linear infinite;
+  }
+}
+
+/* Import Luxury Design System */
+@import '../styles/luxury.css';
+
+/* MerchLab Brand Tokens */
+:root {
+  --ml-blue: #1461FF;        /* MerchLab primary */
+  --ml-ink:  #0B1020;        /* dark ink */
+  --ml-muted:#6B7280;        /* neutral text */
+}
+
+:root{
+  --ml-blue:#1461FF;
+  --ml-ink:#0B1020;
+  --ml-ink-2:#0E162D;
+  --ml-ink-3:#10182F;
+}
+
+/* pleasant radial + grid helpers */
+.ml-hero-bg {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(20,97,255,.28), transparent 60%),
+    linear-gradient(180deg, var(--ml-ink) 0%, var(--ml-ink-2) 40%, var(--ml-ink-3) 65%, rgba(16,24,47,0) 100%);
+}
+.ml-noise {
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  opacity: .06;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 fill=%22none%22><path d=%22M0 39.5 H40 M-.5 0 V40%22 stroke=%22white%22 opacity=%220.5%22/></svg>');
+}
+
+/* hero backgrounds */
+.ml-hero {
+  background:
+    radial-gradient(1200px 600px at 60% -10%, rgba(20,97,255,.25), transparent 55%),
+    linear-gradient(180deg, #0b1020 0%, #0e162d 50%, #10182f 70%, #f9fafb 100%);
+}
+.ml-grid-noise {
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  opacity: .06;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22><path d=%22M0 39.5 H40 M-.5 0 V40%22 stroke=%22white%22 opacity=%220.5%22/></svg>');
+}
