@@ -422,8 +422,8 @@ export default function ProductCard({ group }: Props) {
                      }}
                      size={35}
                    />
-                 ))}
-               </div>
+              ))}
+            </div>
 
                {/* Right navigation arrow - only show if there are multiple colors */}
                {colourMap.length > 3 && (
@@ -492,8 +492,8 @@ export default function ProductCard({ group }: Props) {
                   >
                     {s}
                   </button>
-                ))}
-              </div>
+              ))}
+            </div>
 
               {/* Right navigation arrow - only show if there are multiple sizes */}
               {allSizes.length > 4 && (
@@ -513,8 +513,8 @@ export default function ProductCard({ group }: Props) {
                   </svg>
                 </button>
               )}
-            </div>
           </div>
+        </div>
         )}
 
         {/* Quick Add button - only show when hovering */}

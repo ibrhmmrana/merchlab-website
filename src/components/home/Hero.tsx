@@ -7,14 +7,10 @@ export default function Hero() {
     <section className="relative overflow-hidden min-h-[60vh] md:min-h-[80vh]">
           {/* Background image */}
       <div 
-        className="absolute inset-0 bg-cover bg-center md:bg-center bg-no-repeat"
-        style={{
-          backgroundImage: 'url(https://bmkdwnfrldoqvduhpgsu.supabase.co/storage/v1/object/public/Storage/ML%20Mascot.png)',
-          backgroundPosition: '80% center'
-        }}
+        className="absolute inset-0 bg-cover bg-center md:bg-center bg-no-repeat hero-bg-position"
       />
-      {/* Black overlay at 45% opacity on mobile, 35% on desktop */}
-      <div className="absolute inset-0 bg-black/45 md:bg-black/35" />
+      {/* Black overlay at 45% opacity on mobile only */}
+      <div className="absolute inset-0 bg-black/45 md:bg-transparent" />
       {/* Grid noise overlay */}
       <div className="absolute inset-0 ml-grid-noise pointer-events-none" />
 
@@ -47,7 +43,7 @@ export default function Hero() {
         <div className="mt-8 flex gap-3">
           <Link
             href="/shop"
-            className="px-5 py-3 rounded-xl bg-[var(--ml-blue)] text-white font-medium shadow-lg shadow-[var(--ml-blue)]/30 hover:brightness-110 transition"
+            className="px-6 py-4 rounded-xl bg-white text-[var(--ml-blue)] font-semibold shadow-xl shadow-black/20 hover:bg-gray-50 hover:shadow-2xl hover:shadow-black/30 transition-all duration-200 transform hover:scale-105"
           >
             Shop now
           </Link>

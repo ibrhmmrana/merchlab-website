@@ -158,3 +158,16 @@
   opacity: .06;
   background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22><path d=%22M0 39.5 H40 M-.5 0 V40%22 stroke=%22white%22 opacity=%220.5%22/></svg>');
 }
+
+/* Hero background positioning and images - different images for mobile vs desktop */
+.hero-bg-position {
+  background-position: 80% center;
+  background-image: url('https://bmkdwnfrldoqvduhpgsu.supabase.co/storage/v1/object/public/Storage/ML%20Mascot.png');
+}
+
+@media (min-width: 768px) {
+  .hero-bg-position {
+    background-position: 80% 30%;
+    background-image: url('https://bmkdwnfrldoqvduhpgsu.supabase.co/storage/v1/object/public/Storage/MerchLab%20Hero%20BG%20Image.png');
+  }
+}

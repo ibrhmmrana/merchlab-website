@@ -110,7 +110,7 @@ export default function CartPage() {
         console.log(`Item ${idx}: stock_id=${item.stock_id}, stock_header_id=${item.stock_header_id}, colour=${item.colour}, size=${item.size}`);
         return {
           enquiryItemId: enquiryId + idx + 200,
-          enquiryId,
+        enquiryId,
           stockId: item.stock_id ?? item.stockId, // Use real stock_id from Supabase
           stockHeaderId: item.stock_header_id ?? item.stockHeaderId, // Use real stock_header_id from Supabase
         quantity: item.quantity,
@@ -272,7 +272,7 @@ export default function CartPage() {
             {/* Product Section */}
             <div className="bg-white rounded-lg p-6">
               <h2 className="text-lg font-semibold mb-4">Product</h2>
-              {items.length === 0 ? (
+        {items.length === 0 ? (
                 <div className="text-muted-foreground">Your cart is empty.</div>
               ) : (
                 <div className="space-y-4">
@@ -368,8 +368,8 @@ export default function CartPage() {
                     className="mt-1"
                   />
                 </div>
+                </div>
               </div>
-            </div>
 
             {/* Address Details */}
             <div className="bg-white rounded-lg p-6">
@@ -471,7 +471,7 @@ export default function CartPage() {
                         className="mt-1"
                       />
                     </div>
-                  </div>
+            </div>
                 )}
               </div>
             </div>
@@ -506,14 +506,14 @@ export default function CartPage() {
                       for this website.
                     </label>
                   </div>
-                </div>
+      </div>
 
                 <button
                   disabled={submitting || items.length === 0 || !termsAccepted}
                   onClick={submitQuote}
                   className="luxury-btn w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {submitting ? "Submitting…" : "Submit Quote"}
+          {submitting ? "Submitting…" : "Submit Quote"}
                 </button>
 
                 {msg && (
