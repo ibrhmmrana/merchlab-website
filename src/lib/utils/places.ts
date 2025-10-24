@@ -1,6 +1,5 @@
 // lib/utils/places.ts
 export type ParsedAddress = {
-  fullText: string;
   street: string;
   suburb: string;
   city: string;
@@ -9,37 +8,50 @@ export type ParsedAddress = {
   country: string;
   lat?: number;
   lng?: number;
+  formattedAddress?: string; // <-- add this
 };
 
 export function parsePlace(place: google.maps.places.PlaceResult): ParsedAddress {
-  const comps = place.address_components || [];
-  const get = (type: string) => comps.find(c => c.types.includes(type));
-  const num = get("street_number")?.long_name ?? "";
-  const route = get("route")?.long_name ?? "";
-  const street = [num, route].filter(Boolean).join(" ").trim();
+  const map = new Map<string, string>();
 
-  // South Africa-friendly mappings (with good fallbacks)
-  const suburb = get("sublocality_level_1")?.long_name
-              ?? get("neighborhood")?.long_name
-              ?? "";
-  const city = get("locality")?.long_name
-            ?? get("administrative_area_level_2")?.long_name
-            ?? "";
-  const province = get("administrative_area_level_1")?.long_name ?? "";
-  const postalCode = get("postal_code")?.long_name ?? "";
-  const country = get("country")?.long_name ?? "";
+  (place.address_components ?? []).forEach((c) => {
+    for (const t of c.types) {
+      map.set(t, c.long_name);
+    }
+  });
+
+  const streetNumber = map.get('street_number') ?? '';
+  const route = map.get('route') ?? '';
+  const street =
+    streetNumber && route ? `${streetNumber} ${route}` : route || streetNumber || '';
+
+  const suburb =
+    map.get('sublocality') ??
+    map.get('sublocality_level_1') ??
+    map.get('neighborhood') ??
+    '';
+
+  const city =
+    map.get('locality') ??
+    map.get('administrative_area_level_2') ??
+    '';
+
+  const province = map.get('administrative_area_level_1') ?? '';
+  const postalCode = map.get('postal_code') ?? '';
+  const country = map.get('country') ?? '';
 
   const lat = place.geometry?.location?.lat();
   const lng = place.geometry?.location?.lng();
 
   return {
-    fullText: place.formatted_address || [street, suburb, city, province, postalCode, country].filter(Boolean).join(", "),
     street,
     suburb,
     city,
     province,
     postalCode,
     country,
-    ...(lat !== undefined && lng !== undefined ? { lat, lng } : {})
+    lat,
+    lng,
+    formattedAddress: place.formatted_address ?? '', // <-- include this
   };
 }

@@ -41,7 +41,7 @@ export default function CartPage() {
     console.log('Form updating with address:', addr);
     
     // If address is being cleared, hide individual fields
-    if (!addr.street && !addr.city && !addr.fullText) {
+    if (!addr.street && !addr.city && !addr.formattedAddress) {
       console.log('Clearing address fields');
       setAddressSelected(false);
       setForm((f) => ({
