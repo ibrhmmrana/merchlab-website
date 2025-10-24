@@ -18,7 +18,7 @@ export default function SuccessNotification() {
   if (!showSuccess) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4 text-center">
         <div className="mb-4">
           <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">

@@ -157,9 +157,17 @@ export function OrderSummary() {
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <span className="text-sm font-medium w-8 text-center">
-                          {item.quantity}
-                        </span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const newQty = parseInt(e.target.value) || 1;
+                            updateQty(String(item.stock_id), Math.max(1, newQty));
+                          }}
+                          className="text-sm font-medium w-12 text-center border rounded px-2 py-1 h-8"
+                          aria-label="Quantity"
+                        />
                         <Button
                           variant="outline"
                           size="sm"

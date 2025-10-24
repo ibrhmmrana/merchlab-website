@@ -2,11 +2,12 @@
 import { useCartStore, getCartItemKey } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useHasHydrated } from "@/lib/hooks/useHasHydrated";
 import SmartImage from "@/components/SmartImage";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
+import type { ParsedAddress } from "@/lib/utils/places";
 
 export default function CartPage() {
   const hydrated = useHasHydrated();
@@ -35,6 +36,43 @@ export default function CartPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [addressSearch, setAddressSearch] = useState("");
   const [addressSelected, setAddressSelected] = useState(false);
+
+  const handleAddressParsed = useCallback((addr: ParsedAddress) => {
+    console.log('Form updating with address:', addr);
+    
+    // If address is being cleared, hide individual fields
+    if (!addr.street && !addr.city && !addr.fullText) {
+      console.log('Clearing address fields');
+      setAddressSelected(false);
+      setForm((f) => ({
+        ...f,
+        street: "",
+        suburb: "",
+        city: "",
+        province: "",
+        postalCode: "",
+        country: "",
+        lat: undefined,
+        lng: undefined,
+      }));
+      return;
+    }
+    
+    // Show individual fields and populate them
+    console.log('Showing address fields and populating');
+    setAddressSelected(true);
+    setForm((f) => ({
+      ...f,
+      street: addr.street || "",
+      suburb: addr.suburb || "",
+      city: addr.city || "",
+      province: addr.province || "",
+      postalCode: addr.postalCode || "",
+      country: addr.country || f.country || "South Africa",
+      lat: addr.lat ?? f.lat,
+      lng: addr.lng ?? f.lng,
+    }));
+  }, []); // setState functions are stable; functional updates avoid deps
 
   function update<K extends keyof typeof form>(k: K, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -296,7 +334,17 @@ export default function CartPage() {
                             >
                               −
                             </button>
-                            <span className="text-sm w-6 text-center">{item.quantity}</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const newQty = parseInt(e.target.value) || 1;
+                                updateQty(itemKey, Math.max(1, newQty));
+                              }}
+                              className="text-sm w-12 text-center border rounded px-1 py-1 h-7"
+                              aria-label="Quantity"
+                            />
                             <button
                               className="h-7 w-7 rounded border text-sm"
                               onClick={() => updateQty(itemKey, item.quantity + 1)}
@@ -381,43 +429,7 @@ export default function CartPage() {
                   <AddressAutocomplete
                     value={addressSearch}
                     onChange={setAddressSearch}
-                    onAddressParsed={(addr) => {
-                      console.log('Form updating with address:', addr);
-                      
-                      // If address is being cleared, hide individual fields
-                      if (!addr.street && !addr.city && !addr.formattedAddress) {
-                        console.log('Clearing address fields');
-                        setAddressSelected(false);
-                        setForm((f) => ({
-                          ...f,
-                          street: "",
-                          suburb: "",
-                          city: "",
-                          province: "",
-                          postalCode: "",
-                          country: "",
-                          lat: undefined,
-                          lng: undefined,
-                        }));
-                        return;
-                      }
-                      
-                      // Show individual fields and populate them
-                      console.log('Showing address fields and populating');
-                      setAddressSelected(true);
-                      setForm((f) => ({
-                        ...f,
-                        street: addr.street || "",
-                        suburb: addr.suburb || "",
-                        city: addr.city || "",
-                        province: addr.province || "",
-                        postalCode: addr.postalCode || "",
-                        country: addr.country || f.country || "South Africa",
-                        // Optionally track coords if your payload supports it:
-                        lat: addr.lat,
-                        lng: addr.lng,
-                      }));
-                    }}
+                    onAddressParsed={handleAddressParsed}
                     placeholder="Start typing to search on Google Maps"
                   />
                 </div>

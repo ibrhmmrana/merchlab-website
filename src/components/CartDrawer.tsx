@@ -53,7 +53,17 @@ export default function CartDrawer() {
                       >
                         −
                       </button>
-                      <span className="text-sm w-5 text-center">{i.quantity}</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={i.quantity}
+                        onChange={(e) => {
+                          const newQty = parseInt(e.target.value) || 1;
+                          updateQty(itemKey, Math.max(1, newQty));
+                        }}
+                        className="text-sm w-12 text-center border rounded px-1 py-0.5"
+                        aria-label="Quantity"
+                      />
                       <button
                         className="h-6 w-6 rounded border text-sm hover:bg-gray-50"
                         onClick={() => updateQty(itemKey, i.quantity + 1)}

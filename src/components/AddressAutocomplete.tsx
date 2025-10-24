@@ -1,134 +1,91 @@
 'use client';
 import React, { useEffect, useRef } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { parsePlace, type ParsedAddress } from '@/lib/utils/places';
 
 type Props = {
   value: string;
   onChange: (v: string) => void;
-  onAddressParsed: (addr: {
-    street?: string; suburb?: string; city?: string; province?: string; postalCode?: string; country?: string;
-    lat?: number; lng?: number; formattedAddress?: string;
-  }) => void;
+  onAddressParsed: (addr: ParsedAddress) => void;
   placeholder?: string;
 };
 
 export default function AddressAutocomplete({ value, onChange, onAddressParsed, placeholder }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const placeListenerRef = useRef<google.maps.MapsEventListener | null>(null);
+  const initializedRef = useRef(false);
+
+  // Hold latest callbacks to avoid effect deps
+  const onAddressParsedRef = useRef(onAddressParsed);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onAddressParsedRef.current = onAddressParsed; }, [onAddressParsed]);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   useEffect(() => {
-    let cancelled = false;
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      console.warn('Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY');
+      console.error("Google Maps API key missing");
       return;
     }
 
     (async () => {
       try {
-        // Configure the global loader **before** importing libraries
+        // Configure loader first
         setOptions({
           key: apiKey,
-          v: 'weekly',
-          language: 'en',
-          region: 'ZA',
+          v: "weekly",
+          language: "en",
+          region: "ZA",
         });
 
-        // Load the Places library
-        const { Autocomplete } = (await importLibrary('places')) as google.maps.PlacesLibrary;
+        const { Autocomplete } = (await importLibrary("places")) as google.maps.PlacesLibrary;
+        if (!inputRef.current) return;
 
-        if (cancelled || !inputRef.current) return;
-
-        // Create the Autocomplete instance
-        const autocomplete = new Autocomplete(inputRef.current, {
-          fields: ['address_components', 'formatted_address', 'geometry'],
-          types: ['address'],
-          componentRestrictions: { country: 'za' }
+        // Create once
+        const ac = new Autocomplete(inputRef.current, {
+          fields: ["address_components", "formatted_address", "geometry"],
+          types: ["address"],
+          componentRestrictions: { country: "za" },
         });
+        autocompleteRef.current = ac;
 
-        autocompleteRef.current = autocomplete;
-
-        // Listen for place selection
-        autocomplete.addListener('place_changed', () => {
+        // Attach listener once
+        placeListenerRef.current = ac.addListener("place_changed", () => {
           console.log('Place changed event triggered');
+          const place = ac.getPlace();
+          console.log('Place selected:', place);
           
-          // Use a small delay to ensure the place data is fully loaded
-          setTimeout(() => {
-            const place = autocomplete.getPlace();
-            console.log('Place selected:', place);
-            
-            // Process if place has address components
-            if (!place || !place.address_components) {
-              console.log('No place or address components found');
-              return;
-            }
+          if (!place || !place.address_components) {
+            console.log('No place or address components found');
+            return;
+          }
 
-            try {
-              // Create a more comprehensive mapping of all address components
-              const comps = new Map<string, string>();
-              place.address_components.forEach((component: google.maps.GeocoderAddressComponent) => {
-                component.types.forEach((type: string) => {
-                  comps.set(type, component.long_name);
-                });
-              });
-              
-              console.log('Address components:', place.address_components);
-              console.log('Parsed components map:', comps);
-              
-              // Better mapping for South African addresses
-              const streetNumber = comps.get('street_number') || '';
-              const route = comps.get('route') || '';
-              const street = [streetNumber, route].filter(Boolean).join(' ').trim();
-              
-              // Enhanced suburb detection - try multiple Google Places fields
-              let suburb = comps.get('sublocality_level_1') || 
-                          comps.get('sublocality_level_2') || 
-                          comps.get('neighborhood') || 
-                          comps.get('sublocality') ||
-                          comps.get('administrative_area_level_3') ||
-                          comps.get('political');
-              
-              // Fallback: try to extract suburb from formatted address
-              if (!suburb && place.formatted_address) {
-                const addressParts = place.formatted_address.split(', ');
-                // For SA addresses, suburb is usually the second part
-                if (addressParts.length >= 2) {
-                  suburb = addressParts[1].trim();
-                }
-              }
-              
-              const parsed = {
-                street: street || undefined,
-                suburb: suburb,
-                city: comps.get('locality') || comps.get('postal_town') || comps.get('administrative_area_level_2'),
-                province: comps.get('administrative_area_level_1'),
-                postalCode: comps.get('postal_code'),
-                country: comps.get('country'),
-                lat: place.geometry?.location?.lat(),
-                lng: place.geometry?.location?.lng(),
-                formattedAddress: place.formatted_address,
-              };
-              
-              console.log('Address parsed:', parsed);
-              onChange(place.formatted_address || '');
-              onAddressParsed(parsed);
-            } catch (e) {
-              console.error('Failed to parse place data', e);
-            }
-          }, 100);
+          // Sync the input (controlled) with Google's formatted address
+          const formatted = place.formatted_address ?? "";
+          onChangeRef.current?.(formatted);
+
+          // Parse and bubble up
+          const parsed = parsePlace(place);
+          console.log('Address parsed:', parsed);
+          onAddressParsedRef.current?.(parsed);
         });
       } catch (e) {
-        console.error('Failed to initialize Google Places', e);
+        console.error("Failed to initialize Google Places", e);
       }
     })();
 
-    return () => { 
-      cancelled = true;
-      if (autocompleteRef.current) {
-        autocompleteRef.current.unbindAll();
-      }
+    // Cleanup on unmount only
+    return () => {
+      placeListenerRef.current?.remove();
+      placeListenerRef.current = null;
+      autocompleteRef.current?.unbindAll?.();
+      autocompleteRef.current = null;
     };
-  }, [onAddressParsed, onChange]);
+  }, []); // <-- IMPORTANT: empty deps
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
