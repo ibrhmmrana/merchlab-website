@@ -129,155 +129,144 @@ function ShopPageContent() {
   // Category navigation data
   const mainCategories = [
     { name: "Apparel", subCategories: [
-      { name: "Bodywarmers", subSubCategories: [] },
-      { name: "Bottoms", subSubCategories: [] },
-      { name: "Fleece Tops", subSubCategories: [] },
-      { name: "Golf Shirts", subSubCategories: [] },
-      { name: "Jackets", subSubCategories: [] },
-      { name: "Kids-Fleece Tops", subSubCategories: [] },
-      { name: "Kids-Golf Shirts", subSubCategories: [] },
-      { name: "Kids-Jackets", subSubCategories: [] },
-      { name: "Kids-Sweaters", subSubCategories: [] },
-      { name: "Kids-T-Shirts", subSubCategories: [] },
-      { name: "Knitwear", subSubCategories: [] },
-      { name: "Ladies Corporate Wear", subSubCategories: [
-        { name: "Schoolwear", subSubCategories: [] },
-        { name: "Shirts-Corporate", subSubCategories: [] },
-        { name: "Shirts-Outdoor", subSubCategories: [] },
-        { name: "Shirts-Racing", subSubCategories: [] },
-        { name: "Sweaters", subSubCategories: [] },
-        { name: "T-Shirts", subSubCategories: [] }
-      ] }
+      "Bodywarmers",
+      "Bottoms",
+      "Fleece Tops",
+      "Golf Shirts",
+      "Jackets",
+      "Kids-Fleece Tops",
+      "Kids-Golf Shirts",
+      "Kids-Jackets",
+      "Kids-Sweaters",
+      "Kids-T-Shirts",
+      "Knitwear",
+      "Schoolwear",
+      "Shirts-Corporate",
+      "Shirts-Outdoor",
+      "Shirts-Racing",
+      "Sweaters",
+      "T-Shirts"
     ] },
     { name: "Bags", subCategories: [
-      { name: "Backpacks", subSubCategories: [] },
-      { name: "Bags on Wheels", subSubCategories: [] },
-      { name: "Beauty and Toiletries", subSubCategories: [] },
-      { name: "Conference and Messenger Bags", subSubCategories: [] },
-      { name: "Drawstrings", subSubCategories: [] },
-      { name: "Outdoor", subSubCategories: [] },
-      { name: "Shoppers and Slings", subSubCategories: [] },
-      { name: "Sports Bags", subSubCategories: [] },
-      { name: "Travel Bags", subSubCategories: [] },
-      { name: "Waistbag", subSubCategories: [] }
+      "Backpacks",
+      "Bags on Wheels",
+      "Beauty and Toiletries",
+      "Conference and Messenger Bags",
+      "Drawstrings",
+      "Outdoor",
+      "Shoppers and Slings",
+      "Sports Bags",
+      "Travel Bags",
+      "Waistbag"
     ] },
     { name: "Chef Wear", subCategories: [
-      { name: "Apron", subSubCategories: [] },
-      { name: "Bottoms", subSubCategories: [] },
-      { name: "Head Wear Range", subSubCategories: [] },
-      { name: "Jackets", subSubCategories: [] }
+      "Apron",
+      "Bottoms",
+      "Head Wear Range",
+      "Jackets"
     ] },
     { name: "Display", subCategories: [
-      { name: "Flags", subSubCategories: [] },
-      { name: "Hardware", subSubCategories: [] },
-      { name: "Indoor", subSubCategories: [] },
-      { name: "Outdoor", subSubCategories: [] },
-      { name: "Skins", subSubCategories: [] }
+      "Flags",
+      "Hardware",
+      "Indoor",
+      "Outdoor",
+      "Skins"
     ] },
     { name: "Gifting", subCategories: [
-      { name: "Automotive and First Aid", subSubCategories: [
-        { name: "Ladies Gifts", subSubCategories: [] },
-        { name: "Loadshedding", subSubCategories: [] },
-        { name: "Notebooks", subSubCategories: [] },
-        { name: "Novelties", subSubCategories: [] },
-        { name: "Office Accessories", subSubCategories: [] },
-        { name: "Outdoor", subSubCategories: [] },
-        { name: "Packaging", subSubCategories: [] },
-        { name: "Pet Care", subSubCategories: [] },
-        { name: "Safety Accessories", subSubCategories: [] },
-        { name: "Sports Bags", subSubCategories: [] },
-        { name: "Technology", subSubCategories: [] },
-        { name: "Travel", subSubCategories: [] },
-        { name: "Travel Bags", subSubCategories: [] },
-        { name: "Umbrellas", subSubCategories: [] },
-        { name: "Wine", subSubCategories: [] },
-        { name: "Writing Instruments", subSubCategories: [] }
-      ] },
-      { name: "Backpacks", subSubCategories: [] },
-      { name: "Bags on Wheels", subSubCategories: [] },
-      { name: "Braai", subSubCategories: [] },
-      { name: "Coolers", subSubCategories: [] },
-      { name: "Diaries", subSubCategories: [] },
-      { name: "Drawstrings", subSubCategories: [] },
-      { name: "Drinkware", subSubCategories: [] },
-      { name: "Flashlights and Tools", subSubCategories: [] },
-      { name: "Folders", subSubCategories: [] },
-      { name: "Keychains", subSubCategories: [] },
-      { name: "Kitchen Wine and Food", subSubCategories: [] }
+      "Ladies Gifts",
+      "Loadshedding",
+      "Notebooks",
+      "Novelties",
+      "Office Accessories",
+      "Outdoor",
+      "Packaging",
+      "Pet Care",
+      "Safety Accessories",
+      "Sports Bags",
+      "Technology",
+      "Travel",
+      "Travel Bags",
+      "Umbrellas",
+      "Wine",
+      "Writing Instruments",
+      "Backpacks",
+      "Bags on Wheels",
+      "Braai",
+      "Coolers",
+      "Diaries",
+      "Drawstrings",
+      "Drinkware",
+      "Flashlights and Tools",
+      "Folders",
+      "Keychains",
+      "Kitchen Wine and Food"
     ] },
     { name: "Headwear", subCategories: [
-      { name: "Caps", subSubCategories: [] },
-      { name: "Outdoor", subSubCategories: [] },
-      { name: "Safety Range", subSubCategories: [] },
-      { name: "Winter Range", subSubCategories: [] }
+      "Caps",
+      "Outdoor",
+      "Safety Range",
+      "Winter Range"
     ] },
     { name: "Homeware", subCategories: [
-      { name: "Appliances", subSubCategories: [] },
-      { name: "Crockery", subSubCategories: [] },
-      { name: "Cutlery", subSubCategories: [] },
-      { name: "Drinkware", subSubCategories: [] },
-      { name: "Glassware", subSubCategories: [] },
-      { name: "Kitchenware", subSubCategories: [] },
-      { name: "Table Linen", subSubCategories: [] }
+      "Appliances",
+      "Crockery",
+      "Cutlery",
+      "Drinkware",
+      "Glassware",
+      "Kitchenware",
+      "Table Linen"
     ] },
     { name: "Sport", subCategories: [
-      { name: "Canterbury", subSubCategories: [] },
-      { name: "Events", subSubCategories: [] },
-      { name: "Off Field Apparel", subSubCategories: [] },
-      { name: "On Field Apparel", subSubCategories: [] },
-      { name: "RWC 2023 Range", subSubCategories: [] },
-      { name: "Socks", subSubCategories: [] },
-      { name: "Sport Bags", subSubCategories: [] }
+      "Canterbury",
+      "Events",
+      "Off Field Apparel",
+      "On Field Apparel",
+      "RWC 2023 Range",
+      "Socks",
+      "Sport Bags"
     ] },
     { name: "Sublimation", subCategories: [
-      { name: "Accessories", subSubCategories: [
-        { name: "Bottoms", subSubCategories: [] },
-        { name: "Golf Shirts", subSubCategories: [] },
-        { name: "On Field Apparel", subSubCategories: [] },
-        { name: "T-Shirts", subSubCategories: [] }
-      ] }
+      "Bottoms",
+      "Golf Shirts",
+      "On Field Apparel",
+      "T-Shirts"
     ] },
     { name: "Workwear", subCategories: [
-      { name: "Bottoms", subSubCategories: [] },
-      { name: "Footwear", subSubCategories: [] },
-      { name: "High Visibility", subSubCategories: [] },
-      { name: "JCB Workwear", subSubCategories: [] },
-      { name: "Jackets", subSubCategories: [] },
-      { name: "Pioneer Safety", subSubCategories: [] },
-      { name: "Protective Outerwear", subSubCategories: [] },
-      { name: "Safety Accessories", subSubCategories: [] },
-      { name: "Security", subSubCategories: [] },
-      { name: "Service and Beauty", subSubCategories: [] }
+      "Bottoms",
+      "Footwear",
+      "High Visibility",
+      "JCB Workwear",
+      "Jackets",
+      "Pioneer Safety",
+      "Protective Outerwear",
+      "Safety Accessories",
+      "Security",
+      "Service and Beauty"
     ] }
   ];
 
   const [selectedMainCategory, setSelectedMainCategory] = useState<string | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
-  const [selectedSubSubCategory, setSelectedSubSubCategory] = useState<string | null>(null);
 
   // Handle category selection
   const handleMainCategoryClick = (categoryName: string) => {
     if (selectedMainCategory === categoryName) {
       setSelectedMainCategory(null);
       setSelectedSubCategory(null);
-      setSelectedSubSubCategory(null);
       // Clear all filters
       setFilters(prev => ({ 
         ...prev, 
         categories: null, 
-        types: null, 
-        garment_types: null 
+        types: null
       }));
     } else {
       setSelectedMainCategory(categoryName);
       setSelectedSubCategory(null);
-      setSelectedSubSubCategory(null);
       // Set category filter and clear sub-category filters
       setFilters(prev => ({ 
         ...prev, 
         categories: [categoryName], 
-        types: null, 
-        garment_types: null 
+        types: null
       }));
     }
   };
@@ -285,34 +274,18 @@ function ShopPageContent() {
   const handleSubCategoryClick = (subCategoryName: string) => {
     if (selectedSubCategory === subCategoryName) {
       setSelectedSubCategory(null);
-      setSelectedSubSubCategory(null);
-      // Clear sub-category and sub-sub-category filters, keep main category
+      // Clear sub-category filter, keep main category
       setFilters(prev => ({ 
         ...prev, 
-        types: null, 
-        garment_types: null 
+        types: null
       }));
     } else {
       setSelectedSubCategory(subCategoryName);
-      setSelectedSubSubCategory(null);
-      // Set sub-category filter and clear sub-sub-category filter
+      // Set sub-category filter
       setFilters(prev => ({ 
         ...prev, 
-        types: [subCategoryName], 
-        garment_types: null 
+        types: [subCategoryName]
       }));
-    }
-  };
-
-  const handleSubSubCategoryClick = (subSubCategoryName: string) => {
-    if (selectedSubSubCategory === subSubCategoryName) {
-      setSelectedSubSubCategory(null);
-      // Clear sub-sub-category filter, keep main and sub categories
-      setFilters(prev => ({ ...prev, garment_types: null }));
-    } else {
-      setSelectedSubSubCategory(subSubCategoryName);
-      // Set sub-sub-category filter
-      setFilters(prev => ({ ...prev, garment_types: [subSubCategoryName] }));
     }
   };
 
@@ -346,44 +319,20 @@ function ShopPageContent() {
             <div className="flex flex-wrap gap-3">
               {mainCategories
                 .find(cat => cat.name === selectedMainCategory)
-                ?.subCategories.map((subCategory, index) => (
+                ?.subCategories.map((subCategoryName, index) => (
                   <button
-                    key={`${subCategory.name}-${index}`}
-                    onClick={() => handleSubCategoryClick(subCategory.name)}
+                    key={`${subCategoryName}-${index}`}
+                    onClick={() => handleSubCategoryClick(subCategoryName)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      selectedSubCategory === subCategory.name
+                      selectedSubCategory === subCategoryName
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {subCategory.name}
+                    {subCategoryName}
                   </button>
                 ))}
             </div>
-          </div>
-        )}
-
-        {/* Sub-Sub Categories */}
-        {selectedSubCategory && (
-          <div className="ml-8 mb-4">
-            <div className="flex flex-wrap gap-3">
-              {mainCategories
-                .find(cat => cat.name === selectedMainCategory)
-                ?.subCategories.find(sub => sub.name === selectedSubCategory)
-                ?.subSubCategories.map((subSubCategory, index) => (
-                  <button
-                    key={`${subSubCategory.name}-${index}`}
-                    onClick={() => handleSubSubCategoryClick(subSubCategory.name)}
-                    className={`px-3 py-1 text-sm rounded transition-colors ${
-                      selectedSubSubCategory === subSubCategory.name
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                    }`}
-                  >
-                    {subSubCategory.name}
-                  </button>
-        ))}
-      </div>
           </div>
         )}
       </div>
