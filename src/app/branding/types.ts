@@ -11,3 +11,5 @@ export type BrandingCompletePayload = {
   selections: BrandingSelectionInput[];
 };
 
+export type BrandingMode = 'branded' | 'unbranded';
+

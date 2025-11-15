@@ -12,7 +12,8 @@ import { sortSizes } from "@/lib/sizeUtils";
 import BrandingModal from "@/components/branding/BrandingModal";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { BrandingMode, BrandingSelection } from "@/types/branding";
+import type { BrandingSelection } from "@/types/branding";
+import type { BrandingMode } from "@/app/branding/types";
 import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +103,7 @@ export default function ProductCard({ group }: Props) {
   const [showToast, setShowToast] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [brandingMode, setBrandingMode] = useState<BrandingMode>("unbranded");
+  const [brandingMode, setBrandingMode] = useState<BrandingMode | null>(null);
   const [brandingSelections, setBrandingSelections] = useState<BrandingSelection[]>([]);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
   const { openBranding } = useBrandingSheet();

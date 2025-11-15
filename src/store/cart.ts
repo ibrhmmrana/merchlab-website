@@ -2,7 +2,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Variant } from "@/lib/data/types";
-import type { BrandingMode, BrandingSelection } from "@/types/branding";
+import type { BrandingMode } from "@/app/branding/types";
+import type { BrandingSelection } from "@/types/branding";
 
 export type CartItem = Variant & { 
   quantity: number;
