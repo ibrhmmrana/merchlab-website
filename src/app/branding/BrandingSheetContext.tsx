@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import type { BrandingCompletePayload } from "./types";
 
 const BrandingSheet = dynamic(() => import("./BrandingSheet"), { ssr: false });
 
@@ -18,10 +19,12 @@ export type BrandingOpenPayload = {
   itemKey?: string;
 };
 
-type BrandingResult = {
+type NormalizedBrandingResult = {
   stockHeaderId: number;
   selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string }>;
-} | null;
+};
+
+type BrandingResult = NormalizedBrandingResult | null;
 
 type Ctx = {
   openBranding: (p: BrandingOpenPayload) => Promise<BrandingResult>;
@@ -59,10 +62,35 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
     setResolver(null);
   }
 
-  function handleComplete(v: BrandingResult) {
-    console.log('BrandingSheetContext: handleComplete called with:', v);
+  function handleComplete(payload: BrandingCompletePayload) {
+    console.log('BrandingSheetContext: handleComplete called with:', payload);
+    
+    // Guard: every selection must have type and size
+    const allChosen = payload.selections.every(s => s.type && s.size);
+    if (!allChosen) {
+      console.warn('BrandingSheetContext: Some selections are missing type or size');
+      // Return null to indicate incomplete selection
+      if (resolver) {
+        resolver(null);
+      }
+      close();
+      return;
+    }
+
+    // Normalize to stricter internal shape (non-null assertions safe after guard)
+    const normalized: NormalizedBrandingResult = {
+      stockHeaderId: payload.stockHeaderId,
+      selections: payload.selections.map(s => ({
+        position: s.position,
+        type: s.type!,   // non-null now
+        size: s.size!,   // non-null now
+        colorCount: s.colorCount,
+        comment: s.comment,
+      })),
+    };
+
     if (resolver) {
-      resolver(v);
+      resolver(normalized);
     }
     close();
   }

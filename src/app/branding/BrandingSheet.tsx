@@ -14,6 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { fetchBrandingPositions, fetchBrandingTypes, fetchBrandingSizes } from '@/lib/branding';
+import type { BrandingCompletePayload } from './types';
 
 export type PositionOption = string;
 export type TypeOption = string;
@@ -31,17 +32,7 @@ export type BrandingSheetProps = {
   size?: string | null;
 
   // when user presses "Save Branding", we resolve with selections
-  onComplete: (payload: {
-    stockHeaderId: number;
-    selections: Array<{
-      position: string;
-      type: string | null;
-      size: string | null;
-      colorCount: number;
-      comment?: string;
-      // artworkUrl?: string; // we'll implement upload next step
-    }>;
-  }) => void;
+  onComplete: (payload: BrandingCompletePayload) => void;
 };
 
 type PosDraft = {
