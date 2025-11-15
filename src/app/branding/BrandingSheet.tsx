@@ -120,7 +120,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       }
       // remove drafts for unpicked
       Object.keys(next).forEach((k) => {
-        if (!picked.includes(k)) delete (next as any)[k];
+        if (!picked.includes(k)) delete next[k];
       });
       return next;
     });
@@ -155,7 +155,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
           loadingRef.current.types.delete(p);
         });
     }
-  }, [picked, stockHeaderId]);
+  }, [picked, stockHeaderId, typesByPosition]);
 
   // Load sizes when type changes for a position
   useEffect(() => {
@@ -296,7 +296,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
         ) : (
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
-              You've selected your positions! Now select branding details for each position.
+              You&apos;ve selected your positions! Now select branding details for each position.
             </div>
 
             <Tabs value={active ?? undefined} onValueChange={(v) => setActive(v)}>
@@ -341,7 +341,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                             value={d?.type ?? ""}
                             onValueChange={(v) => {
                               // reset size when type changes
-                              setDraft(p, { type: v, size: null as any });
+                              setDraft(p, { type: v, size: null });
                             }}
                             disabled={typeOptions.length === 0}
                           >

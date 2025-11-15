@@ -64,8 +64,9 @@ export default function BrandingModal({ open, onClose, stockHeaderId, onComplete
         const rows = await listBrandingPositions(stockHeaderId);
         const mapped = rows.map(r => ({ name: r.branding_position, count: r.option_count }));
         setPositions(mapped);
-      } catch (e: any) {
-        setErr(e?.message ?? 'Failed to load branding positions.');
+      } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : 'Failed to load branding positions.';
+        setErr(errorMessage);
       } finally {
         setLoading(false);
       }

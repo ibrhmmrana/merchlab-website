@@ -33,9 +33,14 @@ export function useBrandingSheet() {
   return ctx;
 }
 
+type BrandingResult = {
+  stockHeaderId: number;
+  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string }>;
+} | null;
+
 export function BrandingSheetProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<BrandingOpenPayload | null>(null);
-  const [resolver, setResolver] = useState<((v: any) => void) | null>(null);
+  const [resolver, setResolver] = useState<((v: BrandingResult) => void) | null>(null);
 
   const openBranding = useCallback((p: BrandingOpenPayload) => {
     // Guard: log if stock_header_id looks suspicious
@@ -43,7 +48,7 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
       console.warn('BrandingSheetProvider: stockHeaderId seems too small:', p.stockHeaderId);
     }
     setPending(p);
-    return new Promise<any>((resolve) => {
+    return new Promise<BrandingResult>((resolve) => {
       setResolver(() => resolve);
     });
   }, []);
@@ -57,7 +62,7 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
     setResolver(null);
   }
 
-  function handleComplete(v: any) {
+  function handleComplete(v: BrandingResult) {
     console.log('BrandingSheetContext: handleComplete called with:', v);
     if (resolver) {
       resolver(v);

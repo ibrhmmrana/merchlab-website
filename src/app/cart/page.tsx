@@ -49,7 +49,6 @@ export default function CartPage() {
   const setActiveCartGroup = useCartStore((s) => s.setActiveCartGroup);
   const updateQty = useCartStore((s) => s.updateQty);
   const remove = useCartStore((s) => s.remove);
-  const clear = useCartStore((s) => s.clear);
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
 
@@ -284,7 +283,7 @@ export default function CartPage() {
   }
 
   // Build branded payload matching the sample format
-  function buildBrandedPayload(groupItems: CartItem[], selections: QuoteBrandingSelection[]): any[] {
+  function buildBrandedPayload(groupItems: CartItem[], selections: QuoteBrandingSelection[]): Array<Record<string, unknown>> {
     const now = new Date();
     const nowIso = now.toISOString();
     const enquiryId = Math.floor(Date.now() / 1000); // Use timestamp-based ID
