@@ -155,7 +155,11 @@ export const useCartStore = create<State>()(
     },
     {
       name: "merchlab-cart",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      })),
       onRehydrateStorage: () => (state) => {
         if (state) {
           state._hasHydrated = true;
