@@ -18,11 +18,13 @@ export type BrandingOpenPayload = {
   itemKey?: string;
 };
 
+type BrandingResult = {
+  stockHeaderId: number;
+  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string }>;
+} | null;
+
 type Ctx = {
-  openBranding: (p: BrandingOpenPayload) => Promise<{
-    stockHeaderId: number;
-    selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string }>;
-  }>;
+  openBranding: (p: BrandingOpenPayload) => Promise<BrandingResult>;
 };
 
 const BrandingCtx = createContext<Ctx | null>(null);
@@ -32,11 +34,6 @@ export function useBrandingSheet() {
   if (!ctx) throw new Error("useBrandingSheet must be used inside <BrandingSheetProvider>");
   return ctx;
 }
-
-type BrandingResult = {
-  stockHeaderId: number;
-  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string }>;
-} | null;
 
 export function BrandingSheetProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<BrandingOpenPayload | null>(null);
