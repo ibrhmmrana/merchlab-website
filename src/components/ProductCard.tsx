@@ -9,6 +9,12 @@ import ColorSwatch from "@/components/ColorSwatch";
 import { useUiStore } from "@/store/ui";
 import { Toast } from "@/components/ui/toast";
 import { sortSizes } from "@/lib/sizeUtils";
+import BrandingModal from "@/components/branding/BrandingModal";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { BrandingMode, BrandingSelection } from "@/types/branding";
+import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
+import { cn } from "@/lib/utils";
 
 type Props = { group: ProductGroup };
 
@@ -67,6 +73,9 @@ function generateColorSvg(colorName: string): string {
 }
 
 
+// Helper function to normalize strings for comparison
+const norm = (x?: string | null) => String(x ?? '').trim().toLowerCase();
+
 export default function ProductCard({ group }: Props) {
   const [variants, setVariants] = useState<Variant[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,6 +102,28 @@ export default function ProductCard({ group }: Props) {
   const [showToast, setShowToast] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [brandingMode, setBrandingMode] = useState<BrandingMode>("unbranded");
+  const [brandingSelections, setBrandingSelections] = useState<BrandingSelection[]>([]);
+  const [showBrandingModal, setShowBrandingModal] = useState(false);
+  const { openBranding } = useBrandingSheet();
+
+  // When user clicks "Branded"
+  function onChooseBranded() {
+    setBrandingMode('branded');
+    // Don't open modal immediately - wait for Quick Add click
+  }
+
+  // When user clicks "Unbranded"
+  function onChooseUnbranded() {
+    setBrandingMode('unbranded');
+    setBrandingSelections([]); // clear any old branded selections
+  }
+
+  // Handle branding completion (from modal - keeping for backward compatibility)
+  function handleBrandingComplete(selections: BrandingSelection[]) {
+    setBrandingSelections(selections);
+    setShowBrandingModal(false);
+  }
 
   const sizesForSelected = useMemo(() => {
     const fromMap = colourMap?.find(c => c.name === selectedColour)?.sizes ?? [];
@@ -168,13 +199,128 @@ export default function ProductCard({ group }: Props) {
 
 
   async function quickAddIfReady() {
-    console.log("quickAddIfReady called", { selectedColour, selectedSize, variants: !!variants });
+    console.log("quickAddIfReady called", { selectedColour, selectedSize, variants: !!variants, brandingMode, brandingSelections });
     
     // Only proceed if we have the required selections
     if (!selectedColour || !selectedSize) {
       console.log("Missing color or size, returning silently");
       return; // Don't open modal, just return silently
     }
+    
+    // Find the selected variant to get its ID (norm is defined at component level)
+    // Store it before async operations to ensure we have it
+    let selectedVariant = variants?.find(
+      v => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(selectedSize)
+    );
+    
+    // If branded, open the branding sheet and wait for selections
+    if (brandingMode === 'branded') {
+      // Validate we have a variant before proceeding
+      if (!selectedVariant) {
+        console.error('ProductCard: Cannot open branding - no variant found', {
+          selectedColour,
+          selectedSize,
+          variantsCount: variants?.length,
+          availableVariants: variants?.map(v => ({ colour: v.colour, size: v.size, stock_id: v.stock_id }))
+        });
+        return;
+      }
+      
+      try {
+        // Guard: log if stock_header_id looks suspicious
+        if (group.stock_header_id < 1000) {
+          console.warn('ProductCard: stock_header_id seems too small:', group.stock_header_id);
+        }
+        
+        // Store variant info before async call (these won't change even if state resets)
+        const variantBeforeBranding = selectedVariant;
+        const colourBeforeBranding = selectedColour;
+        const sizeBeforeBranding = selectedSize;
+        
+        const result = await openBranding({
+          productId: String(group.stock_header_id),
+          productName: group.group_name ?? "Product",
+          stockHeaderId: group.stock_header_id,
+          variantId: variantBeforeBranding ? String(variantBeforeBranding.stock_id) : undefined,
+          colour: colourBeforeBranding ?? undefined,
+          size: sizeBeforeBranding ?? undefined,
+          quantity: 1,
+        });
+        
+        console.log('ProductCard: branding result:', result);
+        
+        // After user saves branding, recompute selectedVariant in case variants changed
+        // Use the stored values to ensure we get the same variant
+        // Note: onMouseLeave might have reset selectedColour/selectedSize, so we use stored values
+        if (variants && colourBeforeBranding && sizeBeforeBranding) {
+          const recomputedVariant = variants.find(
+            v => norm(v.colour) === norm(colourBeforeBranding) && norm(v.size) === norm(sizeBeforeBranding)
+          );
+          if (recomputedVariant) {
+            selectedVariant = recomputedVariant;
+          }
+        }
+        
+        // If still no variant, use the one we stored before (fallback)
+        if (!selectedVariant && variantBeforeBranding) {
+          selectedVariant = variantBeforeBranding;
+        }
+        
+        console.log('ProductCard: selectedVariant after branding:', selectedVariant, {
+          colourBeforeBranding,
+          sizeBeforeBranding,
+          currentSelectedColour: selectedColour,
+          currentSelectedSize: selectedSize,
+          variantsCount: variants?.length,
+          variantBeforeBranding: variantBeforeBranding ? { stock_id: variantBeforeBranding.stock_id, colour: variantBeforeBranding.colour, size: variantBeforeBranding.size } : null,
+          availableVariants: variants?.map(v => ({ colour: v.colour, size: v.size, stock_id: v.stock_id }))
+        });
+        
+        // After user saves branding, add to cart including branding data
+        if (result && result.selections && result.selections.length > 0) {
+          if (!selectedVariant) {
+            console.error('ProductCard: No selected variant available to add to cart', {
+              colourBeforeBranding,
+              sizeBeforeBranding,
+              variantsCount: variants?.length,
+              availableVariants: variants?.map(v => ({ colour: v.colour, size: v.size, stock_id: v.stock_id }))
+            });
+            return;
+          }
+          
+          // Convert branding selections to the format expected by cart
+          const brandingSelections = result.selections.map(sel => ({
+            branding_position: sel.position,
+            branding_type: sel.type || '',
+            branding_size: sel.size || '',
+            color_count: sel.colorCount,
+            comment: sel.comment,
+          }));
+          
+          console.log('ProductCard: Adding to cart with branding:', {
+            variant: selectedVariant,
+            brandingSelections,
+            brandingMode: 'branded'
+          });
+          
+          add({
+            ...selectedVariant,
+            quantity: 1,
+            brandingMode: 'branded',
+            branding: brandingSelections,
+          });
+          
+          setShowToast(true);
+        } else {
+          console.log('ProductCard: No branding selections or user cancelled');
+        }
+      } catch (error) {
+        console.error("Error in branding flow:", error);
+      }
+      return;
+    }
+    
+    // Unbranded flow continues below
     
     // Start pressing animation
     setIsPressed(true);
@@ -214,10 +360,7 @@ export default function ProductCard({ group }: Props) {
       return;
     }
 
-    // Normalise helpers
-    const norm = (x?: string | null) => String(x ?? '').trim().toLowerCase();
-
-    // Match the real variant by colour + size
+    // Match the real variant by colour + size (norm already defined above)
     const realVariant =
       variants?.find(v => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(selectedSize))
       // fallback: if size not chosen yet, match by colour only and pick first size
@@ -253,11 +396,20 @@ export default function ProductCard({ group }: Props) {
       size: realVariant.size,
     });
 
-    // Add to cart with the exact variant object
+    // Add to cart with the exact variant object and branding info
     try {
-      add({ ...realVariant, quantity: 1 });
+      add({ 
+        ...realVariant, 
+        quantity: 1,
+        brandingMode: brandingMode ?? undefined,
+        branding: brandingMode === 'branded' ? brandingSelections : undefined,
+      });
       console.log("Successfully added to cart - no popup needed");
       setShowToast(true);
+      
+      // Optional: reset branding choices after adding
+      // setBrandingMode(null);
+      // setBrandingSelections([]);
     } catch (error) {
       console.error("Error adding to cart:", error);
     }
@@ -333,6 +485,8 @@ export default function ProductCard({ group }: Props) {
       const prevPreviewImage = prevColor.image_url ?? generateColorSvg(prevColor.name);
       setPreview(prevPreviewImage);
       setSelectedSize(null);
+      setBrandingMode(null);
+      setBrandingSelections([]);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       const nextIndex = currentIndex < colourMap.length - 1 ? currentIndex + 1 : 0;
@@ -341,11 +495,13 @@ export default function ProductCard({ group }: Props) {
       const nextPreviewImage = nextColor.image_url ?? generateColorSvg(nextColor.name);
       setPreview(nextPreviewImage);
       setSelectedSize(null);
+      setBrandingMode(null);
+      setBrandingSelections([]);
     }
   };
 
   return (
-    <div className="luxury-product-card group" onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); }}>
+    <div className="luxury-product-card group" onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); setBrandingMode('unbranded'); setBrandingSelections([]); }}>
       <div className="aspect-square relative bg-gray-50 overflow-hidden">
         {preview ? (
           <Image
@@ -413,13 +569,15 @@ export default function ProductCard({ group }: Props) {
                      src={c.image_url}
                      label={c.name}
                      selected={selectedColour === c.name}
-                     onClick={() => { 
-                       console.log("Color clicked:", c.name);
-                       setSelectedColour(c.name); 
-                       const previewImage = c.image_url ?? generateColorSvg(c.name);
-                       setPreview(previewImage); 
-                       setSelectedSize(null); 
-                     }}
+                    onClick={() => { 
+                      console.log("Color clicked:", c.name);
+                      setSelectedColour(c.name); 
+                      const previewImage = c.image_url ?? generateColorSvg(c.name);
+                      setPreview(previewImage); 
+                      setSelectedSize(null);
+                      setBrandingMode('unbranded');
+                      setBrandingSelections([]);
+                    }}
                      size={35}
                    />
               ))}
@@ -484,6 +642,8 @@ export default function ProductCard({ group }: Props) {
                       e.stopPropagation();
                       console.log("Size clicked:", s);
                       setSelectedSize(s);
+                      setBrandingMode(null);
+                      setBrandingSelections([]);
                     }}
                     className={`px-3 py-1 text-xs rounded-full border flex-shrink-0 z-10 relative ${
                       selectedSize === s ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 hover:border-gray-400"
@@ -520,10 +680,59 @@ export default function ProductCard({ group }: Props) {
         {/* Quick Add button - only show when hovering */}
         {isHovered && (
         <div className="mt-3">
+          {/* Branding selector - ToggleGroup */}
+          <div className="flex items-center justify-between mb-2 relative z-10">
+            <div className="flex gap-1.5 w-full rounded-md border border-gray-300 p-0.5 bg-white sm:rounded-lg sm:border-2 sm:p-1 sm:gap-2 sm:bg-gray-50">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChooseUnbranded();
+                }}
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-semibold rounded transition-all relative flex items-center justify-center gap-1.5 min-h-[36px]",
+                  "sm:px-4 sm:py-2.5 sm:text-xs sm:min-h-0",
+                  brandingMode === "unbranded" 
+                    ? "bg-primary text-white shadow-md ring-1 ring-primary/20" 
+                    : "text-gray-600 hover:text-gray-800 hover:bg-gray-50 bg-transparent active:bg-gray-100"
+                )}
+              >
+                {brandingMode === "unbranded" && (
+                  <svg className="w-3.5 h-3.5 text-white sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                <span>Unbranded</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChooseBranded();
+                }}
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-semibold rounded transition-all relative flex items-center justify-center gap-1.5 min-h-[36px]",
+                  "sm:px-4 sm:py-2.5 sm:text-xs sm:min-h-0",
+                  brandingMode === "branded" 
+                    ? "bg-primary text-white shadow-md ring-1 ring-primary/20" 
+                    : "text-gray-600 hover:text-gray-800 hover:bg-gray-50 bg-transparent active:bg-gray-100"
+                )}
+              >
+                {brandingMode === "branded" && (
+                  <svg className="w-3.5 h-3.5 text-white sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                <span>Branded</span>
+              </button>
+            </div>
+          </div>
+          
           <button 
             disabled={loading || !selectedColour || !selectedSize} 
-            onClick={() => {
-              console.log("Button clicked!", { selectedColour, selectedSize, loading });
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log("Button clicked!", { selectedColour, selectedSize, loading, brandingMode });
               quickAddIfReady();
             }} 
             className={`luxury-btn w-full ${
@@ -532,7 +741,7 @@ export default function ProductCard({ group }: Props) {
                 : 'scale-100'
             } ${loading || !selectedColour || !selectedSize ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {loading ? "Loading…" : isPressed ? "Adding..." : "Quick Add To Cart"}
+            {loading ? "Loading…" : isPressed ? "Adding..." : brandingMode === "branded" ? "Customize & Add" : "Quick Add To Cart"}
           </button>
         </div>
         )}
@@ -551,6 +760,33 @@ export default function ProductCard({ group }: Props) {
       <Toast open={showToast} onOpenChange={setShowToast}>
         Added to cart!
       </Toast>
+      
+      {/* Branding Modal */}
+      {(() => {
+        // Get stock_header_id from selected variant or fall back to product group
+        let stockHeaderId: number | undefined;
+        
+        if (selectedColour && selectedSize && variants) {
+          const selectedVariant = variants.find(
+            v => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(selectedSize)
+          );
+          stockHeaderId = selectedVariant?.stock_header_id;
+        }
+        
+        // Fallback to product group's stock_header_id
+        if (!stockHeaderId) {
+          stockHeaderId = group.stock_header_id;
+        }
+        
+        return (
+          <BrandingModal
+            open={showBrandingModal}
+            onClose={() => setShowBrandingModal(false)}
+            stockHeaderId={stockHeaderId}
+            onComplete={handleBrandingComplete}
+          />
+        );
+      })()}
     </div>
   );
 }

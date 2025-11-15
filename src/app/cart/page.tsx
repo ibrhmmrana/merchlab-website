@@ -1,20 +1,82 @@
 "use client";
-import { useCartStore, getCartItemKey } from "@/store/cart";
+import { useCartStore, getCartItemKey, isBranded, type CartItem } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useHasHydrated } from "@/lib/hooks/useHasHydrated";
 import SmartImage from "@/components/SmartImage";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import type { ParsedAddress } from "@/lib/utils/places";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
+import { useSearchParams, useRouter } from "next/navigation";
+import { getOrCreateSessionToken } from "@/lib/session";
+import { fetchQuoteBrandingSelections, type QuoteBrandingSelection } from "@/lib/branding";
+
+// Validation helper for branded items
+function validateBrandedItem(item: CartItem): boolean {
+  if (!isBranded(item) || !item.branding || item.branding.length === 0) {
+    return false;
+  }
+  
+  return item.branding.every((b) => {
+    if (!b.branding_position || !b.branding_type || !b.branding_size) {
+      return false;
+    }
+    if (typeof b.color_count !== 'number' || b.color_count < 1) {
+      return false;
+    }
+    // For Screen Printing, color_count must be 1-10; for others, must be 1
+    const isScreenPrint = b.branding_type.toLowerCase().includes('screen') && b.branding_type.toLowerCase().includes('print');
+    if (isScreenPrint) {
+      return b.color_count >= 1 && b.color_count <= 10;
+    } else {
+      return b.color_count === 1;
+    }
+  });
+}
 
 export default function CartPage() {
   const hydrated = useHasHydrated();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const items = useCartStore((s) => s.items);
+  const brandedItems = useCartStore((s) => s.brandedItems);
+  const unbrandedItems = useCartStore((s) => s.unbrandedItems);
+  const activeCartGroup = useCartStore((s) => s.activeCartGroup);
+  const setActiveCartGroup = useCartStore((s) => s.setActiveCartGroup);
   const updateQty = useCartStore((s) => s.updateQty);
   const remove = useCartStore((s) => s.remove);
   const clear = useCartStore((s) => s.clear);
+
+  const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
+
+  // Sync URL query param with activeCartGroup
+  useEffect(() => {
+    const groupParam = searchParams.get('group');
+    if (groupParam === 'branded' || groupParam === 'unbranded') {
+      if (groupParam !== activeCartGroup) {
+        setActiveCartGroup(groupParam);
+      }
+    }
+  }, [searchParams, activeCartGroup, setActiveCartGroup]);
+
+  // Update URL when activeCartGroup changes
+  useEffect(() => {
+    const currentGroup = searchParams.get('group');
+    if (currentGroup !== activeCartGroup) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('group', activeCartGroup);
+      router.replace(`/cart?${params.toString()}`, { scroll: false });
+    }
+  }, [activeCartGroup, searchParams, router]);
+
+  // Validate branded items
+  const isBrandedValid = activeCartGroup === 'branded' 
+    ? activeItems.every(validateBrandedItem)
+    : true;
 
   const [form, setForm] = useState({
     firstName: "",
@@ -87,7 +149,7 @@ export default function CartPage() {
     return `MLQ-${y}${m}${dd}-${rand}`;
   }
 
-  function buildQuotePayload(merchantOrderNo: string) {
+  function buildQuotePayload(merchantOrderNo: string, groupItems: CartItem[]) {
     const now = new Date();
     const nowIso = now.toISOString();
     const enquiryId = Math.floor(Math.random() * 1000) + 100;
@@ -108,10 +170,11 @@ export default function CartPage() {
       warehousingRequired: "",
       shippingDecision: "",
       shippingType: "",
-      itemCount: items.length,
-      itemCost: items.reduce((sum, item) => sum + ((item.discounted_price || item.base_price || 0) * item.quantity), 0),
+      itemCount: groupItems.length,
+      itemCost: groupItems.reduce((sum, item) => sum + ((item.discounted_price || item.base_price || 0) * item.quantity), 0),
       brandingCost: 0,
-      totalCost: items.reduce((sum, item) => sum + ((item.discounted_price || item.base_price || 0) * item.quantity), 0),
+      totalCost: groupItems.reduce((sum, item) => sum + ((item.discounted_price || item.base_price || 0) * item.quantity), 0),
+      quote_meta: { category: activeCartGroup },
       vat: 0,
       overallMarkup: 0,
       brandingStatus: "unbranded",
@@ -144,7 +207,7 @@ export default function CartPage() {
         enquiryAddressId: enquiryCustomerId + 1,
         enquiries: [null]
       },
-      items: items.map((item, idx) => {
+      items: groupItems.map((item, idx) => {
         console.log(`Item ${idx}: stock_id=${item.stock_id}, stock_header_id=${item.stock_header_id}, colour=${item.colour}, size=${item.size}`);
         return {
           enquiryItemId: enquiryId + idx + 200,
@@ -220,16 +283,251 @@ export default function CartPage() {
     return colourMap[colour] || "#000000";
   }
 
+  // Build branded payload matching the sample format
+  function buildBrandedPayload(groupItems: CartItem[], selections: QuoteBrandingSelection[]): any[] {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const enquiryId = Math.floor(Date.now() / 1000); // Use timestamp-based ID
+    const enquiryCustomerId = Math.floor(Math.random() * 100) + 20;
+    const leadCustomerAccount = null; // Can be set if you have a CRM account code
+
+    // Group selections by item_key
+    const selectionsByItemKey: Record<string, QuoteBrandingSelection[]> = {};
+    selections.forEach(sel => {
+      if (!selectionsByItemKey[sel.item_key]) {
+        selectionsByItemKey[sel.item_key] = [];
+      }
+      selectionsByItemKey[sel.item_key].push(sel);
+    });
+
+    const items = groupItems.map((item, idx) => {
+      const itemKey = getCartItemKey(item);
+      const itemSelections = selectionsByItemKey[itemKey] || [];
+      
+      // Build brandingItems array
+      const brandingItems = itemSelections.map((sel, selIdx) => ({
+        enquiryBrandingItemId: enquiryId + idx * 1000 + selIdx + 1,
+        enquiryItemId: enquiryId + idx + 200,
+        stockHeaderId: item.stock_header_id,
+        colour: item.colour || null,
+        brandingConfigId: "",
+        brandingChargeId: "",
+        brandingType: sel.branding_type,
+        brandingPosition: sel.branding_position,
+        brandingSize: sel.branding_size,
+        colourCount: sel.color_count,
+        unitCount: item.quantity,
+        unitPrice: 0,
+        setupFee: 0,
+        namesList: "[]",
+        comment: sel.comment || "",
+        brandingCost: 0,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        logoFile: sel.artwork_url ? [sel.artwork_url] : [],
+      }));
+
+      return {
+        enquiryItemId: enquiryId + idx + 200,
+        enquiryId,
+        stockId: item.stock_id ?? item.stockId ?? 0,
+        stockHeaderId: item.stock_header_id ?? item.stockHeaderId ?? 0,
+        quantity: item.quantity,
+        price: 0,
+        colour: item.colour || null,
+        size: item.size || null,
+        description: item.description || item.stock_code || "",
+        descriptionSlug: (item.description || item.stock_code || "").toLowerCase().replace(/\s+/g, "-"),
+        productColourImage: item.image_url || null,
+        itemTotalCost: 0,
+        brandingApplied: 1,
+        lineItemMarkup: "0",
+        transferred: 0,
+        sample: 0,
+        discontinued: 0,
+        isExternal: 0,
+        itemNumber: item.stock_code || "",
+        hexCode: getHexCodeForColour(item.colour),
+        supplier: "Barron",
+        suppliedBy: "Barron",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        brandingItems,
+      };
+    });
+
+    return [{
+      enquiryId,
+      enquiryCustomerId,
+      leadCustomerAccount,
+      enquiryDate: nowIso,
+      submissionDate: nowIso,
+      source: "quote_form",
+      status: "pending",
+      packingDecision: "",
+      packingType: "",
+      warehousingDecision: "",
+      warehousingRequired: "",
+      shippingDecision: "",
+      shippingType: "",
+      itemCount: groupItems.length,
+      itemCost: 0,
+      brandingCost: 0,
+      totalCost: 0,
+      vat: 0,
+      overallMarkup: 0,
+      brandingStatus: "branded",
+      supplierName: "Barron",
+      isSample: false,
+      enquiryCustomer: {
+        enquiryCustomerId,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        subscribeToNewsletter: false,
+        telephoneNumber: form.phone,
+        company: form.company || null,
+        address: {
+          enquiryAddressId: enquiryCustomerId + 1,
+          street: form.street || "",
+          suburb: form.suburb || "",
+          city: form.city || "",
+          province: form.province || "",
+          postalCode: form.postalCode || "",
+          country: form.country || "South Africa",
+          enquiryCustomerId,
+          enquiryCustomer: null,
+          ...(form.lat !== undefined && form.lng !== undefined ? { 
+            lat: form.lat, 
+            lng: form.lng 
+          } : {})
+        },
+        enquiryAddressId: enquiryCustomerId + 1,
+        enquiries: [null]
+      },
+      items,
+    }];
+  }
+
   async function submitQuote() {
+    if (activeItems.length === 0) {
+      setMsg("No items to submit in the selected group.");
+      return;
+    }
+
+    if (activeCartGroup === 'branded' && !isBrandedValid) {
+      setMsg("Please complete all branding details before submitting.");
+      return;
+    }
+
     setSubmitting(true);
     setMsg(null);
     try {
+      // Handle branded submission separately
+      if (activeCartGroup === 'branded') {
+        // Get session token
+        const sessionToken = getOrCreateSessionToken();
+        
+        // Get item keys for current branded items
+        const itemKeys = activeItems.map(item => getCartItemKey(item));
+        
+        // Fetch branding selections from database
+        let selections: QuoteBrandingSelection[] = [];
+        try {
+          selections = await fetchQuoteBrandingSelections(sessionToken, itemKeys);
+        } catch (e) {
+          console.warn('Failed to fetch selections from DB, will use cart item branding:', e);
+        }
+        
+        // If no DB selections found, build from cart item's branding array
+        if (selections.length === 0) {
+          // Convert cart item branding to QuoteBrandingSelection format
+          selections = activeItems.flatMap(item => {
+            if (!item.branding || item.branding.length === 0) {
+              return [];
+            }
+            const itemKey = getCartItemKey(item);
+            return item.branding.map(b => ({
+              item_key: itemKey,
+              stock_header_id: item.stock_header_id,
+              branding_position: b.branding_position,
+              branding_type: b.branding_type,
+              branding_size: b.branding_size,
+              color_count: b.color_count,
+              comment: b.comment || null,
+              artwork_url: b.artwork_url || null,
+            }));
+          });
+        }
+        
+        // Validate that each item has at least one selection (either from DB or cart)
+        const itemsWithoutSelections = activeItems.filter(item => {
+          const itemKey = getCartItemKey(item);
+          const hasDbSelection = selections.some(sel => sel.item_key === itemKey);
+          const hasCartBranding = item.branding && item.branding.length > 0;
+          return !hasDbSelection && !hasCartBranding;
+        });
+        
+        if (itemsWithoutSelections.length > 0) {
+          setMsg("Some items are missing branding selections. Please ensure all branded items have saved selections.");
+          setSubmitting(false);
+          return;
+        }
+        
+        // Build branded payload
+        const brandedPayload = buildBrandedPayload(activeItems, selections);
+        
+        console.log('Submitting branded payload:', JSON.stringify(brandedPayload, null, 2));
+        
+        // POST to branded webhook
+        const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_BRANDED_URL || "https://ai.intakt.co.za/webhook/ml-branded-enquiries";
+        const res = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { 
+            "content-type": "application/json",
+            "user-agent": "MerchLab-Quote-System/1.0"
+          },
+          body: JSON.stringify(brandedPayload),
+        });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("Branded webhook failed:", res.status, errorText);
+          throw new Error(`Failed to submit branded quote: ${res.status} - ${errorText}`);
+        }
+        
+        // Success - remove branded items
+        const otherGroup = 'unbranded';
+        const otherItems = unbrandedItems;
+        const willHaveRemainingItems = otherItems.length > 0;
+        
+        activeItems.forEach((item) => {
+          remove(getCartItemKey(item));
+        });
+        
+        const message = willHaveRemainingItems
+          ? "Branded items submitted. Your unbranded items are still in the cart."
+          : "Branded items submitted successfully.";
+        
+        sessionStorage.setItem('quoteSuccess', message);
+        
+        if (!willHaveRemainingItems) {
+          window.location.href = '/';
+        } else {
+          setActiveCartGroup(otherGroup);
+          setMsg(message);
+        }
+        
+        return;
+      }
+      
+      // Unbranded submission - use existing flow
       const mon = generateMerchantOrderNo();
-      const fullEnquiryJson = buildQuotePayload(mon);
+      const fullEnquiryJson = buildQuotePayload(mon, activeItems);
       
       // Debug: Log stock_id verification
       console.log("=== STOCK ID VERIFICATION ===");
-      items.forEach((item, idx) => {
+      activeItems.forEach((item, idx) => {
         console.log(`Cart Item ${idx}:`, {
           stock_id: item.stock_id,
           stock_header_id: item.stock_header_id,
@@ -245,7 +543,7 @@ export default function CartPage() {
       
       // Temporary log for debugging
       console.log('CLIENT PAYLOAD PREVIEW', JSON.stringify({ 
-        items: items.map(item => ({
+        items: activeItems.map(item => ({
           stock_id: item.stock_id,
           stock_header_id: item.stock_header_id,
           stockId: item.stockId,
@@ -267,14 +565,32 @@ export default function CartPage() {
       });
       if (!res.ok) throw new Error("Failed to submit quote");
       
-      // Clear cart and redirect to home with success message
-      clear();
+      // Check what will remain before removing
+      const otherGroup = 'branded';
+      const otherItems = brandedItems;
+      const willHaveRemainingItems = otherItems.length > 0;
+      
+      // Remove only the submitted group's items from cart
+      activeItems.forEach((item) => {
+        remove(getCartItemKey(item));
+      });
+      
+      // Show success message
+      const message = willHaveRemainingItems
+        ? "Unbranded items sent. Branded items still in your cart."
+        : "Unbranded items sent successfully.";
       
       // Store success message in sessionStorage for the home page to display
-      sessionStorage.setItem('quoteSuccess', 'true');
+      sessionStorage.setItem('quoteSuccess', message);
       
-      // Redirect to home page
-      window.location.href = '/';
+      // If no items left, redirect to home, otherwise stay on cart page
+      if (!willHaveRemainingItems) {
+        window.location.href = '/';
+      } else {
+        // Switch to the other group
+        setActiveCartGroup(otherGroup);
+        setMsg(message);
+      }
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : "Something went wrong.";
       setMsg(errorMessage);
@@ -310,11 +626,51 @@ export default function CartPage() {
             {/* Product Section */}
             <div className="bg-white rounded-lg p-6">
               <h2 className="text-lg font-semibold mb-4">Product</h2>
-        {items.length === 0 ? (
+              
+              {/* Tabs */}
+              {items.length > 0 && (
+                <div className="mb-4">
+                  <ToggleGroup
+                    type="single"
+                    value={activeCartGroup}
+                    onValueChange={(v) => {
+                      if (v === 'branded' || v === 'unbranded') {
+                        setActiveCartGroup(v);
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    <ToggleGroupItem
+                      value="branded"
+                      className={cn(
+                        "flex-1 px-4 py-2 text-sm font-semibold",
+                        activeCartGroup === "branded" && "bg-primary text-white"
+                      )}
+                    >
+                      Branded ({brandedItems.length})
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="unbranded"
+                      className={cn(
+                        "flex-1 px-4 py-2 text-sm font-semibold",
+                        activeCartGroup === "unbranded" && "bg-primary text-white"
+                      )}
+                    >
+                      Unbranded ({unbrandedItems.length})
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              )}
+
+              {items.length === 0 ? (
                 <div className="text-muted-foreground">Your cart is empty.</div>
+              ) : activeItems.length === 0 ? (
+                <div className="text-muted-foreground">
+                  No {activeCartGroup === 'branded' ? 'branded' : 'unbranded'} items in your cart.
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {items.map((item) => {
+                  {activeItems.map((item) => {
                     const itemKey = getCartItemKey(item);
                     return (
                       <div key={itemKey} className="flex items-center gap-4 border rounded p-3">
@@ -326,6 +682,16 @@ export default function CartPage() {
                           <div className="text-sm text-muted-foreground truncate">
                             {item.brand || "Barron"} • {item.colour} • {item.size}
                           </div>
+                          {isBranded(item) && item.branding?.length ? (
+                            <div className="mt-1.5 space-y-0.5">
+                              <div className="text-[10px] font-medium text-primary">Branded</div>
+                              {item.branding.map((b, idx) => (
+                                <div key={idx} className="text-[10px] text-muted-foreground">
+                                  Position: {b.branding_position} • Size: {b.branding_size} • Type: {b.branding_type} • Colours: {b.color_count}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <div className="mt-2 flex items-center gap-2">
                             <button
                               className="h-7 w-7 rounded border text-sm"
@@ -495,11 +861,16 @@ export default function CartPage() {
               <h2 className="text-lg font-semibold mb-4">Summary</h2>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Products</span>
+                  <span className="text-sm text-gray-600">Products ({activeCartGroup})</span>
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                    {items.length} products
+                    {activeItems.length} {activeItems.length === 1 ? 'product' : 'products'}
                   </span>
                 </div>
+                {activeCartGroup === 'branded' && !isBrandedValid && (
+                  <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                    Please complete all branding details before submitting.
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
@@ -521,11 +892,11 @@ export default function CartPage() {
       </div>
 
                 <button
-                  disabled={submitting || items.length === 0 || !termsAccepted}
+                  disabled={submitting || activeItems.length === 0 || !termsAccepted || (activeCartGroup === 'branded' && !isBrandedValid)}
                   onClick={submitQuote}
                   className="luxury-btn w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-          {submitting ? "Submitting…" : "Submit Quote"}
+                  {submitting ? "Submitting…" : `Submit ${activeCartGroup === 'branded' ? 'Branded' : 'Unbranded'} Quote`}
                 </button>
 
                 {msg && (

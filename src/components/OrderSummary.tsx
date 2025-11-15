@@ -146,6 +146,16 @@ export function OrderSummary() {
                     <p className="text-sm text-muted-foreground">
                       {item.stock_code}
                     </p>
+                    {item.brandingMode === 'branded' && item.branding?.length ? (
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="text-[10px] font-medium text-primary">Branded</div>
+                        {item.branding.map((b, idx) => (
+                          <div key={idx} className="text-[10px] text-muted-foreground">
+                            Position: {b.branding_position} • Size: {b.branding_size} • Type: {b.branding_type} • Colours: {b.color_count}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center space-x-2">

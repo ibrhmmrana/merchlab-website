@@ -1,10 +1,12 @@
 "use client";
 import { useUiStore } from "@/store/ui";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useCartStore, getCartItemKey } from "@/store/cart";
+import { useCartStore, getCartItemKey, isBranded } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import SmartImage from "@/components/SmartImage";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 
 function Thumb({ src, alt }: { src: string | null | undefined; alt: string }) {
   return (
@@ -20,8 +22,14 @@ export default function CartDrawer() {
   const router = useRouter();
 
   const items = useCartStore((s) => s.items);
+  const brandedItems = useCartStore((s) => s.brandedItems);
+  const unbrandedItems = useCartStore((s) => s.unbrandedItems);
+  const activeCartGroup = useCartStore((s) => s.activeCartGroup);
+  const setActiveCartGroup = useCartStore((s) => s.setActiveCartGroup);
   const remove = useCartStore((s) => s.remove);
   const updateQty = useCartStore((s) => s.updateQty);
+
+  const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -30,12 +38,51 @@ export default function CartDrawer() {
           <SheetTitle>My Cart</SheetTitle>
         </SheetHeader>
 
+        {/* Tabs */}
+        {items.length > 0 && (
+          <div className="flex-shrink-0 px-6 pb-3">
+            <ToggleGroup
+              type="single"
+              value={activeCartGroup}
+              onValueChange={(v) => {
+                if (v === 'branded' || v === 'unbranded') {
+                  setActiveCartGroup(v);
+                }
+              }}
+              className="w-full"
+            >
+              <ToggleGroupItem
+                value="branded"
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-semibold",
+                  activeCartGroup === "branded" && "bg-primary text-white"
+                )}
+              >
+                Branded ({brandedItems.length})
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="unbranded"
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-semibold",
+                  activeCartGroup === "unbranded" && "bg-primary text-white"
+                )}
+              >
+                Unbranded ({unbrandedItems.length})
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        )}
+
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto px-6 space-y-3">
           {items.length === 0 ? (
             <div className="text-sm text-muted-foreground py-4">Your cart is empty.</div>
+          ) : activeItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4">
+              No {activeCartGroup === 'branded' ? 'branded' : 'unbranded'} items in your cart.
+            </div>
           ) : (
-            items.map((i) => {
+            activeItems.map((i) => {
               const itemKey = getCartItemKey(i);
               return (
                 <div key={itemKey} className="flex items-center gap-3 border rounded p-3">
@@ -45,6 +92,16 @@ export default function CartDrawer() {
                     <div className="text-xs text-muted-foreground truncate">
                       {i.brand || "Barron"} • {i.colour} • {i.size}
                     </div>
+                    {isBranded(i) && i.branding?.length ? (
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="text-[10px] font-medium text-primary">Branded</div>
+                        {i.branding.map((b, idx) => (
+                          <div key={idx} className="text-[10px] text-muted-foreground">
+                            Position: {b.branding_position} • Size: {b.branding_size} • Type: {b.branding_type} • Colours: {b.color_count}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         className="h-6 w-6 rounded border text-sm hover:bg-gray-50"

@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 import { GlobalLoadingProvider } from "@/components/GlobalLoadingProvider";
 import CookieConsent from "@/components/CookieConsent";
+import { BrandingProvider } from "@/components/providers/BrandingProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://merchlab.io'),
@@ -50,17 +51,19 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <GlobalLoadingProvider>
-          <div className="min-h-screen flex flex-col">
-            <Header />
-            <main className="flex-1">
-              {children}
-            </main>
-            <Footer />
-            <CartDrawer />
-            <CookieConsent />
-          </div>
-        </GlobalLoadingProvider>
+        <BrandingProvider>
+          <GlobalLoadingProvider>
+            <div className="min-h-screen flex flex-col">
+              <Header />
+              <main className="flex-1">
+                {children}
+              </main>
+              <Footer />
+              <CartDrawer />
+              <CookieConsent />
+            </div>
+          </GlobalLoadingProvider>
+        </BrandingProvider>
       </body>
     </html>
   );
