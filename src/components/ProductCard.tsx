@@ -17,6 +17,9 @@ import type { BrandingMode } from "@/app/branding/types";
 import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
 import { cn } from "@/lib/utils";
 
+// Type guard helper for branding mode
+const isBranded = (m: BrandingMode | undefined): m is 'branded' => m === 'branded';
+
 type Props = { group: ProductGroup };
 
 type ColourOption = { name: string; image_url: string | null; sizes: string[] };
@@ -103,7 +106,7 @@ export default function ProductCard({ group }: Props) {
   const [showToast, setShowToast] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [brandingMode, setBrandingMode] = useState<BrandingMode | null>(null);
+  const [brandingMode, setBrandingMode] = useState<BrandingMode | undefined>(undefined);
   const [brandingSelections, setBrandingSelections] = useState<BrandingSelection[]>([]);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
   const { openBranding } = useBrandingSheet();
@@ -403,7 +406,7 @@ export default function ProductCard({ group }: Props) {
         ...realVariant, 
         quantity: 1,
         brandingMode: brandingMode ?? undefined,
-        branding: brandingMode === 'branded' ? brandingSelections : undefined,
+        branding: isBranded(brandingMode) ? brandingSelections : undefined,
       });
       console.log("Successfully added to cart - no popup needed");
       setShowToast(true);
@@ -486,7 +489,7 @@ export default function ProductCard({ group }: Props) {
       const prevPreviewImage = prevColor.image_url ?? generateColorSvg(prevColor.name);
       setPreview(prevPreviewImage);
       setSelectedSize(null);
-      setBrandingMode(null);
+      setBrandingMode(undefined);
       setBrandingSelections([]);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
@@ -496,7 +499,7 @@ export default function ProductCard({ group }: Props) {
       const nextPreviewImage = nextColor.image_url ?? generateColorSvg(nextColor.name);
       setPreview(nextPreviewImage);
       setSelectedSize(null);
-      setBrandingMode(null);
+      setBrandingMode(undefined);
       setBrandingSelections([]);
     }
   };
@@ -643,7 +646,7 @@ export default function ProductCard({ group }: Props) {
                       e.stopPropagation();
                       console.log("Size clicked:", s);
                       setSelectedSize(s);
-                      setBrandingMode(null);
+                      setBrandingMode(undefined);
                       setBrandingSelections([]);
                     }}
                     className={`px-3 py-1 text-xs rounded-full border flex-shrink-0 z-10 relative ${
