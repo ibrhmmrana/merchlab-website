@@ -241,6 +241,12 @@ export default function ProductCard({ group }: Props) {
         const colourBeforeBranding = selectedColour;
         const sizeBeforeBranding = selectedSize;
         
+        // Generate a temporary itemKey for branding (will be used when item is added to cart)
+        // This allows us to save branding selections to the database before the item is in the cart
+        const tempItemKey = variantBeforeBranding 
+          ? `${variantBeforeBranding.stock_id}-${colourBeforeBranding || 'default'}-${sizeBeforeBranding || 'default'}|b:temp`
+          : `temp-${group.stock_header_id}-${Date.now()}`;
+        
         const result = await openBranding({
           productId: String(group.stock_header_id),
           productName: group.group_name ?? "Product",
@@ -249,6 +255,7 @@ export default function ProductCard({ group }: Props) {
           colour: colourBeforeBranding ?? undefined,
           size: sizeBeforeBranding ?? undefined,
           quantity: 1,
+          itemKey: tempItemKey,
         });
         
         console.log('ProductCard: branding result:', result);
@@ -299,7 +306,7 @@ export default function ProductCard({ group }: Props) {
             branding_size: sel.size || '',
             color_count: sel.colorCount,
             comment: sel.comment,
-            artwork_url: sel.artwork_url,
+            artwork_url: sel.artwork_url, // Include artwork_url from upload
           }));
           
           console.log('ProductCard: Adding to cart with branding:', {

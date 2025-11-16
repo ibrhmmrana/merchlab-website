@@ -15,8 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { fetchBrandingPositions, fetchBrandingTypes, fetchBrandingSizes } from '@/lib/branding';
 import type { BrandingCompletePayload } from './types';
-import { uploadBrandingImage } from '@/lib/storage';
-import { Input } from '@/components/ui/input';
+import { getOrCreateSessionToken } from '@/lib/session';
 
 export type PositionOption = string;
 export type TypeOption = string;
@@ -32,6 +31,7 @@ export type BrandingSheetProps = {
   // initial variant/qty context if you want to show it in the header later
   colour?: string | null;
   size?: string | null;
+  itemKey?: string; // Cart item key for saving branding selections
 
   // when user presses "Save Branding", we resolve with selections
   onComplete: (payload: BrandingCompletePayload) => void;
@@ -46,7 +46,7 @@ type PosDraft = {
 };
 
 export default function BrandingSheet(props: BrandingSheetProps) {
-  const { open, onClose, productName, stockHeaderId, colour, size, onComplete } = props;
+  const { open, onClose, productName, stockHeaderId, colour, size, itemKey, onComplete } = props;
 
   const [screen, setScreen] = useState<"choose" | "details">("choose");
   const [picked, setPicked] = useState<string[]>([]);
@@ -209,15 +209,101 @@ export default function BrandingSheet(props: BrandingSheetProps) {
   }
 
   function setDraft(p: string, patch: Partial<PosDraft>) {
-    setDrafts((prev) => ({ ...prev, [p]: { ...prev[p], ...patch } as PosDraft }));
+    setDrafts((prev) => {
+      const updated = { ...prev, [p]: { ...prev[p], ...patch } as PosDraft };
+      // Auto-save to database when type/size/colorCount changes (preserve artwork_url)
+      // Only save if we have complete selection (type and size) and the change is to type/size/colorCount
+      const draft = updated[p];
+      if (itemKey && draft?.type && draft?.size && (patch.type || patch.size || patch.colorCount !== undefined)) {
+        // Debounce: save after a short delay to avoid too many calls
+        setTimeout(() => {
+          saveBrandingSelectionToDb(p, draft);
+        }, 500);
+      }
+      return updated;
+    });
+  }
+
+  async function saveBrandingSelectionToDb(position: string, draft: PosDraft) {
+    if (!itemKey || !draft.type || !draft.size) {
+      // Don't save incomplete selections
+      return;
+    }
+
+    try {
+      const sessionToken = getOrCreateSessionToken();
+      const response = await fetch('/api/save-branding-selection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionToken,
+          itemKey,
+          stockHeaderId,
+          position,
+          brandingType: draft.type,
+          brandingSize: draft.size,
+          colorCount: draft.colorCount,
+          comment: draft.comment || null,
+          artwork_url: draft.artwork_url || null, // Preserve existing artwork_url
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to save branding selection to DB:', await response.text());
+      }
+    } catch (error) {
+      console.error('Error saving branding selection:', error);
+    }
   }
 
   async function handleFileUpload(position: string, file: File) {
+    if (!itemKey) {
+      setUploadError((prev) => ({ ...prev, [position]: 'Item key is required for upload' }));
+      return;
+    }
+
     setUploading((prev) => ({ ...prev, [position]: true }));
     setUploadError((prev) => ({ ...prev, [position]: '' }));
 
     try {
-      const url = await uploadBrandingImage(file);
+      const sessionToken = getOrCreateSessionToken();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sessionToken', sessionToken);
+      formData.append('itemKey', itemKey);
+      formData.append('stockHeaderId', stockHeaderId.toString());
+      formData.append('position', position);
+      
+      // Include current draft values if available
+      const draft = drafts[position];
+      if (draft?.type) formData.append('brandingType', draft.type);
+      if (draft?.size) formData.append('brandingSize', draft.size);
+      if (draft?.colorCount) formData.append('colorCount', draft.colorCount.toString());
+      if (draft?.comment) formData.append('comment', draft.comment);
+
+      const response = await fetch('/api/upload-branding', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Upload failed: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          const text = await response.text().catch(() => '');
+          errorMessage = text || errorMessage;
+        }
+        console.error('Upload API error:', { status: response.status, error: errorMessage });
+        throw new Error(errorMessage);
+      }
+
+      const { url } = await response.json();
+      if (!url) {
+        throw new Error('No URL returned from upload');
+      }
+      
       setDraft(position, { artwork_url: url });
       setUploadError((prev) => ({ ...prev, [position]: '' }));
     } catch (error) {

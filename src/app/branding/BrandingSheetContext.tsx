@@ -21,7 +21,7 @@ export type BrandingOpenPayload = {
 
 type NormalizedBrandingResult = {
   stockHeaderId: number;
-  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string }>;
+  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string; artwork_url?: string }>;
 };
 
 type BrandingResult = NormalizedBrandingResult | null;
@@ -86,6 +86,7 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
         size: s.size!,   // non-null now
         colorCount: s.colorCount,
         comment: s.comment,
+        artwork_url: s.artwork_url, // Include artwork_url
       })),
     };
 
@@ -106,6 +107,7 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
           stockHeaderId={pending.stockHeaderId}
           colour={pending.colour}
           size={pending.size}
+          itemKey={pending.itemKey}
           onComplete={handleComplete}
         />
       ) : null}

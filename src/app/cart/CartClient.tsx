@@ -192,7 +192,7 @@ export default function CartClient() {
         brandingCost: 0,
         createdAt: nowIso,
         updatedAt: nowIso,
-        logoFile: sel.artwork_url || "",
+        logoFile: sel.artwork_url ? [sel.artwork_url] : [],
       }));
 
       return {
@@ -299,34 +299,39 @@ export default function CartClient() {
         // Get item keys for current branded items
         const itemKeys = activeItems.map(item => getCartItemKey(item));
         
-        // Fetch branding selections from database
-        let selections: QuoteBrandingSelection[] = [];
+        // Build selections from cart items (most up-to-date, includes artwork_url from uploads)
+        // Convert cart item branding to QuoteBrandingSelection format
+        const selectionsFromCart = activeItems.flatMap(item => {
+          if (!item.branding || item.branding.length === 0) {
+            return [];
+          }
+          const itemKey = getCartItemKey(item);
+          return item.branding.map(b => ({
+            item_key: itemKey,
+            stock_header_id: item.stock_header_id,
+            branding_position: b.branding_position,
+            branding_type: b.branding_type,
+            branding_size: b.branding_size,
+            color_count: b.color_count,
+            comment: b.comment || null,
+            artwork_url: b.artwork_url || null,
+          }));
+        });
+        
+        // Try to fetch from database as fallback, but prioritize cart data (especially artwork_url)
+        let dbSelections: QuoteBrandingSelection[] = [];
         try {
-          selections = await fetchQuoteBrandingSelections(sessionToken, itemKeys);
+          dbSelections = await fetchQuoteBrandingSelections(sessionToken, itemKeys);
         } catch (e) {
           console.warn('Failed to fetch selections from DB, will use cart item branding:', e);
         }
         
-        // If no DB selections found, build from cart item's branding array
-        if (selections.length === 0) {
-          // Convert cart item branding to QuoteBrandingSelection format
-          selections = activeItems.flatMap(item => {
-            if (!item.branding || item.branding.length === 0) {
-              return [];
-            }
-            const itemKey = getCartItemKey(item);
-            return item.branding.map(b => ({
-              item_key: itemKey,
-              stock_header_id: item.stock_header_id,
-              branding_position: b.branding_position,
-              branding_type: b.branding_type,
-              branding_size: b.branding_size,
-              color_count: b.color_count,
-              comment: b.comment || null,
-              artwork_url: b.artwork_url || null,
-            }));
-          });
-        }
+        // Use cart selections if available (they have the latest artwork_url from uploads)
+        // Otherwise fall back to DB selections
+        const selections = selectionsFromCart.length > 0 ? selectionsFromCart : dbSelections;
+        
+        // Debug: Log selections to verify artwork_url is present
+        console.log('Branding selections for payload:', JSON.stringify(selections, null, 2));
         
         // Validate that each item has at least one selection (either from DB or cart)
         const itemsWithoutSelections = activeItems.filter(item => {
