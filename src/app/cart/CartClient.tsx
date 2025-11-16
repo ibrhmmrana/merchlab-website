@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useCartStore, getCartItemKey, isBranded, type CartItem } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useHasHydrated } from "@/lib/hooks/useHasHydrated";
 import SmartImage from "@/components/SmartImage";

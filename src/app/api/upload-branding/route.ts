@@ -122,12 +122,12 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error('Storage upload error:', {
+        name: uploadError.name,
         message: uploadError.message,
-        statusCode: uploadError.statusCode,
         error: uploadError,
       });
       return NextResponse.json(
-        { error: `Storage upload failed: ${uploadError.message} (Code: ${uploadError.statusCode || 'unknown'})` },
+        { error: `Storage upload failed: ${uploadError.message}` },
         { status: 500 }
       );
     }

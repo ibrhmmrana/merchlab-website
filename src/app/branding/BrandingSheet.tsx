@@ -291,7 +291,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
-        } catch (e) {
+        } catch {
           const text = await response.text().catch(() => '');
           errorMessage = text || errorMessage;
         }
