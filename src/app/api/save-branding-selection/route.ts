@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +27,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database via RPC
-    const { error: rpcError } = await supabaseAdmin.rpc('save_branding_selection', {
+    const supabase = getSupabaseAdmin();
+    const { error: rpcError } = await supabase.rpc('save_branding_selection', {
       p_session_token: sessionToken,
       p_item_key: itemKey,
       p_stock_header_id: parseInt(stockHeaderId, 10),

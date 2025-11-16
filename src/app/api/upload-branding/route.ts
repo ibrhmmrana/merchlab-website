@@ -1,26 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
-// Use service role key for admin operations
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// Try SUPABASE_SERVICE_ROLE_KEY first, fallback to NEXT_PUBLIC_SUPABASE_ANON_KEY if not set
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase environment variables:', {
-    hasUrl: !!supabaseUrl,
-    hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  });
-  throw new Error('Missing Supabase environment variables');
-}
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 function sanitizeFilename(filename: string): string {
   // Remove path separators and special chars, keep alphanumeric, dots, dashes, underscores
@@ -112,8 +94,9 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to Supabase Storage
+    const supabase = getSupabaseAdmin();
     console.log('Uploading to Supabase Storage:', { filePath, bucket: 'branding' });
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('branding')
       .upload(filePath, buffer, {
         contentType: file.type,
@@ -122,12 +105,11 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error('Storage upload error:', {
-        name: uploadError.name,
         message: uploadError.message,
         error: uploadError,
       });
       return NextResponse.json(
-        { error: `Storage upload failed: ${uploadError.message}` },
+        { error: 'Upload failed', message: uploadError.message },
         { status: 500 }
       );
     }
@@ -135,7 +117,7 @@ export async function POST(request: NextRequest) {
     console.log('File uploaded successfully:', uploadData);
 
     // Get public URL
-    const { data: urlData } = supabaseAdmin.storage
+    const { data: urlData } = supabase.storage
       .from('branding')
       .getPublicUrl(filePath);
 
@@ -149,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database via RPC
-    const { error: rpcError } = await supabaseAdmin.rpc('save_branding_selection', {
+    const { error: rpcError } = await supabase.rpc('save_branding_selection', {
       p_session_token: sessionToken,
       p_item_key: itemKey,
       p_stock_header_id: parseInt(stockHeaderId, 10),
