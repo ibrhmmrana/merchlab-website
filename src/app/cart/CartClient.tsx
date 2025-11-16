@@ -567,7 +567,19 @@ export default function CartClient() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <h1 className="text-3xl font-bold mb-6">Shopping Cart</h1>
+        {/* Header */}
+        <div className="mb-6">
+          <Button asChild variant="outline" className="mb-4">
+            <Link href="/shop">Continue shopping</Link>
+          </Button>
+          <h1 className="text-3xl font-bold text-foreground">Order summary</h1>
+          <p className="text-muted-foreground">Submit your quote and we will be in touch shortly.</p>
+          <div className="mt-2">
+            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+              MerchLab
+            </span>
+          </div>
+        </div>
 
         {msg && (
           <div className={`mb-4 p-4 rounded ${msg.includes('error') || msg.includes('Error') || msg.includes('failed') || msg.includes('Failed') ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
@@ -575,92 +587,88 @@ export default function CartClient() {
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-6">
-          {/* Left Column - Items */}
-          <div className="lg:col-span-2 space-y-4">
-          {items.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-4">Your cart is empty.</p>
-              <Link href="/shop" className="luxury-btn">
-                Continue Shopping
-              </Link>
-            </div>
-          ) : (
-            <>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Items and Recipient Details */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Product Section */}
+            <div className="bg-white rounded-lg p-6">
+              <h2 className="text-lg font-semibold mb-4">Product</h2>
+              
               {/* Tabs */}
-              <div className="bg-white rounded-lg p-4 border">
-                <ToggleGroup
-                  type="single"
-                  value={activeCartGroup}
-                  onValueChange={(v) => {
-                    if (v === 'branded' || v === 'unbranded') {
-                      setActiveCartGroup(v);
-                    }
-                  }}
-                  className="w-full"
-                >
-                  <ToggleGroupItem
-                    value="branded"
-                    className={cn(
-                      "flex-1 px-4 py-2 text-sm font-semibold",
-                      activeCartGroup === "branded" && "bg-primary text-white"
-                    )}
+              {items.length > 0 && (
+                <div className="mb-4">
+                  <ToggleGroup
+                    type="single"
+                    value={activeCartGroup}
+                    onValueChange={(v) => {
+                      if (v === 'branded' || v === 'unbranded') {
+                        setActiveCartGroup(v);
+                      }
+                    }}
+                    className="w-full"
                   >
-                    Branded ({brandedItems.length})
-                  </ToggleGroupItem>
-                  <ToggleGroupItem
-                    value="unbranded"
-                    className={cn(
-                      "flex-1 px-4 py-2 text-sm font-semibold",
-                      activeCartGroup === "unbranded" && "bg-primary text-white"
-                    )}
-                  >
-                    Unbranded ({unbrandedItems.length})
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-
-              {/* Items List */}
-              {activeItems.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600">
-                    No {activeCartGroup === 'branded' ? 'branded' : 'unbranded'} items in your cart.
-                  </p>
+                    <ToggleGroupItem
+                      value="branded"
+                      className={cn(
+                        "flex-1 px-4 py-2 text-sm font-semibold",
+                        activeCartGroup === "branded" && "bg-primary text-white"
+                      )}
+                    >
+                      Branded ({brandedItems.length})
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="unbranded"
+                      className={cn(
+                        "flex-1 px-4 py-2 text-sm font-semibold",
+                        activeCartGroup === "unbranded" && "bg-primary text-white"
+                      )}
+                    >
+                      Unbranded ({unbrandedItems.length})
+                    </ToggleGroupItem>
+                  </ToggleGroup>
                 </div>
+              )}
+
+              {items.length === 0 ? (
+                <div className="text-muted-foreground">Your cart is empty.</div>
               ) : (
-                <div className="space-y-4">
-                  {activeItems.map((item) => {
-                    const itemKey = getCartItemKey(item);
-                    return (
-                      <div key={itemKey} className="bg-white rounded-lg border p-4">
-                        <div className="flex gap-4">
-                          <div className="relative w-24 h-24 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                            <SmartImage
-                              src={item.image_url}
-                              alt={item.description || item.stock_code || "Product"}
-                              fill
-                              className="object-contain"
-                              sizes="96px"
+                activeItems.length === 0 ? (
+                  <div className="text-muted-foreground">
+                    No {activeCartGroup === 'branded' ? 'branded' : 'unbranded'} items in your cart.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {activeItems.map((item) => {
+                      const itemKey = getCartItemKey(item);
+                      return (
+                        <div key={itemKey} className="flex items-center gap-4 border rounded p-3">
+                          <div className="relative w-20 h-20 rounded bg-gray-50 overflow-hidden">
+                            <SmartImage 
+                              src={item.image_url || null} 
+                              alt={item.description || item.stock_code} 
+                              fill 
+                              className="object-contain" 
+                              sizes="80px" 
                             />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-lg mb-1">{item.description || item.stock_code}</h3>
-                            <p className="text-sm text-gray-600 mb-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium leading-tight truncate">{item.description || item.stock_code}</div>
+                            <div className="text-sm text-muted-foreground truncate">
                               {item.brand || "Barron"} • {item.colour} • {item.size}
-                            </p>
+                            </div>
                             {isBranded(item) && item.branding?.length ? (
-                              <div className="mt-2 space-y-1">
-                                <div className="text-xs font-medium text-primary">Branded</div>
+                              <div className="mt-1.5 space-y-0.5">
+                                <div className="text-[10px] font-medium text-primary">Branded</div>
                                 {item.branding.map((b, idx) => (
-                                  <div key={idx} className="text-xs text-muted-foreground">
+                                  <div key={idx} className="text-[10px] text-muted-foreground">
                                     Position: {b.branding_position} • Size: {b.branding_size} • Type: {b.branding_type} • Colours: {b.color_count}
                                   </div>
                                 ))}
                               </div>
                             ) : null}
-                            <div className="mt-3 flex items-center gap-2">
+                            <div className="mt-2 flex items-center gap-2">
                               <button
-                                className="h-8 w-8 rounded border text-sm hover:bg-gray-50"
+                                className="h-7 w-7 rounded border text-sm"
                                 onClick={() => updateQty(itemKey, Math.max(1, item.quantity - 1))}
                                 aria-label="Decrease quantity"
                               >
@@ -674,174 +682,220 @@ export default function CartClient() {
                                   const newQty = parseInt(e.target.value) || 1;
                                   updateQty(itemKey, Math.max(1, newQty));
                                 }}
-                                className="text-sm w-16 text-center border rounded px-2 py-1"
+                                className="text-sm w-12 text-center border rounded px-1 py-1 h-7"
                                 aria-label="Quantity"
                               />
                               <button
-                                className="h-8 w-8 rounded border text-sm hover:bg-gray-50"
+                                className="h-7 w-7 rounded border text-sm"
                                 onClick={() => updateQty(itemKey, item.quantity + 1)}
                                 aria-label="Increase quantity"
                               >
                                 +
                               </button>
-                              <button
-                                className="ml-4 text-sm text-red-600 hover:text-red-800 underline"
-                                onClick={() => remove(itemKey)}
-                              >
+                              <button className="ml-2 text-xs underline" onClick={() => remove(itemKey)}>
                                 Remove
                               </button>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
-            </>
-          )}
-        </div>
+            </div>
 
-        {/* Right Column - Summary */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg p-6 sticky top-6 border shadow-sm">
-            <h2 className="text-lg font-semibold mb-4">Summary</h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Products ({activeCartGroup})</span>
-                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                  {activeItems.length} {activeItems.length === 1 ? 'product' : 'products'}
-                </span>
+            {/* Contact Details */}
+            {items.length > 0 && (
+              <div className="bg-white rounded-lg p-6">
+                <h2 className="text-lg font-semibold mb-4">RECIPIENT DETAILS</h2>
+                <h3 className="text-md font-medium mb-4">Contact Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">First Name *</label>
+                    <Input
+                      value={form.firstName}
+                      onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Last Name *</label>
+                    <Input
+                      value={form.lastName}
+                      onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Email *</label>
+                    <Input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Phone Number *</label>
+                    <div className="flex mt-1">
+                      <span className="inline-flex items-center px-3 text-sm text-gray-500 bg-gray-50 border border-r-0 border-gray-300 rounded-l-md">
+                        +27
+                      </span>
+                      <Input
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        className="rounded-l-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-gray-700">Company Name</label>
+                    <Input
+                      value={form.company}
+                      onChange={(e) => setForm({ ...form, company: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
               </div>
-              {activeCartGroup === 'branded' && !isBrandedValid && (
-                <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
-                  Please complete all branding details before submitting.
+            )}
+
+            {/* Address Details */}
+            {items.length > 0 && (
+              <div className="bg-white rounded-lg p-6">
+                <h2 className="text-lg font-semibold mb-4">ADDRESS DETAILS</h2>
+                <h3 className="text-md font-medium mb-4">Shipping Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Address Search</label>
+                    <AddressAutocomplete
+                      value={form.street}
+                      onChange={(v) => setForm({ ...form, street: v })}
+                      onAddressParsed={(addr: ParsedAddress) => {
+                        setForm({
+                          ...form,
+                          street: addr.street || "",
+                          suburb: addr.suburb || "",
+                          city: addr.city || "",
+                          province: addr.province || "",
+                          postalCode: addr.postalCode || "",
+                          country: addr.country || "South Africa",
+                          lat: addr.lat,
+                          lng: addr.lng,
+                        });
+                      }}
+                      placeholder="Start typing to search on Google Maps"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Street</label>
+                      <Input
+                        value={form.street}
+                        onChange={(e) => setForm({ ...form, street: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Suburb</label>
+                      <Input
+                        value={form.suburb}
+                        onChange={(e) => setForm({ ...form, suburb: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">City</label>
+                      <Input
+                        value={form.city}
+                        onChange={(e) => setForm({ ...form, city: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Province</label>
+                      <Input
+                        value={form.province}
+                        onChange={(e) => setForm({ ...form, province: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Postal Code</label>
+                      <Input
+                        value={form.postalCode}
+                        onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Country</label>
+                      <Input
+                        value={form.country}
+                        onChange={(e) => setForm({ ...form, country: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
                 </div>
-              )}
-              
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="checkbox" 
-                    id="terms" 
-                    className="rounded" 
-                    checked={termsAccepted}
-                    onChange={(e) => setTermsAccepted(e.target.checked)}
-                  />
-                  <label htmlFor="terms" className="text-sm text-gray-600">
-                    I have read and accept the{" "}
-                    <a href="#" className="text-blue-600 hover:underline">
-                      Terms & Conditions
-                    </a>{" "}
-                    for this website.
-                  </label>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Summary */}
+          <div className="lg:col-span-1">
+            <div className="bg-gray-100 rounded-lg p-6 sticky top-6">
+              <h2 className="text-lg font-semibold mb-4">Summary</h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Products</span>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                    {activeItems.length} {activeItems.length === 1 ? 'product' : 'products'}
+                  </span>
                 </div>
+                {activeCartGroup === 'branded' && !isBrandedValid && (
+                  <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                    Please complete all branding details before submitting.
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      id="terms" 
+                      className="rounded" 
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                    />
+                    <label htmlFor="terms" className="text-sm text-gray-600">
+                      I have read and accept the{" "}
+                      <a href="#" className="text-blue-600 hover:underline">
+                        Terms & Conditions
+                      </a>{" "}
+                      for this website.
+                    </label>
+                  </div>
+                </div>
+
                 <button
                   disabled={submitting || activeItems.length === 0 || !termsAccepted || (activeCartGroup === 'branded' && !isBrandedValid)}
                   onClick={submitQuote}
                   className="luxury-btn w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {submitting ? "Submitting…" : `Submit ${activeCartGroup === 'branded' ? 'Branded' : 'Unbranded'} Quote`}
+                  {submitting ? "Submitting…" : "Submit Quote"}
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
 
-        {/* Recipient Details Form - Full Width Below */}
-        {items.length > 0 && (
-          <div className="bg-white rounded-lg p-6 border shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Recipient Details</h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                <Input
-                  placeholder="First Name *"
-                  value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                />
-                <Input
-                  placeholder="Last Name *"
-                  value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                />
-              </div>
-              <Input
-                type="email"
-                placeholder="Email *"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-              <Input
-                type="tel"
-                placeholder="Phone Number *"
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-              <div className="md:col-span-2">
-                <Input
-                  placeholder="Company (optional)"
-                  value={form.company}
-                  onChange={(e) => setForm({ ...form, company: e.target.value })}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <AddressAutocomplete
-                  value={form.street}
-                  onChange={(v) => setForm({ ...form, street: v })}
-                  onAddressParsed={(addr: ParsedAddress) => {
-                    setForm({
-                      ...form,
-                      street: addr.street || "",
-                      suburb: addr.suburb || "",
-                      city: addr.city || "",
-                      province: addr.province || "",
-                      postalCode: addr.postalCode || "",
-                      country: addr.country || "South Africa",
-                      lat: addr.lat,
-                      lng: addr.lng,
-                    });
-                  }}
-                  placeholder="Start typing to search on Google Maps"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <Input
-                  placeholder="Street Address *"
-                  value={form.street}
-                  onChange={(e) => setForm({ ...form, street: e.target.value })}
-                />
-              </div>
-              <Input
-                placeholder="Suburb *"
-                value={form.suburb}
-                onChange={(e) => setForm({ ...form, suburb: e.target.value })}
-              />
-              <Input
-                placeholder="City *"
-                value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-              />
-              <Input
-                placeholder="Province *"
-                value={form.province}
-                onChange={(e) => setForm({ ...form, province: e.target.value })}
-              />
-              <Input
-                placeholder="Postal Code *"
-                value={form.postalCode}
-                onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
-              />
-              <div className="md:col-span-2">
-                <Input
-                  placeholder="Country *"
-                  value={form.country}
-                  onChange={(e) => setForm({ ...form, country: e.target.value })}
-                />
+                {msg && (
+                  <div className={`text-sm ${msg.includes("submitted") ? "text-green-600" : "text-red-600"}`}>
+                    {msg}
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
