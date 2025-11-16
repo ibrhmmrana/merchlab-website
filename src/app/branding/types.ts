@@ -4,6 +4,7 @@ export type BrandingSelectionInput = {
   size: string | null;
   colorCount: number;
   comment?: string;
+  artwork_url?: string;
 };
 
 export type BrandingCompletePayload = {

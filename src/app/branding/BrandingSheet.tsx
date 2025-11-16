@@ -15,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { fetchBrandingPositions, fetchBrandingTypes, fetchBrandingSizes } from '@/lib/branding';
 import type { BrandingCompletePayload } from './types';
+import { uploadBrandingImage } from '@/lib/storage';
+import { Input } from '@/components/ui/input';
 
 export type PositionOption = string;
 export type TypeOption = string;
@@ -40,6 +42,7 @@ type PosDraft = {
   size: string | null;
   colorCount: number;
   comment?: string;
+  artwork_url?: string;
 };
 
 export default function BrandingSheet(props: BrandingSheetProps) {
@@ -60,6 +63,10 @@ export default function BrandingSheet(props: BrandingSheetProps) {
 
   // per-position form state
   const [drafts, setDrafts] = useState<Record<string, PosDraft>>({});
+  
+  // Upload state per position
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [uploadError, setUploadError] = useState<Record<string, string>>({});
 
   // Load positions when modal opens
   useEffect(() => {
@@ -205,6 +212,23 @@ export default function BrandingSheet(props: BrandingSheetProps) {
     setDrafts((prev) => ({ ...prev, [p]: { ...prev[p], ...patch } as PosDraft }));
   }
 
+  async function handleFileUpload(position: string, file: File) {
+    setUploading((prev) => ({ ...prev, [position]: true }));
+    setUploadError((prev) => ({ ...prev, [position]: '' }));
+
+    try {
+      const url = await uploadBrandingImage(file);
+      setDraft(position, { artwork_url: url });
+      setUploadError((prev) => ({ ...prev, [position]: '' }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload image';
+      setUploadError((prev) => ({ ...prev, [position]: errorMessage }));
+      console.error('Upload error:', error);
+    } finally {
+      setUploading((prev) => ({ ...prev, [position]: false }));
+    }
+  }
+
   function handleSave() {
     if (!allValid) {
       console.warn('Cannot save: validation failed', { allValid, picked, drafts });
@@ -217,6 +241,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       size: drafts[p].size!,
       colorCount: drafts[p].colorCount,
       comment: drafts[p].comment?.trim() || undefined,
+      artwork_url: drafts[p].artwork_url,
     }));
 
     console.log('Saving branding selections:', { stockHeaderId, selections });
@@ -315,11 +340,63 @@ export default function BrandingSheet(props: BrandingSheetProps) {
 
                 return (
                   <TabsContent key={p} value={p} className="mt-3 space-y-4">
-                    {/* Artwork dropzone placeholder */}
-                    <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-                      Select a file or drag and drop here
-                      <div className="text-xs">JPG or PNG • Max size 10MB</div>
-                      {/* TODO: implement upload next step */}
+                    {/* Artwork upload */}
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Upload Artwork (Optional)</div>
+                      <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          {d?.artwork_url ? (
+                            <>
+                              <div className="flex items-center gap-2 text-green-600">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span className="text-sm font-medium">Image uploaded successfully</span>
+                              </div>
+                              <img 
+                                src={d.artwork_url} 
+                                alt="Uploaded artwork" 
+                                className="max-h-32 max-w-full rounded border object-contain"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setDraft(p, { artwork_url: undefined })}
+                                className="text-xs text-red-600 hover:text-red-700 underline"
+                              >
+                                Remove image
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <label
+                                htmlFor={`file-upload-${p}`}
+                                className="cursor-pointer rounded bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 transition-colors"
+                              >
+                                {uploading[p] ? 'Uploading...' : 'Select a file'}
+                              </label>
+                              <input
+                                id={`file-upload-${p}`}
+                                type="file"
+                                accept="image/jpeg,image/jpg,image/png,image/webp"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileUpload(p, file);
+                                  }
+                                }}
+                                disabled={uploading[p]}
+                              />
+                              <div className="text-xs text-center">
+                                JPG, PNG, or WebP • Max size 10MB
+                              </div>
+                            </>
+                          )}
+                          {uploadError[p] && (
+                            <div className="text-xs text-red-600 mt-2">{uploadError[p]}</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

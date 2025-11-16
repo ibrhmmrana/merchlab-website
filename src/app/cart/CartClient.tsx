@@ -192,7 +192,7 @@ export default function CartClient() {
         brandingCost: 0,
         createdAt: nowIso,
         updatedAt: nowIso,
-        logoFile: sel.artwork_url ? [sel.artwork_url] : [],
+        logoFile: sel.artwork_url || "",
       }));
 
       return {

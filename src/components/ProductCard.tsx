@@ -299,6 +299,7 @@ export default function ProductCard({ group }: Props) {
             branding_size: sel.size || '',
             color_count: sel.colorCount,
             comment: sel.comment,
+            artwork_url: sel.artwork_url,
           }));
           
           console.log('ProductCard: Adding to cart with branding:', {
