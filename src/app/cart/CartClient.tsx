@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useCartStore, getCartItemKey, isBranded, type CartItem } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useHasHydrated } from "@/lib/hooks/useHasHydrated";
 import SmartImage from "@/components/SmartImage";
@@ -52,21 +52,32 @@ export default function CartClient() {
   const remove = useCartStore((s) => s.remove);
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
+  const isUpdatingUrlRef = useRef(false);
+  const hasInitializedRef = useRef(false);
 
-  // Sync URL query param with activeCartGroup
+  // Sync URL query param with activeCartGroup on initial mount only
   useEffect(() => {
+    if (hasInitializedRef.current) return;
+    
     const groupParam = searchParams.get('group');
     if (groupParam === 'branded' || groupParam === 'unbranded') {
       if (groupParam !== activeCartGroup) {
         setActiveCartGroup(groupParam);
       }
     }
+    hasInitializedRef.current = true;
   }, [searchParams, activeCartGroup, setActiveCartGroup]);
 
-  // Update URL when activeCartGroup changes
+  // Update URL when activeCartGroup changes (but skip if we're updating from URL)
   useEffect(() => {
+    if (!hasInitializedRef.current || isUpdatingUrlRef.current) {
+      isUpdatingUrlRef.current = false;
+      return;
+    }
+    
     const currentGroup = searchParams.get('group');
     if (currentGroup !== activeCartGroup) {
+      isUpdatingUrlRef.current = true;
       const params = new URLSearchParams(searchParams.toString());
       params.set('group', activeCartGroup);
       router.replace(`/cart?${params.toString()}`, { scroll: false });
