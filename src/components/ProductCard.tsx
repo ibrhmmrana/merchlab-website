@@ -694,7 +694,7 @@ export default function ProductCard({ group }: Props) {
                   onChooseUnbranded();
                 }}
                 className={cn(
-                  "flex-1 px-3 py-2 text-xs font-semibold rounded transition-all relative flex items-center justify-center gap-1.5 min-h-[36px]",
+                  "flex-1 px-2 py-1.5 text-[10px] font-semibold rounded transition-all relative flex items-center justify-center gap-1 min-h-[30px]",
                   "sm:px-4 sm:py-2.5 sm:text-xs sm:min-h-0",
                   brandingMode === "unbranded" 
                     ? "bg-primary text-white shadow-md ring-1 ring-primary/20" 
@@ -702,7 +702,7 @@ export default function ProductCard({ group }: Props) {
                 )}
               >
                 {brandingMode === "unbranded" && (
-                  <svg className="w-3.5 h-3.5 text-white sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 text-white sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -715,7 +715,7 @@ export default function ProductCard({ group }: Props) {
                   onChooseBranded();
                 }}
                 className={cn(
-                  "flex-1 px-3 py-2 text-xs font-semibold rounded transition-all relative flex items-center justify-center gap-1.5 min-h-[36px]",
+                  "flex-1 px-2 py-1.5 text-[10px] font-semibold rounded transition-all relative flex items-center justify-center gap-1 min-h-[30px]",
                   "sm:px-4 sm:py-2.5 sm:text-xs sm:min-h-0",
                   brandingMode === "branded" 
                     ? "bg-primary text-white shadow-md ring-1 ring-primary/20" 
@@ -723,7 +723,7 @@ export default function ProductCard({ group }: Props) {
                 )}
               >
                 {brandingMode === "branded" && (
-                  <svg className="w-3.5 h-3.5 text-white sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 text-white sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
