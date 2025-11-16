@@ -565,18 +565,19 @@ export default function CartClient() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6">
-      <h1 className="text-3xl font-bold mb-6">Shopping Cart</h1>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <h1 className="text-3xl font-bold mb-6">Shopping Cart</h1>
 
-      {msg && (
-        <div className={`mb-4 p-4 rounded ${msg.includes('error') || msg.includes('Error') || msg.includes('failed') || msg.includes('Failed') ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
-          {msg}
-        </div>
-      )}
+        {msg && (
+          <div className={`mb-4 p-4 rounded ${msg.includes('error') || msg.includes('Error') || msg.includes('failed') || msg.includes('Failed') ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
+            {msg}
+          </div>
+        )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left Column - Items */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="grid lg:grid-cols-3 gap-6 mb-6">
+          {/* Left Column - Items */}
+          <div className="lg:col-span-2 space-y-4">
           {items.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <p className="text-gray-600 mb-4">Your cart is empty.</p>
@@ -633,7 +634,7 @@ export default function CartClient() {
                     return (
                       <div key={itemKey} className="bg-white rounded-lg border p-4">
                         <div className="flex gap-4">
-                          <div className="w-24 h-24 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                          <div className="relative w-24 h-24 bg-gray-100 rounded overflow-hidden flex-shrink-0">
                             <SmartImage
                               src={item.image_url}
                               alt={item.description || item.stock_code || "Product"}
@@ -703,7 +704,7 @@ export default function CartClient() {
 
         {/* Right Column - Summary */}
         <div className="lg:col-span-1">
-          <div className="bg-gray-100 rounded-lg p-6 sticky top-6">
+          <div className="bg-white rounded-lg p-6 sticky top-6 border shadow-sm">
             <h2 className="text-lg font-semibold mb-4">Summary</h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -744,40 +745,47 @@ export default function CartClient() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+        </div>
 
-            {/* Recipient Details Form */}
-            <div className="mt-6 pt-6 border-t">
-              <h3 className="text-md font-semibold mb-4">Recipient Details</h3>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    placeholder="First Name"
-                    value={form.firstName}
-                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Last Name"
-                    value={form.lastName}
-                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                  />
-                </div>
+        {/* Recipient Details Form - Full Width Below */}
+        {items.length > 0 && (
+          <div className="bg-white rounded-lg p-6 border shadow-sm">
+            <h2 className="text-xl font-semibold mb-4">Recipient Details</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 grid grid-cols-2 gap-4">
                 <Input
-                  type="email"
-                  placeholder="Email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="First Name *"
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                 />
                 <Input
-                  type="tel"
-                  placeholder="Phone Number"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="Last Name *"
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
                 />
+              </div>
+              <Input
+                type="email"
+                placeholder="Email *"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+              <Input
+                type="tel"
+                placeholder="Phone Number *"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+              <div className="md:col-span-2">
                 <Input
                   placeholder="Company (optional)"
                   value={form.company}
                   onChange={(e) => setForm({ ...form, company: e.target.value })}
                 />
+              </div>
+              <div className="md:col-span-2">
                 <AddressAutocomplete
                   value={form.street}
                   onChange={(v) => setForm({ ...form, street: v })}
@@ -796,44 +804,44 @@ export default function CartClient() {
                   }}
                   placeholder="Start typing to search on Google Maps"
                 />
+              </div>
+              <div className="md:col-span-2">
                 <Input
-                  placeholder="Street Address"
+                  placeholder="Street Address *"
                   value={form.street}
                   onChange={(e) => setForm({ ...form, street: e.target.value })}
                 />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    placeholder="Suburb"
-                    value={form.suburb}
-                    onChange={(e) => setForm({ ...form, suburb: e.target.value })}
-                  />
-                  <Input
-                    placeholder="City"
-                    value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    placeholder="Province"
-                    value={form.province}
-                    onChange={(e) => setForm({ ...form, province: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Postal Code"
-                    value={form.postalCode}
-                    onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
-                  />
-                </div>
+              </div>
+              <Input
+                placeholder="Suburb *"
+                value={form.suburb}
+                onChange={(e) => setForm({ ...form, suburb: e.target.value })}
+              />
+              <Input
+                placeholder="City *"
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+              />
+              <Input
+                placeholder="Province *"
+                value={form.province}
+                onChange={(e) => setForm({ ...form, province: e.target.value })}
+              />
+              <Input
+                placeholder="Postal Code *"
+                value={form.postalCode}
+                onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+              />
+              <div className="md:col-span-2">
                 <Input
-                  placeholder="Country"
+                  placeholder="Country *"
                   value={form.country}
                   onChange={(e) => setForm({ ...form, country: e.target.value })}
                 />
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
