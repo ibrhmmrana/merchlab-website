@@ -97,6 +97,7 @@ export default function CartClient() {
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [addressSelected, setAddressSelected] = useState(false);
 
   function generateMerchantOrderNo(): string {
     const timestamp = Date.now();
@@ -784,60 +785,63 @@ export default function CartClient() {
                           lat: addr.lat,
                           lng: addr.lng,
                         });
+                        setAddressSelected(true);
                       }}
                       placeholder="Start typing to search on Google Maps"
                     />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Street</label>
-                      <Input
-                        value={form.street}
-                        onChange={(e) => setForm({ ...form, street: e.target.value })}
-                        className="mt-1"
-                      />
+                  {addressSelected && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Street</label>
+                        <Input
+                          value={form.street}
+                          onChange={(e) => setForm({ ...form, street: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Suburb</label>
+                        <Input
+                          value={form.suburb}
+                          onChange={(e) => setForm({ ...form, suburb: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">City</label>
+                        <Input
+                          value={form.city}
+                          onChange={(e) => setForm({ ...form, city: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Province</label>
+                        <Input
+                          value={form.province}
+                          onChange={(e) => setForm({ ...form, province: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Postal Code</label>
+                        <Input
+                          value={form.postalCode}
+                          onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Country</label>
+                        <Input
+                          value={form.country}
+                          onChange={(e) => setForm({ ...form, country: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Suburb</label>
-                      <Input
-                        value={form.suburb}
-                        onChange={(e) => setForm({ ...form, suburb: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">City</label>
-                      <Input
-                        value={form.city}
-                        onChange={(e) => setForm({ ...form, city: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Province</label>
-                      <Input
-                        value={form.province}
-                        onChange={(e) => setForm({ ...form, province: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Postal Code</label>
-                      <Input
-                        value={form.postalCode}
-                        onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Country</label>
-                      <Input
-                        value={form.country}
-                        onChange={(e) => setForm({ ...form, country: e.target.value })}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
