@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Hero from "@/components/home/Hero";
 import ShopByCategory from "@/components/home/ShopByCategory";
 import AboutSection from "@/components/home/AboutSection";
@@ -17,7 +18,9 @@ export default async function HomePage() {
       <Capabilities />
       <Process />
       <CtaBand />
-      <SuccessNotification />
+      <Suspense fallback={null}>
+        <SuccessNotification />
+      </Suspense>
     </main>
   );
 }
