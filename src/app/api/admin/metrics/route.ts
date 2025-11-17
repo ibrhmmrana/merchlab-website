@@ -16,6 +16,17 @@ export const runtime = 'nodejs';
 
 const STORAGE_BASE_URL = 'https://fxsqdpmmddcidjwzxtpc.supabase.co/storage/v1/object/public/audit-reports';
 
+// --- helpers ---
+const pickStr = (obj: unknown, keys: string[], fallback = ''): string => {
+  if (!obj || typeof obj !== 'object') return fallback;
+  const rec = obj as Record<string, unknown>;
+  for (const k of keys) {
+    const v = rec[k];
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return fallback;
+};
+
 function formatPdfUrl(type: 'quote' | 'invoice', id: string): string {
   if (type === 'invoice' && !id.startsWith('INV-')) {
     id = `INV-${id}`;
@@ -120,11 +131,13 @@ export async function GET(request: NextRequest) {
     // Recent quotes (max 50)
     const recentQuotes = quotes.slice(0, 50).map((q) => {
       const p = parsePayload(q.payload);
-      const customer = p?.enquiryCustomer || p?.customer;
-      const firstName = customer?.firstName || customer?.first_name || '';
-      const lastName = customer?.lastName || customer?.last_name || '';
+      // prefer payload.enquiryCustomer, else legacy customer
+      const customerUnknown = (p?.enquiryCustomer ?? p?.customer) as unknown;
+
+      const firstName = pickStr(customerUnknown, ['firstName', 'first_name']);
+      const lastName = pickStr(customerUnknown, ['lastName', 'last_name']);
+      const company = pickStr(customerUnknown, ['company'], '-');
       const customerName = `${firstName} ${lastName}`.trim() || '-';
-      const company = customer?.company || '-';
 
       return {
         created_at: q.created_at,
@@ -139,11 +152,13 @@ export async function GET(request: NextRequest) {
     // Recent invoices (max 50)
     const recentInvoices = invoices.slice(0, 50).map((inv) => {
       const p = parsePayload(inv.payload);
-      const customer = p?.customer || p?.enquiryCustomer;
-      const firstName = customer?.firstName || customer?.first_name || '';
-      const lastName = customer?.lastName || customer?.last_name || '';
+      // prefer payload.customer, else legacy enquiryCustomer
+      const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
+
+      const firstName = pickStr(customerUnknown, ['firstName', 'first_name']);
+      const lastName = pickStr(customerUnknown, ['lastName', 'last_name']);
+      const company = pickStr(customerUnknown, ['company'], '-');
       const customerName = `${firstName} ${lastName}`.trim() || '-';
-      const company = customer?.company || '-';
 
       return {
         created_at: inv.created_at,

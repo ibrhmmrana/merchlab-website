@@ -13,8 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { FileText } from 'lucide-react';
-
-type PeriodKey = '4h' | '12h' | '24h' | '7d' | '30d' | '90d' | 'ytd' | 'all' | 'custom';
+import { type PeriodKey } from '@/server/admin/metrics';
 
 type Invoice = {
   created_at: string;

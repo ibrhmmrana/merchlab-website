@@ -11,8 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
-type PeriodKey = '4h' | '12h' | '24h' | '7d' | '30d' | '90d' | 'ytd' | 'all';
+import { type PeriodKey } from '@/server/admin/metrics';
 
 type MetricsData = {
   period: PeriodKey;

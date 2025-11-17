@@ -15,6 +15,7 @@ import {
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { LogOut, Users, TrendingUp, DollarSign, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { type PeriodKey } from '@/server/admin/metrics';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-ZA', {
@@ -32,8 +33,6 @@ const formatDate = (dateString: string) => {
     minute: '2-digit',
   });
 };
-
-type PeriodKey = '4h' | '12h' | '24h' | '7d' | '30d' | '90d' | 'ytd' | 'all';
 
 type MetricsData = {
   period: PeriodKey;
