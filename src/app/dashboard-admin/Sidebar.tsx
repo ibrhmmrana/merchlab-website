@@ -40,10 +40,10 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button */}
+      {/* Mobile menu button - positioned below header */}
       <button
         onClick={() => setIsOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-gray-200"
+        className="lg:hidden fixed top-20 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-gray-200"
         aria-label="Open menu"
       >
         <Menu className="w-6 h-6" />
@@ -52,7 +52,7 @@ export default function Sidebar() {
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          className="lg:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
           onClick={() => setIsOpen(false)}
         />
       )}

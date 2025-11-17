@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const minValue = searchParams.get('minValue');
     const maxValue = searchParams.get('maxValue');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
 
     let start: Date | undefined;
     let end: Date | undefined;
@@ -157,10 +159,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Pagination
+    const total = formattedInvoices.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedInvoices = formattedInvoices.slice(startIndex, endIndex);
+
     return NextResponse.json(
       {
-        invoices: formattedInvoices,
-        total: formattedInvoices.length,
+        invoices: paginatedInvoices,
+        total,
+        page,
+        limit,
+        totalPages,
       },
       {
         headers: {

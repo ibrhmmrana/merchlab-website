@@ -75,6 +75,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const minValue = searchParams.get('minValue');
     const maxValue = searchParams.get('maxValue');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
 
     let start: Date | undefined;
     let end: Date | undefined;
@@ -154,10 +156,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Pagination
+    const total = formattedQuotes.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedQuotes = formattedQuotes.slice(startIndex, endIndex);
+
     return NextResponse.json(
       {
-        quotes: formattedQuotes,
-        total: formattedQuotes.length,
+        quotes: paginatedQuotes,
+        total,
+        page,
+        limit,
+        totalPages,
       },
       {
         headers: {

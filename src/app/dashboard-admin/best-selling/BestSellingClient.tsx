@@ -66,7 +66,7 @@ export default function BestSellingClient() {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="text-lg">Loading...</div>
       </div>
     );
@@ -74,7 +74,7 @@ export default function BestSellingClient() {
 
   if (error || !data) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="text-lg text-red-600">Error: {error || 'Failed to load data'}</div>
       </div>
     );

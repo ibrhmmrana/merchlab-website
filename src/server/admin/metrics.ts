@@ -247,12 +247,72 @@ function pickStr(obj: unknown, keys: string[], fallback = ''): string {
   return fallback;
 }
 
+// Normalize phone number to start with +27
+function normalizePhoneNumber(phone: string): string {
+  if (!phone) return '';
+  
+  // Remove all spaces, dashes, and parentheses
+  let cleaned = phone.replace(/[\s\-()]/g, '');
+  
+  // If already starts with +27, return as is
+  if (cleaned.startsWith('+27')) {
+    return cleaned;
+  }
+  
+  // If starts with 27, add +
+  if (cleaned.startsWith('27')) {
+    return '+' + cleaned;
+  }
+  
+  // If starts with 0, replace with +27
+  if (cleaned.startsWith('0')) {
+    return '+27' + cleaned.substring(1);
+  }
+  
+  // Otherwise, prepend +27
+  return '+27' + cleaned;
+}
+
 export function topCustomers(
   invoices: Array<{ created_at: string; payload: unknown }>,
+  quotes: Array<{ created_at: string; payload: unknown }>,
   limit = 50
-): Array<{ customer: string; company: string; totalValue: number; orderCount: number; lastOrderDate: string }> {
-  const customers: Record<string, { customer: string; company: string; totalValue: number; orderCount: number; lastOrderDate: string }> = {};
+): Array<{ 
+  customer: string; 
+  company: string; 
+  email: string;
+  phone: string;
+  address: {
+    street: string;
+    suburb: string;
+    city: string;
+    province: string;
+    postalCode: string;
+    country: string;
+  } | null;
+  totalValue: number; 
+  orderCount: number; 
+  lastOrderDate: string;
+}> {
+  const customers: Record<string, { 
+    customer: string; 
+    company: string;
+    email: string;
+    phone: string;
+    address: {
+      street: string;
+      suburb: string;
+      city: string;
+      province: string;
+      postalCode: string;
+      country: string;
+    } | null;
+    totalValue: number; 
+    orderCount: number; 
+    lastOrderDate: string;
+  }> = {};
 
+  // First, process invoices to get purchase values and counts
   for (const invoice of invoices) {
     const p = parsePayload(invoice.payload) as Record<string, unknown> | null;
     const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
@@ -272,6 +332,9 @@ export function topCustomers(
       customers[customerKey] = {
         customer: customerName,
         company: company || '-',
+        email: '',
+        phone: '',
+        address: null,
         totalValue: 0,
         orderCount: 0,
         lastOrderDate: orderDate,
@@ -284,6 +347,82 @@ export function topCustomers(
     // Update last order date if this invoice is more recent
     if (orderDate > customers[customerKey].lastOrderDate) {
       customers[customerKey].lastOrderDate = orderDate;
+    }
+  }
+
+  // Then, enrich with customer details from quotes (which have more complete info)
+  // Build a map of quote customers by name+company and also by email for better matching
+  const quoteCustomersByName = new Map<string, Record<string, unknown>>();
+  const quoteCustomersByEmail = new Map<string, Record<string, unknown>>();
+  
+  for (const quote of quotes) {
+    const p = parsePayload(quote.payload) as Record<string, unknown> | null;
+    const customerUnknown = (p?.enquiryCustomer ?? p?.customer) as unknown;
+    
+    if (!customerUnknown || typeof customerUnknown !== 'object') continue;
+    
+    const firstName = pickStr(customerUnknown, ['firstName', 'first_name']);
+    const lastName = pickStr(customerUnknown, ['lastName', 'last_name']);
+    const company = pickStr(customerUnknown, ['company'], '-');
+    const email = pickStr(customerUnknown, ['email']);
+    
+    const customerName = `${firstName} ${lastName}`.trim() || 'Unknown';
+    const customerKey = `${customerName}|${company}`.toLowerCase();
+    
+    // Store by name+company
+    if (!quoteCustomersByName.has(customerKey)) {
+      quoteCustomersByName.set(customerKey, customerUnknown as Record<string, unknown>);
+    }
+    
+    // Also store by email for better matching
+    if (email) {
+      quoteCustomersByEmail.set(email.toLowerCase(), customerUnknown as Record<string, unknown>);
+    }
+  }
+  
+  // Enrich invoice customers with details from quotes
+  for (const [customerKey, customer] of Object.entries(customers)) {
+    // Try to find matching quote customer by name+company first
+    let quoteCustomer = quoteCustomersByName.get(customerKey);
+    
+    // If not found, try to match by email if we have it
+    if (!quoteCustomer && customer.email) {
+      quoteCustomer = quoteCustomersByEmail.get(customer.email.toLowerCase());
+    }
+    
+    // If still not found, try to find by matching name (without company)
+    if (!quoteCustomer) {
+      const nameOnly = customer.customer.toLowerCase();
+      for (const [key, quoteCust] of quoteCustomersByName.entries()) {
+        if (key.startsWith(nameOnly + '|')) {
+          quoteCustomer = quoteCust;
+          break;
+        }
+      }
+    }
+    
+    if (quoteCustomer) {
+      // Extract email
+      const email = pickStr(quoteCustomer, ['email']);
+      if (email) customer.email = email;
+      
+      // Extract phone and normalize to +27 format
+      const phone = pickStr(quoteCustomer, ['telephoneNumber', 'telephone', 'phone', 'phoneNumber']);
+      if (phone) customer.phone = normalizePhoneNumber(phone);
+      
+      // Extract address
+      const addr = quoteCustomer.address;
+      if (addr && typeof addr === 'object') {
+        const addressObj = addr as Record<string, unknown>;
+        customer.address = {
+          street: pickStr(addressObj, ['street'], ''),
+          suburb: pickStr(addressObj, ['suburb'], ''),
+          city: pickStr(addressObj, ['city'], ''),
+          province: pickStr(addressObj, ['province'], ''),
+          postalCode: pickStr(addressObj, ['postalCode', 'postal_code'], ''),
+          country: pickStr(addressObj, ['country'], 'South Africa'),
+        };
+      }
     }
   }
 

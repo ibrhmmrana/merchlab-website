@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
-import { readInvoices, topCustomers, type PeriodKey } from '@/server/admin/metrics';
+import { readInvoices, readQuotes, topCustomers, type PeriodKey } from '@/server/admin/metrics';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -75,8 +75,11 @@ export async function GET(request: NextRequest) {
       end = resolved.end ? new Date(resolved.end) : undefined;
     }
 
-    const invoices = await readInvoices(start, end);
-    const customers = topCustomers(invoices, limit);
+    const [invoices, quotes] = await Promise.all([
+      readInvoices(start, end),
+      readQuotes(start, end),
+    ]);
+    const customers = topCustomers(invoices, quotes, limit);
 
     return NextResponse.json(
       {

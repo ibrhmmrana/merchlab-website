@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { LogOut, Users, TrendingUp, DollarSign, FileText } from 'lucide-react';
+import { LogOut, Users, TrendingUp, DollarSign, FileText, Download, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type PeriodKey } from '@/server/admin/metrics';
 
@@ -80,6 +80,7 @@ export default function OverviewClient() {
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     async function fetchMetrics() {
@@ -122,10 +123,59 @@ export default function OverviewClient() {
     router.refresh();
   }
 
+  async function handleGeneratePdf() {
+    try {
+      setGeneratingPdf(true);
+      
+      // Map period to timeframe format
+      let timeframe: 'last_7d' | 'last_30d' | 'all_time' | 'custom' = 'last_30d';
+      if (period === '7d') timeframe = 'last_7d';
+      else if (period === '30d') timeframe = 'last_30d';
+      else if (period === 'all') timeframe = 'all_time';
+      else if (period === 'custom') timeframe = 'custom';
+      
+      const response = await fetch('/api/admin/report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timeframe,
+          ...(period === 'custom' && customStart && { start: customStart }),
+          ...(period === 'custom' && customEnd && { end: customEnd }),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to generate PDF' }));
+        throw new Error(errorData.error || 'Failed to generate PDF');
+      }
+
+      // Get PDF blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `MerchLab-Executive-Report_${dateStr}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate PDF');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
   // Show message if custom is selected but dates aren't set
   if (period === 'custom' && (!customStart || !customEnd)) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
@@ -176,7 +226,7 @@ export default function OverviewClient() {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="text-lg">Loading dashboard...</div>
       </div>
     );
@@ -184,7 +234,7 @@ export default function OverviewClient() {
 
   if (error || !data) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
@@ -239,6 +289,23 @@ export default function OverviewClient() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <Button
+            onClick={handleGeneratePdf}
+            disabled={generatingPdf || loading}
+            className="flex items-center gap-2"
+          >
+            {generatingPdf ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Generate PDF
+              </>
+            )}
+          </Button>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <select
               value={period}

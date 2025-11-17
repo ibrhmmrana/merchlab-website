@@ -12,8 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileText } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import { type PeriodKey } from '@/server/admin/metrics';
+import { Button } from '@/components/ui/button';
 
 type Invoice = {
   created_at: string;
@@ -27,6 +28,9 @@ type Invoice = {
 type InvoicesData = {
   invoices: Invoice[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 const formatCurrency = (value: number) => {
@@ -57,6 +61,9 @@ export default function InvoicesClient() {
   const [data, setData] = useState<InvoicesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [clickedPage, setClickedPage] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchInvoices() {
@@ -74,6 +81,8 @@ export default function InvoicesClient() {
           ...(search && { search }),
           ...(minValue && { minValue }),
           ...(maxValue && { maxValue }),
+          page: page.toString(),
+          limit: limit.toString(),
         });
 
         const response = await fetch(`/api/admin/invoices?${params.toString()}`);
@@ -99,11 +108,16 @@ export default function InvoicesClient() {
     }, 300); // Debounce search
 
     return () => clearTimeout(timeoutId);
-  }, [period, customStart, customEnd, search, minValue, maxValue, router]);
+  }, [period, customStart, customEnd, search, minValue, maxValue, page, limit, router]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [period, customStart, customEnd, search, minValue, maxValue]);
 
   if (loading && !data) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="text-lg">Loading...</div>
       </div>
     );
@@ -111,7 +125,7 @@ export default function InvoicesClient() {
 
   if (error && !data) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-20">
         <div className="text-lg text-red-600">Error: {error}</div>
       </div>
     );
@@ -206,6 +220,11 @@ export default function InvoicesClient() {
           <CardTitle>
             All Invoices {data && `(${data.total} ${data.total === 1 ? 'result' : 'results'})`}
           </CardTitle>
+          {data && data.total > 0 && (
+            <div className="text-sm text-gray-600 mt-1">
+              Showing {((data.page - 1) * data.limit) + 1} to {Math.min(data.page * data.limit, data.total)} of {data.total}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {data && data.invoices.length > 0 ? (
@@ -248,6 +267,77 @@ export default function InvoicesClient() {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">No invoices found</div>
+          )}
+
+          {/* Pagination */}
+          {data && data.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-6 border-t">
+              <div className="text-sm text-gray-600">
+                Page {data.page} of {data.totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPage(p => Math.max(1, p - 1));
+                    setClickedPage(-1);
+                    setTimeout(() => setClickedPage(null), 200);
+                  }}
+                  disabled={data.page === 1 || loading}
+                  className="transition-all duration-150 active:scale-95 cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (data.totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (data.page <= 3) {
+                      pageNum = i + 1;
+                    } else if (data.page >= data.totalPages - 2) {
+                      pageNum = data.totalPages - 4 + i;
+                    } else {
+                      pageNum = data.page - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={data.page === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          setPage(pageNum);
+                          setClickedPage(pageNum);
+                          setTimeout(() => setClickedPage(null), 200);
+                        }}
+                        disabled={loading}
+                        className={`min-w-[40px] transition-all duration-150 cursor-pointer ${
+                          clickedPage === pageNum ? 'scale-90 bg-primary/80' : 'active:scale-95'
+                        }`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPage(p => Math.min(data.totalPages, p + 1));
+                    setClickedPage(-2);
+                    setTimeout(() => setClickedPage(null), 200);
+                  }}
+                  disabled={data.page === data.totalPages || loading}
+                  className="transition-all duration-150 active:scale-95 cursor-pointer"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

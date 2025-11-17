@@ -6,6 +6,7 @@ import CartDrawer from "@/components/CartDrawer";
 import { GlobalLoadingProvider } from "@/components/GlobalLoadingProvider";
 import CookieConsent from "@/components/CookieConsent";
 import { BrandingProvider } from "@/components/providers/BrandingProvider";
+import { ConditionalFooter } from "@/components/ConditionalFooter";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://merchlab.io'),
@@ -58,7 +59,7 @@ export default function RootLayout({
             <main className="flex-1">
               {children}
             </main>
-            <Footer />
+            <ConditionalFooter />
             <CartDrawer />
             <CookieConsent />
           </div>
