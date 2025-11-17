@@ -37,8 +37,8 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 sm:p-8">
         <h1 className="text-2xl font-bold text-center mb-6">Admin Dashboard</h1>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">

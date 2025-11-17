@@ -125,15 +125,15 @@ export default function OverviewClient() {
   // Show message if custom is selected but dates aren't set
   if (period === 'custom' && (!customStart || !customEnd)) {
     return (
-      <div className="p-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-6">Overview</h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value as PeriodKey)}
-                className="px-4 py-2 border border-gray-300 rounded-md bg-white"
+                className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm sm:text-base"
               >
                 <option value="4h">4h</option>
                 <option value="12h">12h</option>
@@ -145,23 +145,23 @@ export default function OverviewClient() {
                 <option value="all">All</option>
                 <option value="custom">Custom</option>
               </select>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <Input
                   type="date"
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md"
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm sm:text-base"
                 />
-                <span>to</span>
+                <span className="hidden sm:inline">to</span>
                 <Input
                   type="date"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md"
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm sm:text-base"
                 />
               </div>
             </div>
-            <Button onClick={handleLogout} variant="outline" size="sm">
+            <Button onClick={handleLogout} variant="outline" size="sm" className="w-full sm:w-auto">
               <LogOut className="w-4 h-4 mr-2" />
               Log out
             </Button>
@@ -176,7 +176,7 @@ export default function OverviewClient() {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
         <div className="text-lg">Loading dashboard...</div>
       </div>
     );
@@ -184,15 +184,15 @@ export default function OverviewClient() {
 
   if (error || !data) {
     return (
-      <div className="p-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-6">Overview</h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value as PeriodKey)}
-                className="px-4 py-2 border border-gray-300 rounded-md bg-white"
+                className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm sm:text-base"
               >
                 <option value="4h">4h</option>
                 <option value="12h">12h</option>
@@ -205,24 +205,24 @@ export default function OverviewClient() {
                 <option value="custom">Custom</option>
               </select>
               {period === 'custom' && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <Input
                     type="date"
                     value={customStart}
                     onChange={(e) => setCustomStart(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm sm:text-base"
                   />
-                  <span>to</span>
+                  <span className="hidden sm:inline">to</span>
                   <Input
                     type="date"
                     value={customEnd}
                     onChange={(e) => setCustomEnd(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm sm:text-base"
                   />
                 </div>
               )}
             </div>
-            <Button onClick={handleLogout} variant="outline" size="sm">
+            <Button onClick={handleLogout} variant="outline" size="sm" className="w-full sm:w-auto">
               <LogOut className="w-4 h-4 mr-2" />
               Log out
             </Button>
@@ -234,16 +234,16 @@ export default function OverviewClient() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Overview</h1>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">Overview</h1>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value as PeriodKey)}
-              className="px-4 py-2 border border-gray-300 rounded-md bg-white"
+              className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm sm:text-base"
             >
               <option value="4h">4h</option>
               <option value="12h">12h</option>
@@ -256,24 +256,24 @@ export default function OverviewClient() {
               <option value="custom">Custom</option>
             </select>
             {period === 'custom' && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <Input
                   type="date"
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md"
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm sm:text-base"
                 />
-                <span>to</span>
+                <span className="hidden sm:inline">to</span>
                 <Input
                   type="date"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md"
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm sm:text-base"
                 />
               </div>
             )}
           </div>
-          <Button onClick={handleLogout} variant="outline" size="sm">
+          <Button onClick={handleLogout} variant="outline" size="sm" className="w-full sm:w-auto">
             <LogOut className="w-4 h-4 mr-2" />
             Log out
           </Button>
@@ -425,7 +425,9 @@ export default function OverviewClient() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle px-4 sm:px-0">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -457,7 +459,9 @@ export default function OverviewClient() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+              </Table>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -472,7 +476,9 @@ export default function OverviewClient() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle px-4 sm:px-0">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -504,7 +510,9 @@ export default function OverviewClient() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+              </Table>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

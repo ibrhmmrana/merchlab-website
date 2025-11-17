@@ -66,7 +66,7 @@ export default function BestSellingClient() {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
         <div className="text-lg">Loading...</div>
       </div>
     );
@@ -74,20 +74,20 @@ export default function BestSellingClient() {
 
   if (error || !data) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
         <div className="text-lg text-red-600">Error: {error || 'Failed to load data'}</div>
       </div>
     );
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Best Selling Items</h1>
+    <div className="p-4 sm:p-6 lg:p-8 lg:pt-16 pt-16">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">Best Selling Items</h1>
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value as PeriodKey)}
-          className="px-4 py-2 border border-gray-300 rounded-md bg-white"
+          className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm sm:text-base w-full sm:w-auto"
         >
           <option value="4h">4h</option>
           <option value="12h">12h</option>
@@ -105,7 +105,9 @@ export default function BestSellingClient() {
           <CardTitle>Top Sold Items ({period})</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle px-4 sm:px-0">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Description</TableHead>
@@ -128,7 +130,9 @@ export default function BestSellingClient() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+              </Table>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
