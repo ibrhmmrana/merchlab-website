@@ -2,34 +2,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export type PeriodKey = '4h' | '12h' | '24h' | '7d' | '30d' | '90d' | 'ytd' | 'all' | 'custom';
 
-function resolvePeriod(period: PeriodKey): { start?: string; end?: string } {
-  const end = new Date();
-
-  if (period === 'ytd') {
-    const start = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
-    return { start: start.toISOString(), end: end.toISOString() };
-  }
-
-  if (period === 'all' || period === 'custom') return { start: undefined, end: end.toISOString() };
-
-  const nowMs = end.getTime();
-
-  const hoursMap: Record<Exclude<PeriodKey, 'ytd' | 'all' | 'custom'>, number> = {
-    '4h': 4,
-    '12h': 12,
-    '24h': 24,
-    '7d': 24 * 7,
-    '30d': 24 * 30,
-    '90d': 24 * 90,
-  };
-
-  const hrs = hoursMap[period as keyof typeof hoursMap];
-  const start = new Date(nowMs - hrs * 3600 * 1000);
-
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
-function parsePayload(payload: any): any {
+function parsePayload(payload: unknown): unknown {
   if (typeof payload === 'string') {
     try {
       return JSON.parse(payload);
@@ -40,9 +13,10 @@ function parsePayload(payload: any): any {
   return payload;
 }
 
-export function parseGrandTotal(payload: any): number {
-  const p = parsePayload(payload);
-  const total = p?.totals?.grand_total;
+export function parseGrandTotal(payload: unknown): number {
+  const p = parsePayload(payload) as Record<string, unknown> | null;
+  const totals = p?.totals as Record<string, unknown> | undefined;
+  const total = totals?.grand_total;
   if (typeof total === 'number') return total;
   if (typeof total === 'string') {
     const parsed = parseFloat(total);
@@ -95,7 +69,7 @@ export async function readInvoices(since?: Date, until?: Date) {
   return data || [];
 }
 
-export function sumLeads(rows: Array<{ payload: any }>) {
+export function sumLeads(rows: Array<{ payload: unknown }>) {
   let count = 0;
   let value = 0;
 
@@ -107,15 +81,14 @@ export function sumLeads(rows: Array<{ payload: any }>) {
   return { count, value };
 }
 
-export function sumConversions(rows: Array<{ payload: any }>) {
+export function sumConversions(rows: Array<{ payload: unknown }>) {
   return sumLeads(rows);
 }
 
 export function buildTimeseries(
-  quotes: Array<{ created_at: string; payload: any }>,
-  invoices: Array<{ created_at: string; payload: any }>,
-  days = 30,
-  tz = 'Africa/Johannesburg'
+  quotes: Array<{ created_at: string; payload: unknown }>,
+  invoices: Array<{ created_at: string; payload: unknown }>,
+  days = 30
 ) {
   const now = new Date();
   const buckets: Record<string, { leads: number; conversions: number; lead_value: number; conversion_value: number }> = {};
@@ -162,19 +135,19 @@ export function buildTimeseries(
 }
 
 export function topSoldItems(
-  invoices: Array<{ payload: any }>,
+  invoices: Array<{ payload: unknown }>,
   limit = 10
 ): Array<{ description: string; stock_id: number | null; colour: string | null; size: string | null; units: number; revenue: number }> {
   const items: Record<string, { description: string; stock_id: number | null; colour: string | null; size: string | null; units: number; revenue: number }> = {};
 
   for (const invoice of invoices) {
-    const p = parsePayload(invoice.payload);
-    const invoiceItems = p?.items || [];
+    const p = parsePayload(invoice.payload) as Record<string, unknown> | null;
+    const invoiceItems = (p?.items as Array<Record<string, unknown>> | undefined) || [];
     for (const item of invoiceItems) {
-      const stockId = item.stock_id || null;
-      const description = item.description || item.name || 'Unknown';
-      const colour = item.colour || null;
-      const size = item.size || null;
+      const stockId = (item.stock_id as number | undefined) || null;
+      const description = (item.description as string | undefined) || (item.name as string | undefined) || 'Unknown';
+      const colour = (item.colour as string | undefined) || null;
+      const size = (item.size as string | undefined) || null;
 
       // Create key from stock_id or description + colour + size
       const key = stockId
@@ -192,8 +165,8 @@ export function topSoldItems(
         };
       }
 
-      const qty = typeof item.requested_qty === 'number' ? item.requested_qty : parseFloat(item.requested_qty || '0') || 0;
-      const lineTotal = typeof item.line_total === 'number' ? item.line_total : parseFloat(item.line_total || '0') || 0;
+      const qty = typeof item.requested_qty === 'number' ? item.requested_qty : parseFloat(String(item.requested_qty || '0')) || 0;
+      const lineTotal = typeof item.line_total === 'number' ? item.line_total : parseFloat(String(item.line_total || '0')) || 0;
 
       items[key].units += qty;
       items[key].revenue += lineTotal;
@@ -264,8 +237,8 @@ export async function getAllTimeSeries() {
 }
 
 export function buildTimeseriesForPeriod(
-  quotes: Array<{ created_at: string; payload: any }>,
-  invoices: Array<{ created_at: string; payload: any }>,
+  quotes: Array<{ created_at: string; payload: unknown }>,
+  invoices: Array<{ created_at: string; payload: unknown }>,
   start?: Date,
   end?: Date
 ) {

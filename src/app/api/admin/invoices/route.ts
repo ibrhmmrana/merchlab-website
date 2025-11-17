@@ -14,15 +14,15 @@ function formatPdfUrl(id: string): string {
   return `${STORAGE_BASE_URL}/${id}.pdf`;
 }
 
-function parsePayload(payload: any): any {
+function parsePayload(payload: unknown): Record<string, unknown> | null {
   if (typeof payload === 'string') {
     try {
-      return JSON.parse(payload);
+      return JSON.parse(payload) as Record<string, unknown>;
     } catch {
       return null;
     }
   }
-  return payload;
+  return (payload && typeof payload === 'object') ? payload as Record<string, unknown> : null;
 }
 
 function resolvePeriod(period: PeriodKey): { start?: Date; end?: Date } {
