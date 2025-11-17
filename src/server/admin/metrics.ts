@@ -252,7 +252,7 @@ function normalizePhoneNumber(phone: string): string {
   if (!phone) return '';
   
   // Remove all spaces, dashes, and parentheses
-  let cleaned = phone.replace(/[\s\-()]/g, '');
+  const cleaned = phone.replace(/[\s\-()]/g, '');
   
   // If already starts with +27, return as is
   if (cleaned.startsWith('+27')) {

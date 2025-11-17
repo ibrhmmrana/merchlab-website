@@ -1,4 +1,4 @@
-import { readQuotes, readInvoices, parseGrandTotal, topSoldItems, type PeriodKey } from '../metrics';
+import { readQuotes, readInvoices, parseGrandTotal, topSoldItems } from '../metrics';
 
 export type ReportTimeframe = 'last_7d' | 'last_30d' | 'all_time' | 'custom';
 
