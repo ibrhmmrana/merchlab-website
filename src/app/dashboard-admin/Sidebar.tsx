@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, TrendingUp, FileText, Receipt, Menu, X } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Sidebar() {
@@ -30,6 +30,11 @@ export default function Sidebar() {
       href: '/dashboard-admin/invoices',
       label: 'Invoices',
       icon: Receipt,
+    },
+    {
+      href: '/dashboard-admin/customers',
+      label: 'Top Customers',
+      icon: Users,
     },
   ];
 

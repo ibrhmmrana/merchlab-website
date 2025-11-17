@@ -236,6 +236,62 @@ export async function getAllTimeSeries() {
   };
 }
 
+// Helper to safely extract string from unknown object
+function pickStr(obj: unknown, keys: string[], fallback = ''): string {
+  if (!obj || typeof obj !== 'object') return fallback;
+  const rec = obj as Record<string, unknown>;
+  for (const k of keys) {
+    const v = rec[k];
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return fallback;
+}
+
+export function topCustomers(
+  invoices: Array<{ created_at: string; payload: unknown }>,
+  limit = 50
+): Array<{ customer: string; company: string; totalValue: number; orderCount: number; lastOrderDate: string }> {
+  const customers: Record<string, { customer: string; company: string; totalValue: number; orderCount: number; lastOrderDate: string }> = {};
+
+  for (const invoice of invoices) {
+    const p = parsePayload(invoice.payload) as Record<string, unknown> | null;
+    const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
+    
+    // Extract customer info using pickStr helper
+    const firstName = pickStr(customerUnknown, ['firstName', 'first_name']);
+    const lastName = pickStr(customerUnknown, ['lastName', 'last_name']);
+    const company = pickStr(customerUnknown, ['company'], '-');
+    
+    const customerName = `${firstName} ${lastName}`.trim() || 'Unknown';
+    const customerKey = `${customerName}|${company}`.toLowerCase();
+    
+    const value = parseGrandTotal(invoice.payload);
+    const orderDate = invoice.created_at;
+
+    if (!customers[customerKey]) {
+      customers[customerKey] = {
+        customer: customerName,
+        company: company || '-',
+        totalValue: 0,
+        orderCount: 0,
+        lastOrderDate: orderDate,
+      };
+    }
+
+    customers[customerKey].totalValue += value;
+    customers[customerKey].orderCount += 1;
+    
+    // Update last order date if this invoice is more recent
+    if (orderDate > customers[customerKey].lastOrderDate) {
+      customers[customerKey].lastOrderDate = orderDate;
+    }
+  }
+
+  return Object.values(customers)
+    .sort((a, b) => b.totalValue - a.totalValue)
+    .slice(0, limit);
+}
+
 export function buildTimeseriesForPeriod(
   quotes: Array<{ created_at: string; payload: unknown }>,
   invoices: Array<{ created_at: string; payload: unknown }>,
