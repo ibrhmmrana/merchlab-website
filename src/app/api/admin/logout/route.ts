@@ -10,10 +10,13 @@ export async function POST() {
     { status: 200, headers: noIndexHeaders() }
   );
 
+  // Always use secure cookies in production (Vercel sets NODE_ENV)
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  
   response.cookies.set(cookieName, '', {
     path: '/',
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     sameSite: 'lax',
     maxAge: 0,
   });
