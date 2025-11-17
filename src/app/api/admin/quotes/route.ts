@@ -7,6 +7,17 @@ export const runtime = 'nodejs';
 
 const STORAGE_BASE_URL = 'https://fxsqdpmmddcidjwzxtpc.supabase.co/storage/v1/object/public/audit-reports';
 
+// --- helpers ---
+const pickStr = (obj: unknown, keys: string[], fallback = ''): string => {
+  if (!obj || typeof obj !== 'object') return fallback;
+  const rec = obj as Record<string, unknown>;
+  for (const k of keys) {
+    const v = rec[k];
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return fallback;
+};
+
 function formatPdfUrl(id: string): string {
   return `${STORAGE_BASE_URL}/${id}.pdf`;
 }
@@ -33,7 +44,7 @@ function resolvePeriod(period: PeriodKey): { start?: Date; end?: Date } {
   if (period === 'all' || period === 'custom') return { start: undefined, end };
 
   const nowMs = end.getTime();
-  const hoursMap: Record<Exclude<PeriodKey, 'ytd' | 'all' | 'custom'>, number> = {
+  const hoursMap: Partial<Record<Exclude<PeriodKey, 'ytd' | 'all' | 'custom'>, number>> = {
     '4h': 4,
     '12h': 12,
     '24h': 24,
@@ -42,7 +53,7 @@ function resolvePeriod(period: PeriodKey): { start?: Date; end?: Date } {
     '90d': 24 * 90,
   };
 
-  const hrs = hoursMap[period as keyof typeof hoursMap];
+  const hrs = hoursMap[period as keyof typeof hoursMap] ?? 0;
   const start = new Date(nowMs - hrs * 3600 * 1000);
 
   return { start, end };
@@ -98,11 +109,13 @@ export async function GET(request: NextRequest) {
     // Format quotes
     let formattedQuotes = quotes.map((q) => {
       const p = parsePayload(q.payload);
-      const customer = p?.enquiryCustomer || p?.customer;
-      const firstName = customer?.firstName || customer?.first_name || '';
-      const lastName = customer?.lastName || customer?.last_name || '';
+      // prefer payload.enquiryCustomer, else legacy customer
+      const customerUnknown = (p?.enquiryCustomer ?? p?.customer) as unknown;
+
+      const firstName = pickStr(customerUnknown, ['firstName', 'first_name']);
+      const lastName = pickStr(customerUnknown, ['lastName', 'last_name']);
+      const company = pickStr(customerUnknown, ['company'], '-');
       const customerName = `${firstName} ${lastName}`.trim() || '-';
-      const company = customer?.company || '-';
       const value = parseGrandTotal(q.payload);
 
       return {

@@ -31,10 +31,10 @@ function resolvePeriod(period: PeriodKey): { start?: Date; end?: Date } {
     return { start, end };
   }
 
-  if (period === 'all') return { start: undefined, end };
+  if (period === 'all' || period === 'custom') return { start: undefined, end };
 
   const nowMs = end.getTime();
-  const hoursMap: Record<Exclude<PeriodKey, 'ytd' | 'all'>, number> = {
+  const hoursMap: Partial<Record<Exclude<PeriodKey, 'ytd' | 'all' | 'custom'>, number>> = {
     '4h': 4,
     '12h': 12,
     '24h': 24,
@@ -43,7 +43,7 @@ function resolvePeriod(period: PeriodKey): { start?: Date; end?: Date } {
     '90d': 24 * 90,
   };
 
-  const hrs = hoursMap[period as keyof typeof hoursMap];
+  const hrs = hoursMap[period as keyof typeof hoursMap] ?? 0;
   const start = new Date(nowMs - hrs * 3600 * 1000);
 
   return { start, end };
