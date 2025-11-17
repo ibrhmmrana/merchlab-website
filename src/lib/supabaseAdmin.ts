@@ -17,6 +17,11 @@ export function getSupabaseAdmin(): SupabaseClient {
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: {
+      headers: {
+        'X-Client-Info': 'ml-admin-dashboard',
+      },
+    },
   });
 
   return _admin;

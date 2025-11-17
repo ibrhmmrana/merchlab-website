@@ -52,17 +52,17 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <BrandingProvider>
-          <GlobalLoadingProvider>
-            <div className="min-h-screen flex flex-col">
-              <Header />
-              <main className="flex-1">
-                {children}
-              </main>
-              <Footer />
-              <CartDrawer />
-              <CookieConsent />
-            </div>
-          </GlobalLoadingProvider>
+        <GlobalLoadingProvider>
+          <div className="min-h-screen flex flex-col">
+            <Header />
+            <main className="flex-1">
+              {children}
+            </main>
+            <Footer />
+            <CartDrawer />
+            <CookieConsent />
+          </div>
+        </GlobalLoadingProvider>
         </BrandingProvider>
       </body>
     </html>
