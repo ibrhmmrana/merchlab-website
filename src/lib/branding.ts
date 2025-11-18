@@ -108,7 +108,8 @@ export type QuoteBrandingSelection = {
   branding_size: string;
   color_count: number;
   comment?: string | null;
-  artwork_url?: string | null;
+  artwork_url?: string | null; // Original raster image URL
+  logo_file?: string | null; // Vectorized SVG URL
 };
 
 export async function fetchQuoteBrandingSelections(
@@ -130,7 +131,7 @@ export async function fetchQuoteBrandingSelections(
   const queryParts = [
     `session_token=eq.${encodeURIComponent(sessionToken)}`,
     `item_key=in.(${itemKeysParam})`,
-    `select=${encodeURIComponent('item_key,stock_header_id,branding_position,branding_type,branding_size,color_count,comment,artwork_url')}`,
+    `select=${encodeURIComponent('item_key,stock_header_id,branding_position,branding_type,branding_size,color_count,comment,artwork_url,logo_file')}`,
   ];
   
   const url = `${base}/rest/v1/quote_branding_selections?${queryParts.join('&')}`;

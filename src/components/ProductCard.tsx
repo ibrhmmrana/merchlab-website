@@ -307,7 +307,17 @@ export default function ProductCard({ group }: Props) {
             color_count: sel.colorCount,
             comment: sel.comment,
             artwork_url: sel.artwork_url, // Include artwork_url from upload
+            logo_file: sel.logo_file, // Include vectorized SVG URL
           }));
+          
+          console.debug('[branding] ProductCard cart conversion', {
+            selectionsCount: brandingSelections.length,
+            selections: brandingSelections.map(s => ({
+              position: s.branding_position,
+              artwork_url: s.artwork_url,
+              logo_file: s.logo_file,
+            }))
+          });
           
           console.log('ProductCard: Adding to cart with branding:', {
             variant: selectedVariant,

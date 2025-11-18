@@ -4,7 +4,8 @@ export type BrandingSelectionInput = {
   size: string | null;
   colorCount: number;
   comment?: string;
-  artwork_url?: string;
+  artwork_url?: string; // Original raster image URL
+  logo_file?: string; // Vectorized SVG URL
 };
 
 export type BrandingCompletePayload = {

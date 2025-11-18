@@ -21,7 +21,7 @@ export type BrandingOpenPayload = {
 
 type NormalizedBrandingResult = {
   stockHeaderId: number;
-  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string; artwork_url?: string }>;
+  selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string; artwork_url?: string; logo_file?: string }>;
 };
 
 type BrandingResult = NormalizedBrandingResult | null;
@@ -87,8 +87,18 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
         colorCount: s.colorCount,
         comment: s.comment,
         artwork_url: s.artwork_url, // Include artwork_url
+        logo_file: s.logo_file, // Include vectorized SVG URL
       })),
     };
+    
+    console.debug('[branding] context normalized', { 
+      selectionsCount: normalized.selections.length,
+      selections: normalized.selections.map(s => ({ 
+        position: s.position, 
+        artwork_url: s.artwork_url, 
+        logo_file: s.logo_file 
+      }))
+    });
 
     if (resolver) {
       resolver(normalized);

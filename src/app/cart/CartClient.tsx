@@ -173,27 +173,46 @@ export default function CartClient() {
       const itemSelections = selectionsByItemKey[itemKey] || [];
       
       // Build brandingItems array
-      const brandingItems = itemSelections.map((sel, selIdx) => ({
-        enquiryBrandingItemId: enquiryId + idx * 1000 + selIdx + 1,
-        enquiryItemId: enquiryId + idx + 200,
-        stockHeaderId: item.stock_header_id,
-        colour: item.colour || null,
-        brandingConfigId: "",
-        brandingChargeId: "",
-        brandingType: sel.branding_type,
-        brandingPosition: sel.branding_position,
-        brandingSize: sel.branding_size,
-        colourCount: sel.color_count,
-        unitCount: item.quantity,
-        unitPrice: 0,
-        setupFee: 0,
-        namesList: "[]",
-        comment: sel.comment || "",
-        brandingCost: 0,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        logoFile: sel.artwork_url ? [sel.artwork_url] : [],
-      }));
+      const brandingItems = itemSelections.map((sel, selIdx) => {
+        // Prefer logo_file (SVG) over artwork_url (original), convert to array format
+        const logoFileValue = sel.logo_file || sel.artwork_url || null;
+        const logoFileArray = logoFileValue ? [logoFileValue] : [];
+        
+        console.debug('[payload] branding row pre-map', {
+          position: sel.branding_position,
+          artwork_url: sel.artwork_url,
+          logo_file: sel.logo_file,
+        });
+        
+        const mappedRow = {
+          enquiryBrandingItemId: enquiryId + idx * 1000 + selIdx + 1,
+          enquiryItemId: enquiryId + idx + 200,
+          stockHeaderId: item.stock_header_id,
+          colour: item.colour || null,
+          brandingConfigId: "",
+          brandingChargeId: "",
+          brandingType: sel.branding_type,
+          brandingPosition: sel.branding_position,
+          brandingSize: sel.branding_size,
+          colourCount: sel.color_count,
+          unitCount: item.quantity,
+          unitPrice: 0,
+          setupFee: 0,
+          namesList: "[]",
+          comment: sel.comment || "",
+          brandingCost: 0,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          logoFile: logoFileArray, // Prefer SVG, fallback to original
+        };
+        
+        console.debug('[payload] branding row post-map', {
+          position: mappedRow.brandingPosition,
+          logoFile: mappedRow.logoFile,
+        });
+        
+        return mappedRow;
+      });
 
       return {
         enquiryItemId: enquiryId + idx + 200,
@@ -315,6 +334,7 @@ export default function CartClient() {
             color_count: b.color_count,
             comment: b.comment || null,
             artwork_url: b.artwork_url || null,
+            logo_file: b.logo_file || null, // Include vectorized SVG URL
           }));
         });
         
@@ -330,8 +350,16 @@ export default function CartClient() {
         // Otherwise fall back to DB selections
         const selections = selectionsFromCart.length > 0 ? selectionsFromCart : dbSelections;
         
-        // Debug: Log selections to verify artwork_url is present
-        console.log('Branding selections for payload:', JSON.stringify(selections, null, 2));
+        // Debug: Log selections to verify logo_file and artwork_url are present
+        console.debug('[payload] selections for payload', {
+          selectionsCount: selections.length,
+          selections: selections.map(s => ({
+            position: s.branding_position,
+            artwork_url: s.artwork_url,
+            logo_file: s.logo_file,
+            hasSvg: !!s.logo_file && s.logo_file.endsWith('.svg'),
+          }))
+        });
         
         // Validate that each item has at least one selection (either from DB or cart)
         const itemsWithoutSelections = activeItems.filter(item => {
@@ -349,6 +377,18 @@ export default function CartClient() {
         
         // Build branded payload
         const brandedPayload = buildBrandedPayload(activeItems, selections);
+        
+        // Log final payload with logoFile details
+        console.debug('[payload] final webhook payload', {
+          itemsCount: brandedPayload[0]?.items?.length || 0,
+          brandingItems: brandedPayload[0]?.items?.flatMap((item: unknown) => {
+            const i = item as { brandingItems?: Array<{ logoFile?: unknown[] }> };
+            return i.brandingItems?.map((bi: { logoFile?: unknown[] }) => ({
+              logoFile: bi.logoFile,
+              isSvg: Array.isArray(bi.logoFile) && bi.logoFile[0]?.toString().endsWith('.svg'),
+            })) || [];
+          }) || [],
+        });
         
         console.log('Submitting branded payload:', JSON.stringify(brandedPayload, null, 2));
         

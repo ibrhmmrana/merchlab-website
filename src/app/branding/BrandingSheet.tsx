@@ -42,7 +42,10 @@ type PosDraft = {
   size: string | null;
   colorCount: number;
   comment?: string;
-  artwork_url?: string;
+  artwork_url?: string; // Original raster image URL
+  logo_file?: string; // Vectorized SVG URL
+  vectorizing?: boolean; // Loading state for vectorization
+  vectorizeError?: string; // Error message if vectorization fails
 };
 
 export default function BrandingSheet(props: BrandingSheetProps) {
@@ -67,6 +70,8 @@ export default function BrandingSheet(props: BrandingSheetProps) {
   // Upload state per position
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadError, setUploadError] = useState<Record<string, string>>({});
+  const [isDragging, setIsDragging] = useState<Record<string, boolean>>({});
+  const [vectorized, setVectorized] = useState<Record<string, boolean>>({}); // Track which positions have been vectorized
 
   // Load positions when modal opens
   useEffect(() => {
@@ -106,8 +111,70 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       setPicked([]);
       setActive(null);
       setDrafts({});
+      setVectorized({});
     }
   }, [open]);
+
+  // Auto-vectorize existing artwork when details screen opens
+  useEffect(() => {
+    if (screen === "details" && itemKey) {
+      // Check each picked position for artwork_url without logo_file
+      for (const p of picked) {
+        const draft = drafts[p];
+        if (draft?.artwork_url && !draft.logo_file && !vectorized[p] && !draft.vectorizing) {
+          // Mark as vectorizing to prevent duplicate calls
+          setVectorized((prev) => ({ ...prev, [p]: true }));
+          
+          // Auto-vectorize this position's artwork
+          (async () => {
+            try {
+              setDraft(p, { vectorizing: true, vectorizeError: undefined });
+              const vectorizeResponse = await fetch('/api/branding/vectorize', {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                },
+                body: JSON.stringify({ url: draft.artwork_url }),
+              });
+
+              if (vectorizeResponse.ok) {
+                const vectorizeData = await vectorizeResponse.json();
+                if (vectorizeData.logo_file) {
+                  const updatedDraft = { ...draft, logo_file: vectorizeData.logo_file, vectorizing: false };
+                  setDraft(p, updatedDraft);
+                  // Save to DB
+                  if (draft.type && draft.size) {
+                    saveBrandingSelectionToDb(p, updatedDraft);
+                  }
+                } else {
+                  throw new Error('No logo_file in response');
+                }
+              } else {
+                const errorData = await vectorizeResponse.json().catch(() => ({}));
+                throw new Error(errorData.error || `Vectorization failed: ${vectorizeResponse.status}`);
+              }
+            } catch (vectorizeError) {
+              const errorMessage = vectorizeError instanceof Error 
+                ? vectorizeError.message 
+                : 'Vectorization failed';
+              console.warn('Auto-vectorization failed for position', p, errorMessage);
+              setDraft(p, {
+                vectorizing: false,
+                vectorizeError: errorMessage,
+              });
+              // Reset vectorized flag so it can be retried
+              setVectorized((prev) => {
+                const next = { ...prev };
+                delete next[p];
+                return next;
+              });
+            }
+          })();
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, picked, itemKey, stockHeaderId]);
 
   // initialize a draft when a position is first selected and load types for that position
   useEffect(() => {
@@ -232,20 +299,25 @@ export default function BrandingSheet(props: BrandingSheetProps) {
 
     try {
       const sessionToken = getOrCreateSessionToken();
+      const body = {
+        sessionToken,
+        itemKey,
+        stockHeaderId,
+        position,
+        brandingType: draft.type,
+        brandingSize: draft.size,
+        colorCount: draft.colorCount,
+        comment: draft.comment || null,
+        artwork_url: draft.artwork_url || null, // Preserve existing artwork_url
+        logo_file: draft.logo_file || null, // Include vectorized SVG URL
+      };
+      
+      console.debug('[branding] saving selection', { body });
+      
       const response = await fetch('/api/save-branding-selection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionToken,
-          itemKey,
-          stockHeaderId,
-          position,
-          brandingType: draft.type,
-          brandingSize: draft.size,
-          colorCount: draft.colorCount,
-          comment: draft.comment || null,
-          artwork_url: draft.artwork_url || null, // Preserve existing artwork_url
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -304,8 +376,66 @@ export default function BrandingSheet(props: BrandingSheetProps) {
         throw new Error('No URL returned from upload');
       }
       
-      setDraft(position, { artwork_url: url });
+      // Update draft with original image URL
+      setDraft(position, { 
+        artwork_url: url,
+        vectorizing: true,
+        vectorizeError: undefined,
+      });
       setUploadError((prev) => ({ ...prev, [position]: '' }));
+
+      // Auto-vectorize the uploaded image
+      try {
+        const vectorizeResponse = await fetch('/api/branding/vectorize', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ url }),
+        });
+
+        if (vectorizeResponse.ok) {
+          const vectorizeData = await vectorizeResponse.json();
+          if (vectorizeData.logo_file) {
+            // Update draft with SVG URL (preserve existing fields)
+            const currentDraft = drafts[position];
+            const updatedDraft = {
+              ...currentDraft,
+              logo_file: vectorizeData.logo_file,
+              vectorizing: false,
+            };
+            setDraft(position, updatedDraft);
+            setVectorized((prev) => ({ ...prev, [position]: true }));
+            
+            console.debug('[branding] vectorized ready', {
+              position,
+              svgUrl: vectorizeData.logo_file,
+              draftForPositionAfterMerge: updatedDraft,
+            });
+            
+            // Save to DB if we have complete selection
+            if (currentDraft?.type && currentDraft?.size && itemKey) {
+              saveBrandingSelectionToDb(position, updatedDraft);
+            }
+          } else {
+            throw new Error('No logo_file in response');
+          }
+        } else {
+          const errorData = await vectorizeResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Vectorization failed: ${vectorizeResponse.status}`);
+        }
+      } catch (vectorizeError) {
+        // Vectorization failed, but keep the original image
+        const errorMessage = vectorizeError instanceof Error 
+          ? vectorizeError.message 
+          : 'Vectorization failed';
+        console.warn('Vectorization failed for position', position, errorMessage);
+        setDraft(position, {
+          vectorizing: false,
+          vectorizeError: errorMessage,
+        });
+        // Don't show error to user - they can still use the original image
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to upload image';
       setUploadError((prev) => ({ ...prev, [position]: errorMessage }));
@@ -328,6 +458,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       colorCount: drafts[p].colorCount,
       comment: drafts[p].comment?.trim() || undefined,
       artwork_url: drafts[p].artwork_url,
+      logo_file: drafts[p].logo_file, // Include vectorized SVG URL
     }));
 
     console.log('Saving branding selections:', { stockHeaderId, selections });
@@ -429,7 +560,46 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                     {/* Artwork upload */}
                     <div className="space-y-2">
                       <div className="text-sm font-medium">Upload Artwork (Optional)</div>
-                      <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+                      <div
+                        className={`rounded-xl border-2 border-dashed p-6 text-sm text-muted-foreground transition-colors ${
+                          isDragging[p]
+                            ? 'border-primary bg-primary/5'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDragging((prev) => ({ ...prev, [p]: true }));
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Only set dragging to false if we're leaving the drop zone itself
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = e.clientX;
+                          const y = e.clientY;
+                          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                            setIsDragging((prev) => ({ ...prev, [p]: false }));
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDragging((prev) => ({ ...prev, [p]: false }));
+                          
+                          const files = Array.from(e.dataTransfer.files);
+                          const imageFile = files.find(file => 
+                            file.type.startsWith('image/') && 
+                            ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)
+                          );
+                          
+                          if (imageFile) {
+                            handleFileUpload(p, imageFile);
+                          } else if (files.length > 0) {
+                            setUploadError((prev) => ({ ...prev, [p]: 'Please drop an image file (JPG, PNG, or WebP)' }));
+                          }
+                        }}
+                      >
                         <div className="flex flex-col items-center justify-center gap-2">
                           {d?.artwork_url ? (
                             <>
@@ -438,6 +608,15 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                                 <span className="text-sm font-medium">Image uploaded successfully</span>
+                                {d.vectorizing && (
+                                  <span className="text-xs text-muted-foreground ml-2">Auto-vectorizing...</span>
+                                )}
+                                {d.logo_file && !d.vectorizing && (
+                                  <span className="text-xs text-primary ml-2">Vectorized ✓</span>
+                                )}
+                                {d.vectorizeError && !d.logo_file && (
+                                  <span className="text-xs text-amber-600 ml-2">Vectorization failed — using original</span>
+                                )}
                               </div>
                               <img 
                                 src={d.artwork_url} 
@@ -446,7 +625,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                               />
                               <button
                                 type="button"
-                                onClick={() => setDraft(p, { artwork_url: undefined })}
+                                onClick={() => setDraft(p, { artwork_url: undefined, logo_file: undefined })}
                                 className="text-xs text-red-600 hover:text-red-700 underline"
                               >
                                 Remove image
@@ -454,28 +633,45 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                             </>
                           ) : (
                             <>
-                              <label
-                                htmlFor={`file-upload-${p}`}
-                                className="cursor-pointer rounded bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 transition-colors"
-                              >
-                                {uploading[p] ? 'Uploading...' : 'Select a file'}
-                              </label>
-                              <input
-                                id={`file-upload-${p}`}
-                                type="file"
-                                accept="image/jpeg,image/jpg,image/png,image/webp"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    handleFileUpload(p, file);
-                                  }
-                                }}
-                                disabled={uploading[p]}
-                              />
-                              <div className="text-xs text-center">
-                                JPG, PNG, or WebP • Max size 10MB
-                              </div>
+                              {isDragging[p] ? (
+                                <div className="flex flex-col items-center gap-2 py-4">
+                                  <svg className="w-12 h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                  </svg>
+                                  <span className="text-sm font-medium text-primary">Drop your file here</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <svg className="w-12 h-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                  </svg>
+                                  <label
+                                    htmlFor={`file-upload-${p}`}
+                                    className="cursor-pointer rounded bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 transition-colors"
+                                  >
+                                    {uploading[p] ? 'Uploading...' : 'Select a file'}
+                                  </label>
+                                  <input
+                                    id={`file-upload-${p}`}
+                                    type="file"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        handleFileUpload(p, file);
+                                      }
+                                    }}
+                                    disabled={uploading[p]}
+                                  />
+                                  <div className="text-xs text-center">
+                                    Drag and drop or click to select
+                                  </div>
+                                  <div className="text-xs text-center text-muted-foreground">
+                                    JPG, PNG, or WebP • Max size 10MB
+                                  </div>
+                                </>
+                              )}
                             </>
                           )}
                           {uploadError[p] && (
