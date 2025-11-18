@@ -379,15 +379,15 @@ export default function CartClient() {
         const brandedPayload = buildBrandedPayload(activeItems, selections);
         
         // Log final payload with logoFile details
+        const firstPayload = brandedPayload[0] as { items?: Array<{ brandingItems?: Array<{ logoFile?: unknown[] }> }> } | undefined;
         console.debug('[payload] final webhook payload', {
-          itemsCount: brandedPayload[0]?.items?.length || 0,
-          brandingItems: brandedPayload[0]?.items?.flatMap((item: unknown) => {
-            const i = item as { brandingItems?: Array<{ logoFile?: unknown[] }> };
-            return i.brandingItems?.map((bi: { logoFile?: unknown[] }) => ({
+          itemsCount: Array.isArray(firstPayload?.items) ? firstPayload.items.length : 0,
+          brandingItems: Array.isArray(firstPayload?.items) ? firstPayload.items.flatMap((item) => {
+            return item.brandingItems?.map((bi) => ({
               logoFile: bi.logoFile,
               isSvg: Array.isArray(bi.logoFile) && bi.logoFile[0]?.toString().endsWith('.svg'),
             })) || [];
-          }) || [],
+          }) : [],
         });
         
         console.log('Submitting branded payload:', JSON.stringify(brandedPayload, null, 2));
