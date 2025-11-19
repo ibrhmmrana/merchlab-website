@@ -78,7 +78,8 @@ async function getProductFeatures(stockHeaderId: number, cookie: string): Promis
   
   // Parse XML to extract JSON from ResponseData
   // The XML contains escaped JSON in ResponseData: <ResponseData>[{...}]</ResponseData>
-  const responseDataMatch = xmlText.match(/<ResponseData>(.*?)<\/ResponseData>/s);
+  // Use [\s\S] instead of . with s flag for ES2017 compatibility
+  const responseDataMatch = xmlText.match(/<ResponseData>([\s\S]*?)<\/ResponseData>/);
   if (!responseDataMatch) {
     throw new Error('Could not parse ResponseData from XML');
   }
