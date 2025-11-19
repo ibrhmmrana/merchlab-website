@@ -173,6 +173,11 @@ export default function ProductCard({ group }: Props) {
     }
   }, [sizesForSelected, selectedSize]);
 
+  // Load variants on mount to get accurate stock counts immediately
+  useEffect(() => {
+    ensureVariants();
+  }, [group.stock_header_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Don't render if product has no stock - check totalStock if variants loaded, otherwise group.in_stock
   const hasStock = variants && variants.length > 0 
     ? totalStock > 0 
@@ -542,11 +547,6 @@ export default function ProductCard({ group }: Props) {
       setBrandingSelections([]);
     }
   };
-
-  // Load variants on mount to get accurate stock counts immediately
-  useEffect(() => {
-    ensureVariants();
-  }, [group.stock_header_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="luxury-product-card group" onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); setBrandingMode('unbranded'); setBrandingSelections([]); }}>
