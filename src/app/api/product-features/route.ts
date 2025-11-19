@@ -9,13 +9,6 @@ interface ProductFeature {
   Features: string;
 }
 
-interface LoginResponse {
-  headers: {
-    'set-cookie'?: string | string[];
-    'Set-Cookie'?: string | string[];
-  };
-}
-
 async function loginAndGetCookie(): Promise<string> {
   const loginUrl = 'https://wslive.kevro.co.za/StockFeed.asmx/login';
   
@@ -91,7 +84,7 @@ async function getProductFeatures(stockHeaderId: number, cookie: string): Promis
   }
 
   // Extract the JSON string (may be escaped)
-  let jsonStr = responseDataMatch[1].trim();
+  const jsonStr = responseDataMatch[1].trim();
   
   // Remove leading/trailing brackets if present and parse
   if (jsonStr.startsWith('[') && jsonStr.endsWith(']')) {
