@@ -16,6 +16,7 @@ import type { BrandingSelection } from "@/types/branding";
 import type { BrandingMode } from "@/app/branding/types";
 import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
 import { cn } from "@/lib/utils";
+import ProductDetailsModal from "@/components/ProductDetailsModal";
 
 // Type guard helper for branding mode
 const isBranded = (m: BrandingMode | undefined): m is 'branded' => m === 'branded';
@@ -109,6 +110,7 @@ export default function ProductCard({ group }: Props) {
   const [brandingMode, setBrandingMode] = useState<BrandingMode | undefined>(undefined);
   const [brandingSelections, setBrandingSelections] = useState<BrandingSelection[]>([]);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const { openBranding } = useBrandingSheet();
 
   // Calculate total stock from variants (sum of qty_available which already includes wh3_bond)
@@ -549,7 +551,20 @@ export default function ProductCard({ group }: Props) {
   };
 
   return (
-    <div className="luxury-product-card group" onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); setBrandingMode('unbranded'); setBrandingSelections([]); }}>
+    <>
+    <div 
+      className="luxury-product-card group cursor-pointer" 
+      onClick={(e) => {
+        // Don't open modal if clicking on interactive elements
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.closest('[role="button"]') || target.closest('a')) {
+          return;
+        }
+        setShowDetailsModal(true);
+      }}
+      onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} 
+      onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); setBrandingMode('unbranded'); setBrandingSelections([]); }}
+    >
       <div className="aspect-square relative bg-gray-50 overflow-hidden">
         {preview ? (
           <Image
@@ -840,5 +855,14 @@ export default function ProductCard({ group }: Props) {
         );
       })()}
     </div>
+
+    <ProductDetailsModal
+      open={showDetailsModal}
+      onOpenChange={setShowDetailsModal}
+      stockHeaderId={group.stock_header_id}
+      productName={group.group_name}
+      productImage={preview || group.representative_image_url}
+    />
+    </>
   );
 }
