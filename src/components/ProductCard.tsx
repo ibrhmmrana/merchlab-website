@@ -111,6 +111,23 @@ export default function ProductCard({ group }: Props) {
   const [showBrandingModal, setShowBrandingModal] = useState(false);
   const { openBranding } = useBrandingSheet();
 
+  // Calculate total stock from variants (sum of qty_available which already includes wh3_bond)
+  const totalStock = useMemo(() => {
+    if (!variants || variants.length === 0) {
+      return group.in_stock; // Fallback to group.in_stock if variants not loaded
+    }
+    return variants.reduce((sum, v) => sum + (v.qty_available || 0), 0);
+  }, [variants, group.in_stock]);
+
+  // Get selected variant's quantity
+  const selectedVariantQty = useMemo(() => {
+    if (!selectedColour || !selectedSize || !variants) return null;
+    const variant = variants.find(
+      v => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(selectedSize)
+    );
+    return variant?.qty_available ?? null;
+  }, [selectedColour, selectedSize, variants]);
+
   // When user clicks "Branded"
   function onChooseBranded() {
     setBrandingMode('branded');
@@ -156,8 +173,12 @@ export default function ProductCard({ group }: Props) {
     }
   }, [sizesForSelected, selectedSize]);
 
-  // Don't render if product has no stock - moved after all hooks
-  if (group.in_stock <= 0) {
+  // Don't render if product has no stock - check totalStock if variants loaded, otherwise group.in_stock
+  const hasStock = variants && variants.length > 0 
+    ? totalStock > 0 
+    : group.in_stock > 0;
+  
+  if (!hasStock) {
     return null;
   }
 
@@ -522,6 +543,11 @@ export default function ProductCard({ group }: Props) {
     }
   };
 
+  // Load variants on mount to get accurate stock counts immediately
+  useEffect(() => {
+    ensureVariants();
+  }, [group.stock_header_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="luxury-product-card group" onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); setBrandingMode('unbranded'); setBrandingSelections([]); }}>
       <div className="aspect-square relative bg-gray-50 overflow-hidden">
@@ -545,13 +571,17 @@ export default function ProductCard({ group }: Props) {
         )}
         <div className="font-medium leading-tight">{group.group_name}</div>
 
-        {/* Stock information - always visible */}
+        {/* Stock information - show selected variant qty if available, otherwise total stock */}
         <div className="mt-2 flex gap-2">
-          {group.in_stock > 0 && (
+          {selectedVariantQty !== null ? (
             <span className="text-xs border border-gray-300 px-2 py-1 rounded">
-              In stock: {group.in_stock}
+              In stock: {selectedVariantQty}
             </span>
-          )}
+          ) : totalStock > 0 ? (
+            <span className="text-xs border border-gray-300 px-2 py-1 rounded">
+              In stock: {totalStock}
+            </span>
+          ) : null}
         </div>
 
          {/* Color swatches carousel - only show when colors are loaded and hovering */}

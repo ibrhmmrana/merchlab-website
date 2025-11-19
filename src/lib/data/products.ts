@@ -93,10 +93,10 @@ export async function getVariantsForGroup(stock_header_id: number): Promise<Vari
         base_price, 
         discounted_price, 
         image_url, 
-        qty_available
+        qty_available,
+        wh3_bond
       `)
-      .eq('stock_header_id', stock_header_id)
-      .gt('qty_available', 0); // Only return variants with stock > 0
+      .eq('stock_header_id', stock_header_id);
     
     if (error) {
       console.error("getVariantsForGroup Supabase error:", error);
@@ -107,29 +107,38 @@ export async function getVariantsForGroup(stock_header_id: number): Promise<Vari
     console.log("getVariantsForGroup success:", data?.length || 0, "variants");
     
     // Map aliases for compatibility and add default values for missing fields
-    return (data ?? []).map(v => ({
-      stock_id: v.stock_id,
-      stock_header_id: v.stock_header_id,
-      stock_code: v.stock_code,
-      description: v.description,
-      colour: v.colour,
-      size: v.size,
-      color_status: null, // Default value
-      base_price: v.base_price,
-      discounted_price: v.discounted_price,
-      royalty_factor: null, // Default value
-      image_url: v.image_url,
-      qty_available: v.qty_available,
-      brand: null, // Default value
-      category: null, // Default value
-      type: null, // Default value
-      gender: null, // Default value
-      garment_type: null, // Default value
-      weight_per_unit: null, // Default value
-      // Aliases for compatibility
-      stockId: v.stock_id,
-      stockHeaderId: v.stock_header_id,
-    })) as Variant[];
+    // Calculate available quantity as sum of qty_available + wh3_bond
+    return (data ?? [])
+      .map(v => {
+        const qtyAvailable = Number(v.qty_available) || 0;
+        const wh3Bond = Number(v.wh3_bond) || 0;
+        const totalAvailable = qtyAvailable + wh3Bond;
+        
+        return {
+          stock_id: v.stock_id,
+          stock_header_id: v.stock_header_id,
+          stock_code: v.stock_code,
+          description: v.description,
+          colour: v.colour,
+          size: v.size,
+          color_status: null, // Default value
+          base_price: v.base_price,
+          discounted_price: v.discounted_price,
+          royalty_factor: null, // Default value
+          image_url: v.image_url,
+          qty_available: totalAvailable, // Sum of qty_available + wh3_bond
+          brand: null, // Default value
+          category: null, // Default value
+          type: null, // Default value
+          gender: null, // Default value
+          garment_type: null, // Default value
+          weight_per_unit: null, // Default value
+          // Aliases for compatibility
+          stockId: v.stock_id,
+          stockHeaderId: v.stock_header_id,
+        };
+      })
+      .filter(v => v.qty_available > 0) as Variant[]; // Only return variants with stock > 0
   } catch (error) {
     console.error("getVariantsForGroup exception:", error);
     console.error("Exception details:", JSON.stringify(error, null, 2));
