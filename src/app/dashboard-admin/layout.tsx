@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { isAuthed } from '@/lib/adminAuth';
 import Sidebar from './Sidebar';
 import LoginForm from './LoginForm';
+import { DashboardHeader } from '@/components/DashboardHeader';
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
@@ -30,11 +31,14 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto min-w-0">
-        {children}
-      </main>
+    <div className="flex flex-col h-screen bg-gray-50">
+      <DashboardHeader />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto min-w-0 lg:ml-64">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

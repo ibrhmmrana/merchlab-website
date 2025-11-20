@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useCartStore } from '@/store/cart';
 import { useUiStore } from '@/store/ui';
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { LoadingLink } from '@/components/LoadingNavigation';
 
 export function Header() {
@@ -18,6 +18,8 @@ export function Header() {
   const [showSearch, setShowSearch] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const isBuildAQuotePage = pathname === '/build-a-quote';
 
   // Close search when clicking outside
   useEffect(() => {
@@ -73,17 +75,19 @@ export function Header() {
               Home
             </LoadingLink>
             <LoadingLink
-              href="/shop"
+              href={isBuildAQuotePage ? "/dashboard-admin" : "/shop"}
               className="luxury-nav-item"
             >
-              Shop Now
+              {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
             </LoadingLink>
-            <LoadingLink
-              href="/contact"
-              className="luxury-nav-item"
-            >
-              Contact
-            </LoadingLink>
+            {!isBuildAQuotePage && (
+              <LoadingLink
+                href="/contact"
+                className="luxury-nav-item"
+              >
+                Contact
+              </LoadingLink>
+            )}
           </nav>
 
           {/* Right side actions */}
@@ -148,17 +152,19 @@ export function Header() {
                 Home
               </LoadingLink>
               <LoadingLink
-                href="/shop"
+                href={isBuildAQuotePage ? "/dashboard-admin" : "/shop"}
                 className="luxury-nav-item text-sm"
               >
-                Shop Now
+                {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
               </LoadingLink>
-              <LoadingLink
-                href="/contact"
-                className="luxury-nav-item text-sm"
-              >
-                Contact
-              </LoadingLink>
+              {!isBuildAQuotePage && (
+                <LoadingLink
+                  href="/contact"
+                  className="luxury-nav-item text-sm"
+                >
+                  Contact
+                </LoadingLink>
+              )}
             </nav>
           </div>
 

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 import { GlobalLoadingProvider } from "@/components/GlobalLoadingProvider";
 import CookieConsent from "@/components/CookieConsent";
 import { BrandingProvider } from "@/components/providers/BrandingProvider";
 import { ConditionalFooter } from "@/components/ConditionalFooter";
+import { ConditionalHeader } from "@/components/ConditionalHeader";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://merchlab.io'),
@@ -55,7 +55,7 @@ export default function RootLayout({
         <BrandingProvider>
         <GlobalLoadingProvider>
           <div className="min-h-screen flex flex-col">
-            <Header />
+            <ConditionalHeader />
             <main className="flex-1">
               {children}
             </main>

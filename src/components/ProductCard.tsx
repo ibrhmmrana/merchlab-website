@@ -17,6 +17,7 @@ import type { BrandingMode } from "@/app/branding/types";
 import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
 import { cn } from "@/lib/utils";
 import ProductDetailsModal from "@/components/ProductDetailsModal";
+import { usePathname } from "next/navigation";
 
 // Type guard helper for branding mode
 const isBranded = (m: BrandingMode | undefined): m is 'branded' => m === 'branded';
@@ -111,7 +112,11 @@ export default function ProductCard({ group }: Props) {
   const [brandingSelections, setBrandingSelections] = useState<BrandingSelection[]>([]);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedVariantPrice, setSelectedVariantPrice] = useState<number | null>(null);
+  const [loadingPrice, setLoadingPrice] = useState(false);
   const { openBranding } = useBrandingSheet();
+  const pathname = usePathname();
+  const isBuildAQuotePage = pathname === '/build-a-quote';
 
   // Calculate total stock from variants (sum of qty_available which already includes wh3_bond)
   const totalStock = useMemo(() => {
@@ -127,8 +132,155 @@ export default function ProductCard({ group }: Props) {
     const variant = variants.find(
       v => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(selectedSize)
     );
-    return variant?.qty_available ?? null;
+    // Return the quantity if variant exists, otherwise return null (will show "Out of stock")
+    if (!variant) return null;
+    return variant.qty_available ?? 0;
   }, [selectedColour, selectedSize, variants]);
+
+  // Get selected variant for price fetching
+  const selectedVariant = useMemo(() => {
+    if (!selectedColour || !selectedSize || !variants) return null;
+    return variants.find(
+      v => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(selectedSize)
+    ) || null;
+  }, [selectedColour, selectedSize, variants]);
+
+  // Build availableColours directly from variants (products_flat) instead of colourMap
+  // This ensures we only show colors that actually exist in the database
+  const availableColours = useMemo(() => {
+    if (!variants || variants.length === 0) return [];
+    
+    // Get all unique colors that have at least one variant with stock > 0
+    const colorsWithStock = new Map<string, { name: string; image_url: string | null }>();
+    
+    variants
+      .filter(v => (v.qty_available || 0) > 0 && v.colour)
+      .forEach(v => {
+        const colorName = v.colour!.trim();
+        const normalized = norm(colorName);
+        if (!colorsWithStock.has(normalized)) {
+          // Try to find image from colourMap if available, otherwise use variant image or generate
+          let imageUrl: string | null = null;
+          if (colourMap) {
+            const colorFromMap = colourMap.find(c => norm(c.name) === normalized);
+            imageUrl = colorFromMap?.image_url ?? null;
+          }
+          // Fallback to variant image_url if available
+          if (!imageUrl && v.image_url) {
+            imageUrl = v.image_url;
+          }
+          colorsWithStock.set(normalized, {
+            name: colorName,
+            image_url: imageUrl,
+          });
+        }
+      });
+    
+    // Convert map to array and sort by color name
+    return Array.from(colorsWithStock.values()).sort((a, b) => 
+      a.name.localeCompare(b.name)
+    );
+  }, [variants, colourMap]);
+
+  // Auto-select first variant with stock when variants are loaded
+  // Also ensure selected color is from availableColours
+  useEffect(() => {
+    if (variants && variants.length > 0 && !selectedColour && !selectedSize) {
+      // Find first variant with stock > 0 (iterate through all variants until we find one with stock)
+      const firstVariantWithStock = variants.find(v => {
+        const qty = v.qty_available || 0;
+        return qty > 0 && v.colour && v.size;
+      });
+      if (firstVariantWithStock) {
+        setSelectedColour(firstVariantWithStock.colour);
+        setSelectedSize(firstVariantWithStock.size);
+      }
+    }
+    
+    // If selected color is not in available colours, reset selection
+    if (availableColours && availableColours.length > 0 && selectedColour) {
+      const isColorAvailable = availableColours.some(c => norm(c.name) === norm(selectedColour));
+      if (!isColorAvailable) {
+        // Select first available color
+        const firstAvailableColor = availableColours[0];
+        if (firstAvailableColor) {
+          setSelectedColour(firstAvailableColor.name);
+          setSelectedSize(null);
+          // Find first size with stock for this color
+          const firstSizeWithStock = variants?.find(
+            v => norm(v.colour) === norm(firstAvailableColor.name) && (v.qty_available || 0) > 0
+          );
+          if (firstSizeWithStock?.size) {
+            setSelectedSize(firstSizeWithStock.size);
+          }
+        }
+      }
+    }
+  }, [variants, selectedColour, selectedSize, availableColours]);
+
+  // Fetch price when variant is selected (or first variant is auto-selected)
+  useEffect(() => {
+    if (!selectedVariant?.stock_id) {
+      setSelectedVariantPrice(null);
+      return;
+    }
+
+    // Use discounted_price from variant as immediate fallback
+    if (selectedVariant.discounted_price) {
+      setSelectedVariantPrice(selectedVariant.discounted_price);
+      setLoadingPrice(false);
+    } else {
+      setLoadingPrice(true);
+    }
+
+    // Abort controller for request cancellation
+    const abortController = new AbortController();
+
+    async function fetchPrice() {
+      try {
+        const response = await fetch(`/api/product-price?stockId=${selectedVariant.stock_id}`, {
+          signal: abortController.signal,
+          // Use default cache (browser will cache based on headers from API)
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.price) {
+            setSelectedVariantPrice(data.price);
+          } else if (selectedVariant.discounted_price) {
+            // Keep fallback price if API doesn't return price
+            setSelectedVariantPrice(selectedVariant.discounted_price);
+          }
+        } else if (selectedVariant.discounted_price) {
+          // Use fallback price on error
+          setSelectedVariantPrice(selectedVariant.discounted_price);
+        } else {
+          setSelectedVariantPrice(null);
+        }
+      } catch (error) {
+        // Ignore abort errors
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        console.error('Error fetching price:', error);
+        // Use fallback price if available
+        if (selectedVariant.discounted_price) {
+          setSelectedVariantPrice(selectedVariant.discounted_price);
+        } else {
+          setSelectedVariantPrice(null);
+        }
+      } finally {
+        setLoadingPrice(false);
+      }
+    }
+
+    fetchPrice();
+
+    // Cleanup: abort request if component unmounts or variant changes
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedVariant?.stock_id, selectedVariant?.discounted_price]);
 
   // When user clicks "Branded"
   function onChooseBranded() {
@@ -149,31 +301,45 @@ export default function ProductCard({ group }: Props) {
   }
 
   const sizesForSelected = useMemo(() => {
-    const fromMap = colourMap?.find(c => c.name === selectedColour)?.sizes ?? [];
-    if (fromMap.length) {
-      return sortSizes(fromMap);
-    }
     if (!variants || !selectedColour) return [];
-    const sizes = Array.from(new Set(variants.filter(v => (v.colour || "").trim() === selectedColour).map(v => v.size!).filter(Boolean)));
+    // Only show sizes that have variants with stock > 0 for the selected color
+    const sizes = Array.from(new Set(
+      variants
+        .filter(v => norm(v.colour) === norm(selectedColour) && (v.qty_available || 0) > 0)
+        .map(v => v.size!)
+        .filter(Boolean)
+    ));
     return sortSizes(sizes);
-  }, [colourMap, variants, selectedColour]);
+  }, [variants, selectedColour]);
 
-  // All available sizes for the product (for hover display)
+  // All available sizes for the product (for hover display) - only show sizes with stock
   const allSizes = useMemo(() => {
-    if (group.sizes && group.sizes.length > 0) {
-      return sortSizes(group.sizes);
-    }
     if (!variants) return [];
-    const sizes = Array.from(new Set(variants.map(v => v.size!).filter(Boolean)));
+    // Only show sizes that have at least one variant with stock > 0
+    const sizes = Array.from(new Set(
+      variants
+        .filter(v => (v.qty_available || 0) > 0)
+        .map(v => v.size!)
+        .filter(Boolean)
+    ));
     return sortSizes(sizes);
-  }, [group.sizes, variants]);
+  }, [variants]);
 
-  // Preselect size if only one is available
+  // Preselect size if only one is available (and it has stock)
   useEffect(() => {
-    if (sizesForSelected.length === 1 && !selectedSize) {
-      setSelectedSize(sizesForSelected[0]);
+    if (sizesForSelected.length === 1 && !selectedSize && selectedColour) {
+      const size = sizesForSelected[0];
+      // Verify this size actually has stock for the selected color
+      const hasStock = variants?.some(
+        v => norm(v.colour) === norm(selectedColour) && 
+             norm(v.size) === norm(size) && 
+             (v.qty_available || 0) > 0
+      );
+      if (hasStock) {
+        setSelectedSize(size);
+      }
     }
-  }, [sizesForSelected, selectedSize]);
+  }, [sizesForSelected, selectedSize, selectedColour, variants]);
 
   // Load variants on mount to get accurate stock counts immediately
   useEffect(() => {
@@ -522,15 +688,15 @@ export default function ProductCard({ group }: Props) {
 
   // Handle keyboard navigation for color swatches
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!colourMap || colourMap.length === 0) return;
+    if (!availableColours || availableColours.length === 0) return;
     
-    const currentIndex = colourMap.findIndex(c => c.name === selectedColour);
+    const currentIndex = availableColours.findIndex(c => c.name === selectedColour);
     if (currentIndex === -1) return;
 
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const prevIndex = currentIndex > 0 ? currentIndex - 1 : colourMap.length - 1;
-      const prevColor = colourMap[prevIndex];
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : availableColours.length - 1;
+      const prevColor = availableColours[prevIndex];
       setSelectedColour(prevColor.name);
       const prevPreviewImage = prevColor.image_url ?? generateColorSvg(prevColor.name);
       setPreview(prevPreviewImage);
@@ -539,8 +705,8 @@ export default function ProductCard({ group }: Props) {
       setBrandingSelections([]);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      const nextIndex = currentIndex < colourMap.length - 1 ? currentIndex + 1 : 0;
-      const nextColor = colourMap[nextIndex];
+      const nextIndex = currentIndex < availableColours.length - 1 ? currentIndex + 1 : 0;
+      const nextColor = availableColours[nextIndex];
       setSelectedColour(nextColor.name);
       const nextPreviewImage = nextColor.image_url ?? generateColorSvg(nextColor.name);
       setPreview(nextPreviewImage);
@@ -563,7 +729,14 @@ export default function ProductCard({ group }: Props) {
         setShowDetailsModal(true);
       }}
       onMouseEnter={() => { setIsHovered(true); loadColours(); ensureVariants(); }} 
-      onMouseLeave={() => { setIsHovered(false); setSelectedColour(null); setSelectedSize(null); setBrandingMode('unbranded'); setBrandingSelections([]); }}
+      onMouseLeave={() => { 
+        setIsHovered(false); 
+        // Don't reset selection if we want to show prices - only reset branding mode
+        // setSelectedColour(null); 
+        // setSelectedSize(null); 
+        setBrandingMode('unbranded'); 
+        setBrandingSelections([]); 
+      }}
     >
       <div className="aspect-square relative bg-gray-50 overflow-hidden">
         {preview ? (
@@ -586,17 +759,47 @@ export default function ProductCard({ group }: Props) {
         )}
         <div className="font-medium leading-tight">{group.group_name}</div>
 
-        {/* Stock information - show selected variant qty if available, otherwise total stock */}
-        <div className="mt-2 flex gap-2">
-          {selectedVariantQty !== null ? (
-            <span className="text-xs border border-gray-300 px-2 py-1 rounded">
-              In stock: {selectedVariantQty}
+        {/* Stock information - show total stock when not hovering, selected variant qty when hovering */}
+        <div className="mt-2 flex gap-2 flex-wrap">
+          {isHovered ? (
+            // Hovering state: show selected variant quantity
+            selectedColour && selectedSize ? (
+              selectedVariantQty !== null && selectedVariantQty > 0 ? (
+                <span className="text-xs border border-gray-300 px-2 py-1 rounded">
+                  In stock: {selectedVariantQty}
+                </span>
+              ) : selectedVariantQty === 0 ? (
+                // Only show "Out of stock" if a variant was explicitly selected but has 0 stock
+                // This shouldn't happen with auto-select since we only select variants with stock
+                <span className="text-xs border border-red-300 px-2 py-1 rounded bg-red-50 text-red-700">
+                  Out of stock
+                </span>
+              ) : null
+            ) : totalStock > 0 ? (
+              <span className="text-xs border border-gray-300 px-2 py-1 rounded">
+                In stock: {totalStock}
+              </span>
+            ) : null
+          ) : (
+            // Non-hovering state: always show total stock
+            totalStock > 0 ? (
+              <span className="text-xs border border-gray-300 px-2 py-1 rounded">
+                In stock: {totalStock}
+              </span>
+            ) : null
+          )}
+          {/* Show price when variant is selected */}
+          {selectedVariant && (
+            <span className="text-xs border border-gray-300 px-2 py-1 rounded bg-green-50 text-green-700 font-medium">
+              {loadingPrice ? (
+                'Loading price...'
+              ) : selectedVariantPrice !== null ? (
+                `R ${selectedVariantPrice.toFixed(2)}`
+              ) : (
+                'Price unavailable'
+              )}
             </span>
-          ) : totalStock > 0 ? (
-            <span className="text-xs border border-gray-300 px-2 py-1 rounded">
-              In stock: {totalStock}
-            </span>
-          ) : null}
+          )}
         </div>
 
          {/* Color swatches carousel - only show when colors are loaded and hovering */}
@@ -630,7 +833,7 @@ export default function ProductCard({ group }: Props) {
                  tabIndex={0}
                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                >
-                 {colourMap.map((c) => (
+                 {availableColours.map((c) => (
                    <ColorSwatch
                      key={c.name}
                      src={c.image_url}
@@ -651,7 +854,7 @@ export default function ProductCard({ group }: Props) {
             </div>
 
                {/* Right navigation arrow - only show if there are multiple colors */}
-               {colourMap.length > 3 && (
+               {availableColours.length > 3 && (
                  <button
                    onClick={(e) => {
                      e.preventDefault();
@@ -673,11 +876,12 @@ export default function ProductCard({ group }: Props) {
          )}
 
         {/* Size selection carousel - only show when hovering and sizes are available */}
-        {isHovered && allSizes.length > 0 && (
+        {/* Use sizesForSelected if a color is selected, otherwise use allSizes */}
+        {isHovered && (selectedColour ? sizesForSelected : allSizes).length > 0 && (
           <div className="mt-3">
             <div className="flex items-center gap-2">
               {/* Left navigation arrow - only show if there are multiple sizes */}
-              {allSizes.length > 4 && (
+              {(selectedColour ? sizesForSelected : allSizes).length > 4 && (
                 <button
                   onClick={(e) => {
                     e.preventDefault();
@@ -701,7 +905,7 @@ export default function ProductCard({ group }: Props) {
                 className="flex gap-2 overflow-x-auto scrollbar-hide flex-1"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                {allSizes.map((s) => (
+                {(selectedColour ? sizesForSelected : allSizes).map((s) => (
                   <button
                     key={s}
                     onClick={(e) => {
@@ -723,7 +927,7 @@ export default function ProductCard({ group }: Props) {
             </div>
 
               {/* Right navigation arrow - only show if there are multiple sizes */}
-              {allSizes.length > 4 && (
+              {(selectedColour ? sizesForSelected : allSizes).length > 4 && (
                 <button
                   onClick={(e) => {
                     e.preventDefault();

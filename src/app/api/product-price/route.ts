@@ -8,14 +8,31 @@ let cachedCookie: string | null = null;
 let cookieExpiry: number = 0;
 const COOKIE_TTL = 30 * 60 * 1000; // 30 minutes
 
-// In-memory cache for features
-const featuresCache = new Map<number, { features: ProductFeature[]; timestamp: number }>();
-const FEATURES_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+// In-memory cache for prices
+const priceCache = new Map<number, { price: number; basePrice: number; timestamp: number }>();
+const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-interface ProductFeature {
-  LineID: number;
+interface ProductPriceData {
+  StockCode: string;
   StockHeaderID: number;
-  Features: string;
+  StockID: number;
+  Description: string;
+  Colour: string;
+  Size: string;
+  ColorStatus: string;
+  BasePrice: number;
+  DiscountBasePrice: number;
+  RoyaltyFactor: number;
+  Category: string;
+  Type: string;
+  Brand: string;
+  Image: string;
+  QtyAvailable: number;
+  'WH3(BOND)': number;
+  'WH4(BW)': number;
+  WeightPerUnit: number;
+  GarmentType: string;
+  Gender: string;
 }
 
 async function loginAndGetCookie(): Promise<string> {
@@ -69,8 +86,8 @@ async function loginAndGetCookie(): Promise<string> {
   return cookie;
 }
 
-async function getProductFeatures(stockHeaderId: number, cookie: string, retries = 2): Promise<ProductFeature[]> {
-  const url = 'https://wslive.kevro.co.za/StockFeed.asmx/GetProductFetauresByStockHeaderID';
+async function getProductPrice(stockId: number, cookie: string, retries = 2): Promise<ProductPriceData | null> {
+  const url = 'https://wslive.kevro.co.za/StockFeed.asmx/GetFeedByEntityIDAndStockID';
   
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -79,7 +96,7 @@ async function getProductFeatures(stockHeaderId: number, cookie: string, retries
         username: 'ML(Lt',
         psw: 'BnkyVod3jhc=',
         ReturnType: 'JSON',
-        StockHeaderID: String(stockHeaderId),
+        StockID: String(stockId),
       });
 
       const response = await fetch(url, {
@@ -101,7 +118,7 @@ async function getProductFeatures(stockHeaderId: number, cookie: string, retries
           cookie = await loginAndGetCookie();
           continue;
         }
-        throw new Error(`GetProductFeatures failed: ${response.status} ${response.statusText}`);
+        throw new Error(`GetProductPrice failed: ${response.status} ${response.statusText}`);
       }
 
       const xmlText = await response.text();
@@ -118,17 +135,17 @@ async function getProductFeatures(stockHeaderId: number, cookie: string, retries
       const jsonStr = responseDataMatch[1].trim();
       
       // Remove leading/trailing brackets if present and parse
-      let features: ProductFeature[] = [];
+      let data: ProductPriceData | ProductPriceData[] | null = null;
       if (jsonStr.startsWith('[') && jsonStr.endsWith(']')) {
         // Already in array format
-        features = JSON.parse(jsonStr) as ProductFeature[];
+        data = JSON.parse(jsonStr) as ProductPriceData[];
       } else {
         // Try to parse as-is
-        const parsed = JSON.parse(jsonStr) as ProductFeature | ProductFeature[];
-        features = Array.isArray(parsed) ? parsed : [parsed];
+        data = JSON.parse(jsonStr) as ProductPriceData | ProductPriceData[];
       }
       
-      return features;
+      const result = Array.isArray(data) ? data[0] || null : data;
+      return result;
     } catch (error) {
       // If it's the last attempt, throw the error
       if (attempt === retries) {
@@ -139,73 +156,89 @@ async function getProductFeatures(stockHeaderId: number, cookie: string, retries
     }
   }
   
-  return [];
+  return null;
 }
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const stockHeaderId = searchParams.get('stockHeaderId');
+    const stockId = searchParams.get('stockId');
 
-    if (!stockHeaderId) {
+    if (!stockId) {
       return NextResponse.json(
-        { error: 'stockHeaderId parameter is required' },
+        { error: 'stockId parameter is required' },
         { status: 400 }
       );
     }
 
-    const stockHeaderIdNum = parseInt(stockHeaderId, 10);
-    if (isNaN(stockHeaderIdNum)) {
+    const stockIdNum = parseInt(stockId, 10);
+    if (isNaN(stockIdNum)) {
       return NextResponse.json(
-        { error: 'stockHeaderId must be a valid number' },
+        { error: 'stockId must be a valid number' },
         { status: 400 }
       );
     }
 
     // Check cache first
-    const cached = featuresCache.get(stockHeaderIdNum);
-    if (cached && Date.now() - cached.timestamp < FEATURES_CACHE_TTL) {
-      return NextResponse.json({ 
-        features: cached.features,
-        cached: true,
-      }, {
-        headers: {
-          'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1200', // Cache for 10 minutes
-        },
-      });
+    const cached = priceCache.get(stockIdNum);
+    if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL) {
+    return NextResponse.json({ 
+      price: cached.price,
+      basePrice: cached.basePrice,
+      stockId: stockIdNum,
+      cached: true,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // Cache for 5 minutes
+      },
+    });
     }
 
     // Login and get cookie (uses cache)
     const cookie = await loginAndGetCookie();
 
-    // Get product features (with retry logic)
-    const features = await getProductFeatures(stockHeaderIdNum, cookie);
+    // Get product price (with retry logic)
+    const priceData = await getProductPrice(stockIdNum, cookie);
+
+    if (!priceData) {
+      return NextResponse.json(
+        { error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    const result = {
+      price: priceData.DiscountBasePrice,
+      basePrice: priceData.BasePrice,
+      stockId: priceData.StockID,
+    };
 
     // Cache the result
-    featuresCache.set(stockHeaderIdNum, {
-      features,
+    priceCache.set(stockIdNum, {
+      price: result.price,
+      basePrice: result.basePrice,
       timestamp: Date.now(),
     });
 
     // Clean up old cache entries (keep cache size reasonable)
-    if (featuresCache.size > 500) {
+    if (priceCache.size > 1000) {
       const now = Date.now();
-      for (const [key, value] of featuresCache.entries()) {
-        if (now - value.timestamp > FEATURES_CACHE_TTL) {
-          featuresCache.delete(key);
+      for (const [key, value] of priceCache.entries()) {
+        if (now - value.timestamp > PRICE_CACHE_TTL) {
+          priceCache.delete(key);
         }
       }
     }
 
-    return NextResponse.json({ features }, {
+    return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1200', // Cache for 10 minutes
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // Cache for 5 minutes
       },
     });
   } catch (error) {
-    console.error('Error fetching product features:', error);
+    console.error('Error fetching product price:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch product features' },
+      { error: error instanceof Error ? error.message : 'Failed to fetch product price' },
       { status: 500 }
     );
   }

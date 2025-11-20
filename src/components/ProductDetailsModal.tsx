@@ -41,21 +41,40 @@ export default function ProductDetailsModal({
       return;
     }
 
+    // Abort controller for request cancellation
+    const abortController = new AbortController();
+
     async function fetchFeatures() {
       setLoading(true);
       setError(null);
+      
       try {
         const response = await fetch(
-          `/api/product-features?stockHeaderId=${stockHeaderId}`
+          `/api/product-features?stockHeaderId=${stockHeaderId}`,
+          {
+            signal: abortController.signal,
+          }
         );
         
         if (!response.ok) {
-          throw new Error('Failed to fetch product features');
+          // Try to get error message from response
+          let errorMessage = 'Failed to fetch product features';
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            // If response is not JSON, use default message
+          }
+          throw new Error(errorMessage);
         }
 
         const data = await response.json();
         setFeatures(data.features || []);
       } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         console.error('Error fetching features:', err);
         setError(err instanceof Error ? err.message : 'Failed to load features');
       } finally {
@@ -64,6 +83,11 @@ export default function ProductDetailsModal({
     }
 
     fetchFeatures();
+
+    // Cleanup: abort request if component unmounts or dependencies change
+    return () => {
+      abortController.abort();
+    };
   }, [open, stockHeaderId]);
 
   return (
@@ -73,8 +97,8 @@ export default function ProductDetailsModal({
           <DialogTitle>{productName || "Product Details"}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Product Image */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Product Image - Left side */}
           {productImage && (
             <div className="relative w-full aspect-square bg-gray-50 rounded-lg overflow-hidden">
               <Image
@@ -82,29 +106,29 @@ export default function ProductDetailsModal({
                 alt={productName || "Product"}
                 fill
                 className="object-contain"
-                sizes="(max-width: 768px) 100vw, 600px"
+                sizes="200px"
               />
             </div>
           )}
 
-          {/* Features */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Features</h3>
+          {/* Features - Right side */}
+          <div className="flex flex-col min-w-0">
+            <h3 className="text-base font-semibold mb-2">Features</h3>
             {loading && (
-              <div className="text-sm text-muted-foreground">Loading features...</div>
+              <div className="text-xs text-muted-foreground">Loading...</div>
             )}
             {error && (
-              <div className="text-sm text-red-600">Error: {error}</div>
+              <div className="text-xs text-red-600">Error: {error}</div>
             )}
             {!loading && !error && features.length === 0 && (
-              <div className="text-sm text-muted-foreground">No features available for this product.</div>
+              <div className="text-xs text-muted-foreground">No features available.</div>
             )}
             {!loading && !error && features.length > 0 && (
-              <ul className="space-y-2">
+              <ul className="space-y-1.5 overflow-y-auto pr-1">
                 {features.map((feature) => (
-                  <li key={feature.LineID} className="flex items-start gap-2">
-                    <span className="text-primary mt-1.5">•</span>
-                    <span className="text-sm">{feature.Features}</span>
+                  <li key={feature.LineID} className="flex items-start gap-1.5">
+                    <span className="text-primary mt-1 text-xs">•</span>
+                    <span className="text-xs leading-relaxed">{feature.Features}</span>
                   </li>
                 ))}
               </ul>
