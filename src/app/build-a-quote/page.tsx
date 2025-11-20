@@ -9,6 +9,7 @@ import ProductCard from "@/components/ProductCard";
 import FiltersDialog, { FiltersState } from "@/components/FiltersDialog";
 import { ProductLoadingAnimation } from "@/components/ProductLoadingAnimation";
 import { usePageLoading } from "@/components/LoadingNavigation";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 function parseMulti(sp: URLSearchParams, key: string): string[] | null {
   const raw = sp.getAll(key);
@@ -247,6 +248,23 @@ function BuildAQuotePageContent() {
 
   const [selectedMainCategory, setSelectedMainCategory] = useState<string | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
+  
+  // Handle success confirmation dialog
+  const successParam = sp.get("success");
+  const actionParam = sp.get("action");
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  
+  useEffect(() => {
+    if (successParam === "true") {
+      setShowConfirmation(true);
+      // Clean up URL params after showing dialog
+      const params = new URLSearchParams(sp.toString());
+      params.delete("success");
+      params.delete("action");
+      const newUrl = params.toString() ? `?${params.toString()}` : "";
+      router.replace(`/build-a-quote${newUrl}`, { scroll: false });
+    }
+  }, [successParam, sp, router]);
 
   // Handle category selection
   const handleMainCategoryClick = (categoryName: string) => {
@@ -443,6 +461,23 @@ function BuildAQuotePageContent() {
           <div className="text-sm text-muted-foreground">No more items</div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Quote Submitted</DialogTitle>
+            <DialogDescription>
+              Quote {actionParam === 'send' ? 'sent' : 'saved'} successfully!
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowConfirmation(false)}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { type PeriodKey } from '@/server/admin/metrics';
 import { Button } from '@/components/ui/button';
 
@@ -64,6 +64,8 @@ export default function QuotesClient() {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [clickedPage, setClickedPage] = useState<number | null>(null);
+  const [resendingQuote, setResendingQuote] = useState<string | null>(null);
+  const [resentQuotes, setResentQuotes] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     async function fetchQuotes() {
@@ -114,6 +116,78 @@ export default function QuotesClient() {
   useEffect(() => {
     setPage(1);
   }, [period, customStart, customEnd, search, minValue, maxValue]);
+
+  // Load resent quotes from localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const stored = localStorage.getItem('resentQuotes');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          setResentQuotes(new Map(Object.entries(parsed)));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading resent quotes from localStorage:', error);
+      // Clear invalid data
+      try {
+        localStorage.removeItem('resentQuotes');
+      } catch {
+        // Ignore
+      }
+    }
+  }, []);
+
+  // Save resent quotes to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      if (resentQuotes.size > 0) {
+        const obj = Object.fromEntries(resentQuotes);
+        localStorage.setItem('resentQuotes', JSON.stringify(obj));
+      } else {
+        // Clear localStorage if no resent quotes
+        localStorage.removeItem('resentQuotes');
+      }
+    } catch (error) {
+      console.error('Error saving resent quotes to localStorage:', error);
+    }
+  }, [resentQuotes]);
+
+  const handleResendQuote = async (quoteNo: string) => {
+    try {
+      setResendingQuote(quoteNo);
+      const response = await fetch('/api/admin/quotes/resend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ quoteNo }),
+      });
+
+      if (!response.ok) {
+        // Silently fail - button will remain enabled
+        console.error('Failed to resend quote:', await response.json().catch(() => ({})));
+        return;
+      }
+
+      // Increment resend count for this quote
+      setResentQuotes(prev => {
+        const newMap = new Map(prev);
+        const currentCount = newMap.get(quoteNo) || 0;
+        newMap.set(quoteNo, currentCount + 1);
+        return newMap;
+      });
+    } catch (error) {
+      console.error('Error resending quote:', error);
+      // Silently fail - button will remain enabled
+    } finally {
+      setResendingQuote(null);
+    }
+  };
 
   if (loading && !data) {
     return (
@@ -239,6 +313,7 @@ export default function QuotesClient() {
                     <TableHead>Company</TableHead>
                     <TableHead>Value</TableHead>
                     <TableHead>PDF</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -258,6 +333,25 @@ export default function QuotesClient() {
                         >
                           <FileText className="w-4 h-4 inline" />
                         </a>
+                      </TableCell>
+                      <TableCell>
+                        <div className="relative inline-block">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResendQuote(quote.quote_no)}
+                            disabled={resendingQuote === quote.quote_no}
+                            className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
+                          >
+                            <Send className="w-4 h-4 mr-1" />
+                            {resendingQuote === quote.quote_no ? 'Sending...' : 'Resend'}
+                          </Button>
+                          {resentQuotes.has(quote.quote_no) && (
+                            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-md">
+                              x{resentQuotes.get(quote.quote_no)}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

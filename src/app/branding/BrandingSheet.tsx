@@ -473,7 +473,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : null)}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="!max-w-[calc(100%-1.5rem)] sm:!max-w-[calc(100%-2rem)] md:!max-w-[calc(100%-3rem)] lg:!max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-xl">
             {screen === "choose" ? "Choose your position type(s)" : "Choose your branding details"}

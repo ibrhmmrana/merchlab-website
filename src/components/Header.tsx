@@ -20,6 +20,7 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const isBuildAQuotePage = pathname === '/build-a-quote';
+  const isBuildQuotePage = pathname === '/build-quote';
 
   // Close search when clicking outside
   useEffect(() => {
@@ -74,19 +75,38 @@ export function Header() {
             >
               Home
             </LoadingLink>
-            <LoadingLink
-              href={isBuildAQuotePage ? "/dashboard-admin" : "/shop"}
-              className="luxury-nav-item"
-            >
-              {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
-            </LoadingLink>
-            {!isBuildAQuotePage && (
-              <LoadingLink
-                href="/contact"
-                className="luxury-nav-item"
-              >
-                Contact
-              </LoadingLink>
+            {isBuildQuotePage ? (
+              <>
+                <LoadingLink
+                  href="/dashboard-admin"
+                  className="luxury-nav-item"
+                >
+                  Dashboard
+                </LoadingLink>
+                <LoadingLink
+                  href="/build-a-quote"
+                  className="luxury-nav-item"
+                >
+                  Browse Products
+                </LoadingLink>
+              </>
+            ) : (
+              <>
+                <LoadingLink
+                  href={isBuildAQuotePage ? "/dashboard-admin" : "/shop"}
+                  className="luxury-nav-item"
+                >
+                  {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
+                </LoadingLink>
+                {!isBuildAQuotePage && (
+                  <LoadingLink
+                    href="/contact"
+                    className="luxury-nav-item"
+                  >
+                    Contact
+                  </LoadingLink>
+                )}
+              </>
             )}
           </nav>
 
@@ -127,17 +147,31 @@ export function Header() {
             </div>
 
             {/* Cart */}
-            <button
-              onClick={() => useUiStore.getState().openCart()}
-              className="luxury-hover-glow p-2 rounded-lg transition-all duration-300 hover:bg-luxury-gold-light/10 relative"
-            >
-              <ShoppingCart className="h-5 w-5 text-gray-700 hover:text-luxury-gold transition-colors" />
-              {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 h-6 w-6 flex items-center justify-center text-xs bg-red-600 text-white rounded-full font-bold shadow-lg border-2 border-white">
-                  {totalItems}
-                </span>
-              )}
-            </button>
+            {isBuildAQuotePage ? (
+              <LoadingLink
+                href="/build-quote"
+                className="luxury-hover-glow p-2 rounded-lg transition-all duration-300 hover:bg-luxury-gold-light/10 relative"
+              >
+                <ShoppingCart className="h-5 w-5 text-gray-700 hover:text-luxury-gold transition-colors" />
+                {totalItems > 0 && (
+                  <span className="absolute -top-1 -right-1 h-6 w-6 flex items-center justify-center text-xs bg-red-600 text-white rounded-full font-bold shadow-lg border-2 border-white">
+                    {totalItems}
+                  </span>
+                )}
+              </LoadingLink>
+            ) : (
+              <button
+                onClick={() => useUiStore.getState().openCart()}
+                className="luxury-hover-glow p-2 rounded-lg transition-all duration-300 hover:bg-luxury-gold-light/10 relative"
+              >
+                <ShoppingCart className="h-5 w-5 text-gray-700 hover:text-luxury-gold transition-colors" />
+                {totalItems > 0 && (
+                  <span className="absolute -top-1 -right-1 h-6 w-6 flex items-center justify-center text-xs bg-red-600 text-white rounded-full font-bold shadow-lg border-2 border-white">
+                    {totalItems}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -151,19 +185,38 @@ export function Header() {
               >
                 Home
               </LoadingLink>
-              <LoadingLink
-                href={isBuildAQuotePage ? "/dashboard-admin" : "/shop"}
-                className="luxury-nav-item text-sm"
-              >
-                {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
-              </LoadingLink>
-              {!isBuildAQuotePage && (
-                <LoadingLink
-                  href="/contact"
-                  className="luxury-nav-item text-sm"
-                >
-                  Contact
-                </LoadingLink>
+              {isBuildQuotePage ? (
+                <>
+                  <LoadingLink
+                    href="/dashboard-admin"
+                    className="luxury-nav-item text-sm"
+                  >
+                    Dashboard
+                  </LoadingLink>
+                  <LoadingLink
+                    href="/build-a-quote"
+                    className="luxury-nav-item text-sm"
+                  >
+                    Browse Products
+                  </LoadingLink>
+                </>
+              ) : (
+                <>
+                  <LoadingLink
+                    href={isBuildAQuotePage ? "/dashboard-admin" : "/shop"}
+                    className="luxury-nav-item text-sm"
+                  >
+                    {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
+                  </LoadingLink>
+                  {!isBuildAQuotePage && (
+                    <LoadingLink
+                      href="/contact"
+                      className="luxury-nav-item text-sm"
+                    >
+                      Contact
+                    </LoadingLink>
+                  )}
+                </>
               )}
             </nav>
           </div>
