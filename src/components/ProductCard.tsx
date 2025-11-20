@@ -116,7 +116,6 @@ export default function ProductCard({ group }: Props) {
   const [loadingPrice, setLoadingPrice] = useState(false);
   const { openBranding } = useBrandingSheet();
   const pathname = usePathname();
-  const isBuildAQuotePage = pathname === '/build-a-quote';
 
   // Calculate total stock from variants (sum of qty_available which already includes wh3_bond)
   const totalStock = useMemo(() => {
@@ -222,12 +221,15 @@ export default function ProductCard({ group }: Props) {
   useEffect(() => {
     if (!selectedVariant?.stock_id) {
       setSelectedVariantPrice(null);
+      setLoadingPrice(false);
       return;
     }
 
+    const variant = selectedVariant; // Store in local variable for closure
+
     // Use discounted_price from variant as immediate fallback
-    if (selectedVariant.discounted_price) {
-      setSelectedVariantPrice(selectedVariant.discounted_price);
+    if (variant.discounted_price) {
+      setSelectedVariantPrice(variant.discounted_price);
       setLoadingPrice(false);
     } else {
       setLoadingPrice(true);
@@ -238,7 +240,7 @@ export default function ProductCard({ group }: Props) {
 
     async function fetchPrice() {
       try {
-        const response = await fetch(`/api/product-price?stockId=${selectedVariant.stock_id}`, {
+        const response = await fetch(`/api/product-price?stockId=${variant.stock_id}`, {
           signal: abortController.signal,
           // Use default cache (browser will cache based on headers from API)
         });
@@ -247,13 +249,13 @@ export default function ProductCard({ group }: Props) {
           const data = await response.json();
           if (data.price) {
             setSelectedVariantPrice(data.price);
-          } else if (selectedVariant.discounted_price) {
+          } else if (variant.discounted_price) {
             // Keep fallback price if API doesn't return price
-            setSelectedVariantPrice(selectedVariant.discounted_price);
+            setSelectedVariantPrice(variant.discounted_price);
           }
-        } else if (selectedVariant.discounted_price) {
+        } else if (variant.discounted_price) {
           // Use fallback price on error
-          setSelectedVariantPrice(selectedVariant.discounted_price);
+          setSelectedVariantPrice(variant.discounted_price);
         } else {
           setSelectedVariantPrice(null);
         }
@@ -264,8 +266,8 @@ export default function ProductCard({ group }: Props) {
         }
         console.error('Error fetching price:', error);
         // Use fallback price if available
-        if (selectedVariant.discounted_price) {
-          setSelectedVariantPrice(selectedVariant.discounted_price);
+        if (variant.discounted_price) {
+          setSelectedVariantPrice(variant.discounted_price);
         } else {
           setSelectedVariantPrice(null);
         }
