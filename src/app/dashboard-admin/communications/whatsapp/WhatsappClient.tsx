@@ -150,13 +150,21 @@ export default function WhatsappClient() {
           const messageData = parseJsonb(newRow.message);
           const customerData = parseJsonb(newRow.customer);
           
-          const messageType = messageData.type === 'human' || messageData.type === 'ai' 
+          const messageType = (messageData.type === 'human' || messageData.type === 'ai' 
             ? messageData.type 
-            : 'human';
-          const messageContent = messageData.content || '[New message]';
+            : 'human') as 'human' | 'ai';
+          const messageContent = (typeof messageData.content === 'string' 
+            ? messageData.content 
+            : '[New message]') as string;
           
-          const customerName = customerData.name || customerData.number || 'Unknown';
-          const customerNumber = customerData.number || sessionId.replace(/^ML-?\s*/, '');
+          const customerName = (typeof customerData.name === 'string' 
+            ? customerData.name 
+            : typeof customerData.number === 'string' 
+              ? customerData.number 
+              : 'Unknown') as string;
+          const customerNumber = (typeof customerData.number === 'string' 
+            ? customerData.number 
+            : sessionId.replace(/^ML-?\s*/, '')) as string;
 
           // Create new message object
           const newMessage: WhatsappMessage = {
