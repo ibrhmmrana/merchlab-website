@@ -77,7 +77,7 @@ export default function WhatsappClient() {
     async function fetchMessages() {
       try {
         setLoadingMessages(true);
-        const encodedSessionId = encodeURIComponent(selectedSessionId);
+        const encodedSessionId = encodeURIComponent(selectedSessionId!); // Non-null assertion is safe here due to the check above
         const response = await fetch(`/api/admin/whatsapp/conversations/${encodedSessionId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch messages');
