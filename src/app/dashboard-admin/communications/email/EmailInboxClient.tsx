@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Star, Filter, ChevronLeft } from 'lucide-react';
+import { Search, Star, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import type { GmailMessage } from '@/lib/gmailMessages';
@@ -85,7 +85,7 @@ export default function EmailInboxClient() {
   };
 
   // Toggle selection
-  const toggleSelection = (id: number, e: React.MouseEvent) => {
+  const toggleSelection = (id: number, e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
     setSelectedIds((prev) => {
       const next = new Set(prev);
