@@ -133,7 +133,7 @@ export async function getWhatsappConversations(): Promise<WhatsappConversationSu
 }
 
 // Helper function to process conversation data (extracted for reuse)
-function processConversationData(data: any[]): WhatsappConversationSummary[] {
+function processConversationData(data: N8nChatHistoryRow[]): WhatsappConversationSummary[] {
   if (!data || data.length === 0) {
     return [];
   }
@@ -168,8 +168,8 @@ function processConversationData(data: any[]): WhatsappConversationSummary[] {
         // Sort rows by idx (or id if idx doesn't exist) to find the latest message
         const sortedRows = [...rows].sort((a, b) => {
           // Try idx first, fallback to id
-          const aVal = (a as any).idx ?? (a as any).id ?? 0;
-          const bVal = (b as any).idx ?? (b as any).id ?? 0;
+          const aVal = a.idx ?? a.id ?? 0;
+          const bVal = b.idx ?? b.id ?? 0;
           return bVal - aVal;
         });
         const latestRow = sortedRows[0];
@@ -264,7 +264,7 @@ export async function getWhatsappConversationBySessionId(
       }
       
       // Sort in JS if we got data
-      const orderedData = dataWithoutOrder ? [...dataWithoutOrder].sort((a: any, b: any) => {
+      const orderedData = dataWithoutOrder ? [...(dataWithoutOrder as N8nChatHistoryRow[])].sort((a: N8nChatHistoryRow, b: N8nChatHistoryRow) => {
         const aVal = a.idx ?? a.id ?? 0;
         const bVal = b.idx ?? b.id ?? 0;
         return aVal - bVal; // Ascending for chronological order
@@ -285,7 +285,7 @@ export async function getWhatsappConversationBySessionId(
   }
 
   // Try to order by idx, but handle if column doesn't exist
-  const orderedData = data ? [...data].sort((a: any, b: any) => {
+  const orderedData = data ? [...(data as N8nChatHistoryRow[])].sort((a: N8nChatHistoryRow, b: N8nChatHistoryRow) => {
     const aVal = a.idx ?? a.id ?? 0;
     const bVal = b.idx ?? b.id ?? 0;
     return aVal - bVal; // Ascending for chronological order
@@ -299,9 +299,9 @@ export async function getWhatsappConversationBySessionId(
 }
 
 // Helper function to process messages
-function processMessages(data: any[], sessionId: string): WhatsappMessage[] {
+function processMessages(data: N8nChatHistoryRow[], sessionId: string): WhatsappMessage[] {
   // Parse customer info from the first row (assuming all rows have same customer)
-  const firstRow = data[0] as any;
+  const firstRow = data[0];
   const customer = parseCustomer(firstRow.customer || {});
   const customerName = customer.name || customer.number || 'Unknown';
   // Extract phone number from session_id (format: "ML- 27693475825" or "ML-27693475825")
@@ -309,7 +309,7 @@ function processMessages(data: any[], sessionId: string): WhatsappMessage[] {
   const customerNumber = customer.number || phoneFromSession;
 
   // Parse all messages
-  const messages: WhatsappMessage[] = data.map((row: any) => {
+  const messages: WhatsappMessage[] = data.map((row: N8nChatHistoryRow) => {
     const message = parseMessage(row.message || {});
     return {
       id: row.id,

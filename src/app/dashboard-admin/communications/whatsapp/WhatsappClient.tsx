@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Search, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase/browser';
-import type { WhatsappConversationSummary, WhatsappMessage } from '@/lib/chatHistories';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { WhatsappConversationSummary, WhatsappMessage, N8nChatHistoryRow } from '@/lib/chatHistories';
 
 export default function WhatsappClient() {
   const [conversations, setConversations] = useState<WhatsappConversationSummary[]>([]);
@@ -15,7 +16,7 @@ export default function WhatsappClient() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobile, setIsMobile] = useState(false);
-  const subscriptionRef = useRef<any>(null);
+  const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Check if mobile view
@@ -124,7 +125,7 @@ export default function WhatsappClient() {
         async (payload) => {
           console.log('New message received:', payload);
           
-          const newRow = payload.new as any;
+          const newRow = payload.new as N8nChatHistoryRow;
           const sessionId = newRow.session_id;
 
           if (!sessionId) {
@@ -133,7 +134,7 @@ export default function WhatsappClient() {
           }
 
           // Helper to parse JSONB fields
-          const parseJsonb = (data: string | object | null | undefined): any => {
+          const parseJsonb = (data: string | object | null | undefined): Record<string, unknown> => {
             if (!data) return {};
             if (typeof data === 'string') {
               try {
