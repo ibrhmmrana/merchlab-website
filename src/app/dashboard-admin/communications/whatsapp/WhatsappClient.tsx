@@ -138,12 +138,12 @@ export default function WhatsappClient() {
             if (!data) return {};
             if (typeof data === 'string') {
               try {
-                return JSON.parse(data);
+                return JSON.parse(data) as Record<string, unknown>;
               } catch {
                 return {};
               }
             }
-            return data;
+            return data as Record<string, unknown>;
           };
 
           // Parse the new message
