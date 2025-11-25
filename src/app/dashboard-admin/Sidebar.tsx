@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, Menu, X, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, X, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+}
+
+export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
     {
@@ -48,15 +51,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button - positioned below header */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="lg:hidden fixed top-20 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-gray-200"
-        aria-label="Open menu"
-      >
-        <Menu className="w-6 h-6" />
-      </button>
-
       {/* Mobile overlay */}
       {isOpen && (
         <div

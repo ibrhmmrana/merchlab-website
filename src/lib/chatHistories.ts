@@ -7,7 +7,8 @@ export type N8nChatHistoryRow = {
   session_id: string;
   message: string | object | null; // JSONB - can be string, already parsed object, or null
   customer: string | object | null; // JSONB - can be string, already parsed object, or null
-  created_at?: string;
+  date_time?: string; // timestamptz column
+  created_at?: string; // Keep for backward compatibility
 };
 
 // Parsed message type
@@ -203,7 +204,7 @@ function processConversationData(data: N8nChatHistoryRow[]): WhatsappConversatio
           customerName,
           customerNumber,
           lastMessageContent,
-          lastMessageAt: latestRow.created_at,
+          lastMessageAt: latestRow.date_time || latestRow.created_at, // Prefer date_time, fallback to created_at
           messageCount: rows.length,
         });
       } catch (rowError) {
@@ -319,7 +320,7 @@ function processMessages(data: N8nChatHistoryRow[], sessionId: string): Whatsapp
       content: message.content,
       customerName,
       customerNumber,
-      createdAt: row.created_at,
+      createdAt: row.date_time || row.created_at, // Prefer date_time, fallback to created_at
     };
   });
 
