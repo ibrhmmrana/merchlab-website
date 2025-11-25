@@ -507,7 +507,7 @@ export default function WhatsappClient() {
                         </button>
                         <Input
                           type="text"
-                          placeholder="Search messages..."
+                          placeholder="Search messages&hellip;"
                           value={messageSearchQuery}
                           onChange={(e) => setMessageSearchQuery(e.target.value)}
                           className="flex-1 bg-transparent text-white placeholder:text-white/80 h-9 text-sm px-4 rounded-lg border border-white/50 focus:ring-2 focus:ring-white focus:border-white focus:outline-none focus-visible:ring-white focus-visible:border-white focus-visible:ring-offset-0 [&:focus-visible]:border-white [&:focus-visible]:ring-white"
@@ -553,7 +553,7 @@ export default function WhatsappClient() {
                     <div className="space-y-1 max-w-4xl mx-auto">
                       {messageSearchQuery.trim() && searchMatches.length === 0 && (
                         <div className="text-center py-8 text-gray-500">
-                          <p>No messages found matching "{messageSearchQuery}"</p>
+                          <p>No messages found matching &quot;{messageSearchQuery}&quot;</p>
                         </div>
                       )}
                       {messageSearchQuery.trim() && searchMatches.length > 0 && (
