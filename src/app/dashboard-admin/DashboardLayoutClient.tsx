@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import { DashboardHeader } from '@/components/DashboardHeader';
+import { cn } from '@/lib/utils';
 
 export default function DashboardLayoutClient({
   children,
@@ -10,6 +11,7 @@ export default function DashboardLayoutClient({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -21,8 +23,13 @@ export default function DashboardLayoutClient({
         <Sidebar 
           isOpen={isSidebarOpen}
           setIsOpen={setIsSidebarOpen}
+          isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
         />
-        <main className="flex-1 overflow-y-auto min-w-0 lg:ml-64">
+        <main className={cn(
+          "flex-1 overflow-y-auto min-w-0 transition-all duration-300",
+          isSidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
+        )}>
           {children}
         </main>
       </div>

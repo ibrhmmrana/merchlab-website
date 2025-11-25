@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Search, MessageSquare, Search as SearchIcon, X } from 'lucide-react';
+import { ArrowLeft, Search, MessageSquare, Search as SearchIcon, X, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 // Component to highlight search terms in text
@@ -27,6 +27,7 @@ function HighlightText({ text, searchTerm }: { text: string; searchTerm: string 
 import { supabase } from '@/lib/supabase/browser';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { WhatsappConversationSummary, WhatsappMessage, N8nChatHistoryRow } from '@/lib/chatHistories';
+import CustomerActivityPanel from './CustomerActivity';
 
 export default function WhatsappClient() {
   const [conversations, setConversations] = useState<WhatsappConversationSummary[]>([]);
@@ -38,6 +39,7 @@ export default function WhatsappClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [messageSearchQuery, setMessageSearchQuery] = useState('');
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [isActivityPanelOpen, setIsActivityPanelOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -370,28 +372,10 @@ export default function WhatsappClient() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] bg-[#f0f2f5] overflow-hidden">
-      {/* Mobile: Show back button when conversation is selected */}
-      {isMobile && selectedSessionId && (
-        <div className="flex items-center gap-3 p-3 bg-[#008069] flex-shrink-0">
-          <button
-            onClick={() => setSelectedSessionId(null)}
-            className="p-2 hover:bg-[#006b57] rounded-lg text-white"
-            aria-label="Back to conversations"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="flex-1">
-            <h2 className="font-semibold text-white">
-              {selectedConversation?.customerName || 'Unknown'}
-            </h2>
-          </div>
-        </div>
-      )}
-
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Left Column: Conversation List */}
         {(!isMobile || !selectedSessionId) && (
-          <div className="w-full lg:w-[30%] bg-white flex flex-col min-h-0 border-r border-gray-300">
+          <div className="w-full lg:w-[25%] bg-white flex flex-col min-h-0 border-r border-gray-300">
             {/* Search Bar */}
             <div className="px-3 py-2 bg-white border-b border-gray-200">
               <div className="relative">
@@ -457,7 +441,9 @@ export default function WhatsappClient() {
 
         {/* Right Column: Chat View */}
         {(!isMobile || selectedSessionId) && (
-          <div className="flex-1 flex flex-col bg-[#efeae2] min-h-0 relative">
+          <div className="flex-1 flex flex-row bg-[#efeae2] min-h-0 relative">
+            {/* Chat Messages Area */}
+            <div className="flex-1 flex flex-col min-h-0 relative">
             {/* WhatsApp pattern background */}
             <div 
               className="absolute inset-0 opacity-[0.03]"
@@ -526,6 +512,15 @@ export default function WhatsappClient() {
                   </div>
                   {!isSearchingMessages && (
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      {isMobile && selectedSessionId && selectedConversation && (
+                        <button
+                          onClick={() => setIsActivityPanelOpen(true)}
+                          className="p-2 hover:bg-[#006b57] rounded-full text-white"
+                          aria-label="View customer activity"
+                        >
+                          <User className="w-5 h-5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setIsSearchingMessages(true)}
                         className="p-2 hover:bg-[#006b57] rounded-full text-white"
@@ -681,7 +676,35 @@ export default function WhatsappClient() {
                 </div>
               </>
             )}
+            </div>
+            {/* Customer Activity Panel - Desktop only */}
+            {selectedSessionId && selectedConversation && !isMobile && (
+              <CustomerActivityPanel phoneNumber={selectedConversation.customerNumber} />
+            )}
           </div>
+        )}
+        
+        {/* Mobile Customer Activity Panel Overlay */}
+        {isMobile && isActivityPanelOpen && selectedSessionId && selectedConversation && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/50 z-50"
+              onClick={() => setIsActivityPanelOpen(false)}
+            />
+            <div className="fixed right-0 top-0 bottom-0 w-[85%] max-w-sm bg-white z-50 shadow-xl overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between z-10">
+                <h2 className="text-lg font-semibold text-gray-900">Customer Activity</h2>
+                <button
+                  onClick={() => setIsActivityPanelOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <CustomerActivityPanel phoneNumber={selectedConversation.customerNumber} />
+            </div>
+          </>
         )}
       </div>
     </div>

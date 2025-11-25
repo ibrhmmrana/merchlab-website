@@ -785,7 +785,7 @@ export default function ProductCard({ group }: Props) {
           ) : (
             // Non-hovering state: always show total stock
             totalStock > 0 ? (
-              <span className="text-xs border border-gray-300 px-2 py-1 rounded">
+            <span className="text-xs border border-gray-300 px-2 py-1 rounded">
                 In stock: {totalStock}
               </span>
             ) : null
@@ -841,15 +841,15 @@ export default function ProductCard({ group }: Props) {
                      src={c.image_url}
                      label={c.name}
                      selected={selectedColour === c.name}
-                    onClick={() => { 
-                      console.log("Color clicked:", c.name);
-                      setSelectedColour(c.name); 
-                      const previewImage = c.image_url ?? generateColorSvg(c.name);
-                      setPreview(previewImage); 
-                      setSelectedSize(null);
+                     onClick={() => { 
+                       console.log("Color clicked:", c.name);
+                       setSelectedColour(c.name); 
+                       const previewImage = c.image_url ?? generateColorSvg(c.name);
+                       setPreview(previewImage); 
+                       setSelectedSize(null); 
                       setBrandingMode('unbranded');
                       setBrandingSelections([]);
-                    }}
+                     }}
                      size={35}
                    />
               ))}
