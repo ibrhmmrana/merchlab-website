@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, Menu, X } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, Menu, X, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Sidebar() {
@@ -35,6 +35,14 @@ export default function Sidebar() {
       href: '/dashboard-admin/customers',
       label: 'Top Customers',
       icon: Users,
+    },
+  ];
+
+  const communicationsItems = [
+    {
+      href: '/dashboard-admin/communications/whatsapp',
+      label: 'WhatsApp',
+      icon: MessageSquare,
     },
   ];
 
@@ -98,6 +106,36 @@ export default function Sidebar() {
               );
             })}
           </ul>
+          
+          {/* Communications Section */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h2 className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Communications
+            </h2>
+            <ul className="space-y-2">
+              {communicationsItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || pathname?.startsWith(item.href);
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setIsOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
+                        isActive
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      )}
+                    >
+                      <Icon className="w-5 h-5 flex-shrink-0" />
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </nav>
       </aside>
     </>
