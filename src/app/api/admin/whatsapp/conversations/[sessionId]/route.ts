@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionId: string } }
+  { params }: { params: Promise<{ sessionId: string }> }
 ) {
   if (!isAuthed(request)) {
     return NextResponse.json(
@@ -17,7 +17,8 @@ export async function GET(
   }
 
   try {
-    const sessionId = decodeURIComponent(params.sessionId);
+    const { sessionId: sessionIdParam } = await params;
+    const sessionId = decodeURIComponent(sessionIdParam);
     const messages = await getWhatsappConversationBySessionId(sessionId);
     return NextResponse.json(
       { messages },
