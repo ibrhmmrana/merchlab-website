@@ -24,6 +24,149 @@ function HighlightText({ text, searchTerm }: { text: string; searchTerm: string 
     </>
   );
 }
+
+// Function to parse quote message and extract quote number and URL
+function parseQuoteMessage(content: string): { isQuoteMessage: boolean; quoteNumber?: string; quoteUrl?: string; restOfMessage?: string } {
+  // Pattern to match: https://fxsqdpmmddcidjwzxtpc.supabase.co/storage/v1/object/public/audit-reports/[QUOTE NUMBER].pdf
+  const quoteUrlPattern = /https:\/\/fxsqdpmmddcidjwzxtpc\.supabase\.co\/storage\/v1\/object\/public\/audit-reports\/([A-Z0-9-]+)\.pdf/i;
+  
+  const match = content.match(quoteUrlPattern);
+  
+  if (!match) {
+    return { isQuoteMessage: false };
+  }
+  
+  const quoteUrl = match[0];
+  const quoteNumber = match[1];
+  
+  // Check if the message follows the expected pattern
+  // The URL should be followed by the message template
+  const urlIndex = content.indexOf(quoteUrl);
+  if (urlIndex === -1) {
+    return { isQuoteMessage: false };
+  }
+  
+  // Extract the rest of the message after the URL
+  const restOfMessage = content.substring(urlIndex + quoteUrl.length).trim();
+  
+  // Check if it matches the expected pattern (contains "Hi", "MerchLab", "quote is ready", etc.)
+  const hasExpectedPattern = 
+    restOfMessage.includes('Hi') && 
+    restOfMessage.includes('MerchLab') && 
+    restOfMessage.includes('quote is ready');
+  
+  if (!hasExpectedPattern) {
+    return { isQuoteMessage: false };
+  }
+  
+  return {
+    isQuoteMessage: true,
+    quoteNumber,
+    quoteUrl,
+    restOfMessage,
+  };
+}
+
+// Component to render quote message with clickable quote number
+function QuoteMessageContent({ content, searchTerm }: { content: string; searchTerm: string }) {
+  const quoteInfo = parseQuoteMessage(content);
+  
+  if (!quoteInfo.isQuoteMessage || !quoteInfo.quoteNumber || !quoteInfo.quoteUrl || !quoteInfo.restOfMessage) {
+    // Not a quote message, render normally
+    if (searchTerm.trim()) {
+      return <HighlightText text={content} searchTerm={searchTerm} />;
+    }
+    return <>{content}</>;
+  }
+  
+  // Render quote message with clickable link
+  // Split the rest of message by lines to preserve formatting
+  const messageLines = quoteInfo.restOfMessage.split('\n');
+  const displayLines = [`${quoteInfo.quoteNumber}.pdf`, '', ...messageLines];
+  
+  if (searchTerm.trim()) {
+    // If searching, we need to handle highlighting with the link
+    return (
+      <>
+        {displayLines.map((line, lineIndex) => {
+          if (lineIndex === 0 && line === `${quoteInfo.quoteNumber}.pdf`) {
+            // First line is the quote number - make it a link
+            return (
+              <span key={lineIndex}>
+                <a
+                  href={quoteInfo.quoteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 underline font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {quoteInfo.quoteNumber}.pdf
+                </a>
+                {lineIndex < displayLines.length - 1 && <br />}
+              </span>
+            );
+          }
+          
+          // For other lines, check if they contain the search term
+          if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
+            const parts = line.split(new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+            return (
+              <span key={lineIndex}>
+                {parts.map((part, partIndex) =>
+                  part.toLowerCase() === searchTerm.toLowerCase() ? (
+                    <mark key={partIndex} className="bg-yellow-300 text-gray-900 px-0.5 rounded">
+                      {part}
+                    </mark>
+                  ) : (
+                    <span key={partIndex}>{part}</span>
+                  )
+                )}
+                {lineIndex < displayLines.length - 1 && <br />}
+              </span>
+            );
+          }
+          
+          return (
+            <span key={lineIndex}>
+              {line}
+              {lineIndex < displayLines.length - 1 && <br />}
+            </span>
+          );
+        })}
+      </>
+    );
+  }
+  
+  // Not searching, render normally with link
+  return (
+    <>
+      {displayLines.map((line, index) => {
+        if (index === 0 && line === `${quoteInfo.quoteNumber}.pdf`) {
+          return (
+            <span key={index}>
+              <a
+                href={quoteInfo.quoteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 underline font-medium"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {quoteInfo.quoteNumber}.pdf
+              </a>
+              {index < displayLines.length - 1 && <br />}
+            </span>
+          );
+        }
+        return (
+          <span key={index}>
+            {line}
+            {index < displayLines.length - 1 && <br />}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 import { supabase } from '@/lib/supabase/browser';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { WhatsappConversationSummary, WhatsappMessage, N8nChatHistoryRow } from '@/lib/chatHistories';
@@ -329,10 +472,35 @@ export default function WhatsappClient() {
     try {
       const date = new Date(dateString);
       const now = new Date();
+      
+      // Get date parts for comparison (ignore time)
+      const dateYear = date.getFullYear();
+      const dateMonth = date.getMonth();
+      const dateDay = date.getDate();
+      
+      const nowYear = now.getFullYear();
+      const nowMonth = now.getMonth();
+      const nowDay = now.getDate();
+      
+      // Check if it's today
+      if (dateYear === nowYear && dateMonth === nowMonth && dateDay === nowDay) {
+        return 'Today';
+      }
+      
+      // Check if it's yesterday
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (dateYear === yesterday.getFullYear() && 
+          dateMonth === yesterday.getMonth() && 
+          dateDay === yesterday.getDate()) {
+        return 'Yesterday';
+      }
+      
+      // Calculate days difference for remaining logic
       const diffMs = now.getTime() - date.getTime();
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-      // If within a week, show day name
+      // If within a week (but not today or yesterday), show day name
       if (diffDays < 7) {
         return date.toLocaleDateString('en-US', { weekday: 'long' });
       }
@@ -649,11 +817,7 @@ export default function WhatsappClient() {
                               `}
                             >
                               <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                                {messageSearchQuery.trim() && isMatch ? (
-                                  <HighlightText text={message.content} searchTerm={messageSearchQuery} />
-                                ) : (
-                                  message.content
-                                )}
+                                <QuoteMessageContent content={message.content} searchTerm={messageSearchQuery.trim()} />
                               </div>
                               {message.createdAt && (
                                 <div className="flex items-center justify-end gap-1 mt-1">
