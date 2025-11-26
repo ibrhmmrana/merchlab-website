@@ -204,6 +204,47 @@ export async function POST(req: Request) {
     const responseData = await response.text();
     console.log("Webhook response:", responseData);
     
+    // Trigger LinkedIn search automatically after successful quote submission
+    // Extract customer info from enquiryData and trigger LinkedIn search
+    try {
+      const customerInfo = enquiryData.enquiryCustomer as {
+        firstName?: string;
+        lastName?: string;
+        company?: string;
+      } | undefined;
+      
+      if (customerInfo?.firstName && customerInfo?.lastName) {
+        const customerName = `${customerInfo.firstName} ${customerInfo.lastName}`.trim();
+        const companyName = customerInfo.company || null;
+        
+        // Call LinkedIn webhook asynchronously (don't wait for it)
+        // Use internal API call - construct URL from request or use environment variable
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                       process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                       'http://localhost:3000';
+        
+        fetch(`${baseUrl}/api/admin/linkedin/webhook`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            enquiryCustomer: {
+              firstName: customerInfo.firstName,
+              lastName: customerInfo.lastName,
+              company: companyName,
+            },
+          }),
+        }).catch((err) => {
+          console.error('Failed to trigger LinkedIn search:', err);
+          // Don't fail the quote submission if LinkedIn search fails
+        });
+      }
+    } catch (linkedInError) {
+      console.error('Error triggering LinkedIn search:', linkedInError);
+      // Don't fail the quote submission if LinkedIn search fails
+    }
+    
     return NextResponse.json({ 
       ok: true, 
       message: "Quote submitted successfully",

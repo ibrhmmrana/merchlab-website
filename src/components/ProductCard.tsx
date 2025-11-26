@@ -790,8 +790,8 @@ export default function ProductCard({ group }: Props) {
               </span>
             ) : null
           )}
-          {/* Show price when variant is selected */}
-          {selectedVariant && (
+          {/* Show price when variant is selected - ONLY on build-a-quote page */}
+          {selectedVariant && pathname?.startsWith('/build-a-quote') && (
             <span className="text-xs border border-gray-300 px-2 py-1 rounded bg-green-50 text-green-700 font-medium">
               {loadingPrice ? (
                 'Loading price...'

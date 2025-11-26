@@ -15,6 +15,7 @@ import {
 import { FileText, ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { type PeriodKey } from '@/server/admin/metrics';
 import { Button } from '@/components/ui/button';
+import CustomerProfileModal from '@/components/CustomerProfileModal';
 
 type Quote = {
   created_at: string;
@@ -66,6 +67,9 @@ export default function QuotesClient() {
   const [clickedPage, setClickedPage] = useState<number | null>(null);
   const [resendingQuote, setResendingQuote] = useState<string | null>(null);
   const [resentQuotes, setResentQuotes] = useState<Map<string, number>>(new Map());
+  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchQuotes() {
@@ -321,7 +325,22 @@ export default function QuotesClient() {
                     <TableRow key={quote.quote_no}>
                       <TableCell>{formatDate(quote.created_at)}</TableCell>
                       <TableCell>{quote.quote_no}</TableCell>
-                      <TableCell>{quote.customer}</TableCell>
+                      <TableCell>
+                        {quote.customer && quote.customer !== '-' ? (
+                          <button
+                            onClick={() => {
+                              setSelectedCustomer(quote.customer);
+                              setSelectedCompany(quote.company && quote.company !== '-' ? quote.company : null);
+                              setIsProfileModalOpen(true);
+                            }}
+                            className="text-primary hover:underline font-medium cursor-pointer"
+                          >
+                            {quote.customer}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>{quote.company}</TableCell>
                       <TableCell>{formatCurrency(quote.value)}</TableCell>
                       <TableCell>
@@ -435,6 +454,20 @@ export default function QuotesClient() {
           )}
         </CardContent>
       </Card>
+
+      {/* Customer Profile Modal */}
+      {selectedCustomer && (
+        <CustomerProfileModal
+          customerName={selectedCustomer}
+          companyName={selectedCompany}
+          isOpen={isProfileModalOpen}
+          onClose={() => {
+            setIsProfileModalOpen(false);
+            setSelectedCustomer(null);
+            setSelectedCompany(null);
+          }}
+        />
+      )}
     </div>
   );
 }

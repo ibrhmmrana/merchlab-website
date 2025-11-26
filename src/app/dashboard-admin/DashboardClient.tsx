@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import CustomerProfileModal from '@/components/CustomerProfileModal';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -77,6 +78,9 @@ export default function DashboardClient() {
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchMetrics() {
@@ -253,11 +257,26 @@ export default function DashboardClient() {
               </TableHeader>
               <TableBody>
                 {data.quotes.map((quote) => (
-                  <TableRow key={quote.quote_no}>
-                    <TableCell>{formatDate(quote.created_at)}</TableCell>
-                    <TableCell>{quote.quote_no}</TableCell>
-                    <TableCell>{quote.customer || '-'}</TableCell>
-                    <TableCell>{formatCurrency(quote.grand_total)}</TableCell>
+                    <TableRow key={quote.quote_no}>
+                      <TableCell>{formatDate(quote.created_at)}</TableCell>
+                      <TableCell>{quote.quote_no}</TableCell>
+                      <TableCell>
+                        {quote.customer && quote.customer !== '-' ? (
+                          <button
+                            onClick={() => {
+                              setSelectedCustomer(quote.customer);
+                              setSelectedCompany(null); // DashboardClient doesn't have company in quote type
+                              setIsProfileModalOpen(true);
+                            }}
+                            className="text-primary hover:underline font-medium cursor-pointer"
+                          >
+                            {quote.customer}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{formatCurrency(quote.grand_total)}</TableCell>
                     <TableCell>
                       <a
                         href={quote.pdf_url}
@@ -315,6 +334,20 @@ export default function DashboardClient() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Customer Profile Modal */}
+      {selectedCustomer && (
+        <CustomerProfileModal
+          customerName={selectedCustomer}
+          companyName={selectedCompany}
+          isOpen={isProfileModalOpen}
+          onClose={() => {
+            setIsProfileModalOpen(false);
+            setSelectedCustomer(null);
+            setSelectedCompany(null);
+          }}
+        />
+      )}
     </div>
   );
 }
