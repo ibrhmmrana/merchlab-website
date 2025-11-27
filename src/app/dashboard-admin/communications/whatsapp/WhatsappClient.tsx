@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Search, MessageSquare, Search as SearchIcon, X, User } from 'lucide-react';
+import { ArrowLeft, Search, MessageSquare, Search as SearchIcon, X, User, Send } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 // Component to highlight search terms in text
@@ -208,10 +208,16 @@ export default function WhatsappClient() {
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
   const [isActivityPanelOpen, setIsActivityPanelOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [messageInput, setMessageInput] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [isHumanInControl, setIsHumanInControl] = useState(false);
+  const [takingOver, setTakingOver] = useState(false);
+  const [handingOver, setHandingOver] = useState(false);
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchMatchRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const messageInputRef = useRef<HTMLInputElement>(null);
 
   // Check if mobile view
   useEffect(() => {
@@ -452,6 +458,28 @@ export default function WhatsappClient() {
     };
   }, [selectedSessionId]);
 
+  // Load and manage human control state from localStorage
+  useEffect(() => {
+    if (selectedSessionId) {
+      // Check localStorage for this session
+      const storedState = localStorage.getItem(`human-control-${selectedSessionId}`);
+      setIsHumanInControl(storedState === 'true');
+    } else {
+      setIsHumanInControl(false);
+    }
+  }, [selectedSessionId]);
+
+  // Save human control state to localStorage whenever it changes
+  useEffect(() => {
+    if (selectedSessionId) {
+      if (isHumanInControl) {
+        localStorage.setItem(`human-control-${selectedSessionId}`, 'true');
+      } else {
+        localStorage.removeItem(`human-control-${selectedSessionId}`);
+      }
+    }
+  }, [isHumanInControl, selectedSessionId]);
+
   const selectedConversation = conversations.find((c) => c.sessionId === selectedSessionId);
 
   // Format timestamp for chat list (relative time)
@@ -562,6 +590,161 @@ export default function WhatsappClient() {
     return text.slice(0, maxLength) + '...';
   };
 
+  // Format phone number to 27123456789 format
+  const formatPhoneNumber = (phoneNumber: string): string => {
+    // Remove all non-digit characters
+    let cleaned = phoneNumber.replace(/\D/g, '');
+    
+    // If it doesn't start with 27, add it
+    if (!cleaned.startsWith('27')) {
+      // If it starts with 0, replace with 27
+      if (cleaned.startsWith('0')) {
+        cleaned = '27' + cleaned.substring(1);
+      } else {
+        cleaned = '27' + cleaned;
+      }
+    }
+    
+    return cleaned;
+  };
+
+  // Extract first name from full name
+  const getFirstName = (fullName: string): string => {
+    return fullName.split(' ')[0] || fullName;
+  };
+
+  // Handle taking over from AI
+  const handleTakeOver = async () => {
+    if (!selectedConversation || takingOver) {
+      return;
+    }
+
+    setTakingOver(true);
+
+    try {
+      const phoneNumber = formatPhoneNumber(selectedConversation.customerNumber);
+      
+      const response = await fetch('https://ai.intakt.co.za/webhook/human-in-loop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          {
+            number: phoneNumber,
+            status: 'Human',
+          },
+        ]),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error taking over:', errorText);
+        alert(`Failed to take over: ${errorText || 'Unknown error'}`);
+        return;
+      }
+
+      // Successfully took over
+      setIsHumanInControl(true);
+    } catch (error) {
+      console.error('Error taking over:', error);
+      alert('Failed to take over. Please try again.');
+    } finally {
+      setTakingOver(false);
+    }
+  };
+
+  // Handle handing over back to AI
+  const handleHandoverToAI = async () => {
+    if (!selectedConversation || handingOver) {
+      return;
+    }
+
+    setHandingOver(true);
+
+    try {
+      const phoneNumber = formatPhoneNumber(selectedConversation.customerNumber);
+      
+      const response = await fetch('https://ai.intakt.co.za/webhook/human-in-loop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          {
+            number: phoneNumber,
+            status: 'AI',
+          },
+        ]),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error handing over to AI:', errorText);
+        alert(`Failed to handover to AI: ${errorText || 'Unknown error'}`);
+        return;
+      }
+
+      // Successfully handed over to AI
+      setIsHumanInControl(false);
+      setMessageInput(''); // Clear any message in the input
+    } catch (error) {
+      console.error('Error handing over to AI:', error);
+      alert('Failed to handover to AI. Please try again.');
+    } finally {
+      setHandingOver(false);
+    }
+  };
+
+  // Handle sending a message
+  const handleSendMessage = async () => {
+    if (!selectedSessionId || !selectedConversation || !messageInput.trim() || sendingMessage || !isHumanInControl) {
+      return;
+    }
+
+    const messageText = messageInput.trim();
+    setSendingMessage(true);
+
+    try {
+      // Format phone number and extract first name
+      const phoneNumber = formatPhoneNumber(selectedConversation.customerNumber);
+      const firstName = getFirstName(selectedConversation.customerName);
+
+      // Send directly to webhook
+      const response = await fetch('https://ai.intakt.co.za/webhook/human-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          {
+            number: phoneNumber,
+            message: messageText,
+            name: firstName,
+          },
+        ]),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error sending message:', errorText);
+        alert(`Failed to send message: ${errorText || 'Unknown error'}`);
+        return;
+      }
+
+      // Clear input
+      setMessageInput('');
+      
+      // Message will appear automatically via realtime subscription when it's added to Supabase
+      // No need to add it manually to avoid duplicates
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] bg-[#f0f2f5] overflow-hidden">
       <div className="flex flex-1 overflow-hidden min-h-0">
@@ -636,12 +819,13 @@ export default function WhatsappClient() {
           <div className="flex-1 flex flex-row bg-[#efeae2] min-h-0 relative">
             {/* Chat Messages Area */}
             <div className="flex-1 flex flex-col min-h-0 relative">
-            {/* WhatsApp pattern background */}
+            {/* WhatsApp pattern background - only on messages area, not input bar */}
             <div 
-              className="absolute inset-0 opacity-[0.03]"
+              className="absolute top-0 left-0 right-0 opacity-[0.03] pointer-events-none"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-                backgroundSize: '60px 60px'
+                backgroundSize: '60px 60px',
+                bottom: '80px' // Stop before the input bar area
               }}
             />
             
@@ -724,8 +908,10 @@ export default function WhatsappClient() {
                   )}
                 </div>
 
-                {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto px-4 py-2 relative z-10">
+                {/* Chat Content Area - Messages and Input */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Messages Area */}
+                  <div className="flex-1 overflow-y-auto px-4 py-2 relative z-10">
                   {loadingMessages ? (
                     <div className="flex items-center justify-center h-full">
                       <div className="text-gray-500">Loading messages...</div>
@@ -859,6 +1045,89 @@ export default function WhatsappClient() {
                       })}
                       {/* Invisible element to scroll to */}
                       <div ref={messagesEndRef} />
+                    </div>
+                  )}
+                  </div>
+                  
+                  {/* Message Input Bar - Only show when a conversation is selected */}
+                  {selectedSessionId && selectedConversation && (
+                    <div className="bg-white border-t border-gray-200 px-4 py-3 flex-shrink-0 relative z-10" style={{ backgroundColor: 'white', position: 'relative' }}>
+                      <div className="max-w-4xl mx-auto">
+                        {!isHumanInControl ? (
+                          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 border border-gray-300 relative z-50">
+                            <div className="flex-1 flex items-center gap-2">
+                              <span className="text-sm text-gray-600 font-medium">AI in Control</span>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleTakeOver();
+                              }}
+                              disabled={takingOver}
+                              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors relative z-50 ${
+                                takingOver
+                                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                                  : 'bg-[#008069] text-white hover:bg-[#006b57] cursor-pointer'
+                              }`}
+                              style={{ pointerEvents: takingOver ? 'none' : 'auto' }}
+                              aria-label="Take over"
+                              type="button"
+                            >
+                              {takingOver ? 'Taking over...' : 'Take over'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2" style={{ backgroundColor: 'white' }}>
+                            <input
+                              ref={messageInputRef}
+                              type="text"
+                              value={messageInput}
+                              onChange={(e) => setMessageInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSendMessage();
+                                }
+                              }}
+                              placeholder="Type a message..."
+                              className="flex-1 outline-none text-sm text-gray-900 placeholder:text-gray-500 border-0"
+                              style={{ backgroundColor: 'white', background: 'white' }}
+                              disabled={sendingMessage}
+                            />
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleHandoverToAI();
+                              }}
+                              disabled={handingOver || sendingMessage}
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors relative z-50 ${
+                                handingOver || sendingMessage
+                                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                              }`}
+                              style={{ pointerEvents: (handingOver || sendingMessage) ? 'none' : 'auto' }}
+                              aria-label="Handover to AI"
+                              type="button"
+                            >
+                              {handingOver ? 'Handing over...' : 'Handover to AI'}
+                            </button>
+                            <button
+                              onClick={handleSendMessage}
+                              disabled={sendingMessage || !messageInput.trim()}
+                              className={`p-2 rounded-full transition-colors ${
+                                sendingMessage || !messageInput.trim()
+                                  ? 'text-gray-400 cursor-not-allowed'
+                                  : 'text-[#008069] hover:bg-gray-100'
+                              }`}
+                              aria-label="Send message"
+                            >
+                              <Send className="w-5 h-5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
