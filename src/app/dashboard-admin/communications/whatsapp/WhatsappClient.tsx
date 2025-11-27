@@ -27,20 +27,34 @@ function HighlightText({ text, searchTerm }: { text: string; searchTerm: string 
 
 // Function to parse quote message and extract quote number and URL
 function parseQuoteMessage(content: string): { isQuoteMessage: boolean; quoteNumber?: string; quoteUrl?: string; restOfMessage?: string } {
-  // Pattern to match: https://fxsqdpmmddcidjwzxtpc.supabase.co/storage/v1/object/public/audit-reports/[QUOTE NUMBER].pdf
-  const quoteUrlPattern = /https:\/\/fxsqdpmmddcidjwzxtpc\.supabase\.co\/storage\/v1\/object\/public\/audit-reports\/([A-Z0-9-]+)\.pdf/i;
+  // Pattern to match both URL formats:
+  // 1. https://fxsqdpmmddcidjwzxtpc.supabase.co/storage/v1/object/public/audit-reports/[QUOTE NUMBER].pdf
+  // 2. https://fxsqdpmmddcidjwzxtpc.supabase.co/storage/v1/object/audit-reports/[QUOTE NUMBER].pdf
+  const quoteUrlPatterns = [
+    /https:\/\/fxsqdpmmddcidjwzxtpc\.supabase\.co\/storage\/v1\/object\/public\/audit-reports\/([A-Z0-9-]+)\.pdf/i,
+    /https:\/\/fxsqdpmmddcidjwzxtpc\.supabase\.co\/storage\/v1\/object\/audit-reports\/([A-Z0-9-]+)\.pdf/i,
+  ];
   
-  const match = content.match(quoteUrlPattern);
+  let match: RegExpMatchArray | null = null;
+  let quoteUrl = '';
+  let quoteNumber = '';
+  
+  // Try to match either URL pattern
+  for (const pattern of quoteUrlPatterns) {
+    match = content.match(pattern);
+    if (match) {
+      quoteUrl = match[0];
+      quoteNumber = match[1];
+      break;
+    }
+  }
   
   if (!match) {
     return { isQuoteMessage: false };
   }
   
-  const quoteUrl = match[0];
-  const quoteNumber = match[1];
-  
   // Check if the message follows the expected pattern
-  // The URL should be followed by the message template
+  // The URL can appear anywhere in the message
   const urlIndex = content.indexOf(quoteUrl);
   if (urlIndex === -1) {
     return { isQuoteMessage: false };
@@ -49,21 +63,31 @@ function parseQuoteMessage(content: string): { isQuoteMessage: boolean; quoteNum
   // Extract the rest of the message after the URL
   const restOfMessage = content.substring(urlIndex + quoteUrl.length).trim();
   
-  // Check if it matches the expected pattern (contains "Hi", "MerchLab", "quote is ready", etc.)
-  const hasExpectedPattern = 
-    restOfMessage.includes('Hi') && 
-    restOfMessage.includes('MerchLab') && 
-    restOfMessage.includes('quote is ready');
+  // Check the entire message content for quote message indicators
+  // If it contains a quote URL and mentions MerchLab, it's likely a quote message
+  const fullContentLower = content.toLowerCase();
+  const hasMerchLab = fullContentLower.includes('merchlab');
   
-  if (!hasExpectedPattern) {
+  // Accept if it has MerchLab (most quote messages from MerchLab will have this)
+  // This is a quote message if it contains the quote URL pattern
+  if (!hasMerchLab) {
     return { isQuoteMessage: false };
+  }
+  
+  // If URL is at the start, use restOfMessage. Otherwise, reconstruct the message without the URL
+  let displayMessage = restOfMessage;
+  if (urlIndex > 0) {
+    // URL is in the middle or end, reconstruct message by removing URL
+    const beforeUrl = content.substring(0, urlIndex).trim();
+    const afterUrl = content.substring(urlIndex + quoteUrl.length).trim();
+    displayMessage = (beforeUrl + '\n' + afterUrl).trim();
   }
   
   return {
     isQuoteMessage: true,
     quoteNumber,
     quoteUrl,
-    restOfMessage,
+    restOfMessage: displayMessage,
   };
 }
 
