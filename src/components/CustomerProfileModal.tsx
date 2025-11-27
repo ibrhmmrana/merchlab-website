@@ -84,6 +84,9 @@ export default function CustomerProfileModal({
       );
 
       if (response.status === 404) {
+        // Profile not found - LinkedIn search feature is currently disabled
+        // To reactivate, uncomment the code below
+        /*
         // Profile not found, try to search for it
         setSearching(true);
         const searchResponse = await fetch('/api/admin/linkedin/search', {
@@ -106,6 +109,9 @@ export default function CustomerProfileModal({
         const searchData = await searchResponse.json();
         setProfile(searchData.profile);
         lastFetchedRef.current = cacheKey;
+        */
+        // Show "not found" message instead of searching
+        throw new Error('Profile not found');
       } else if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to fetch profile');

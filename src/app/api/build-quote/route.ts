@@ -48,6 +48,9 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json().catch(() => ({}));
 
+    // LinkedIn search feature is currently disabled
+    // To reactivate, uncomment the code below
+    /*
     // Trigger LinkedIn search automatically after successful quote submission
     // Extract customer info from payload and trigger LinkedIn search
     try {
@@ -93,6 +96,7 @@ export async function POST(request: NextRequest) {
       console.error('Error triggering LinkedIn search:', linkedInError);
       // Don't fail the quote submission if LinkedIn search fails
     }
+    */
 
     return NextResponse.json({
       success: true,

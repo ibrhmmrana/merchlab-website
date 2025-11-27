@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import CustomerProfileModal from '@/components/CustomerProfileModal';
 import {
   Table,
   TableBody,
@@ -81,9 +80,6 @@ export default function OverviewClient() {
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
@@ -516,16 +512,7 @@ export default function OverviewClient() {
                   <TableCell>{quote.quote_no}</TableCell>
                   <TableCell>
                     {quote.customer && quote.customer !== '-' ? (
-                      <button
-                        onClick={() => {
-                          setSelectedCustomer(quote.customer);
-                          setSelectedCompany(quote.company && quote.company !== '-' ? quote.company : null);
-                          setIsProfileModalOpen(true);
-                        }}
-                        className="text-primary hover:underline font-medium cursor-pointer"
-                      >
-                        {quote.customer}
-                      </button>
+                      <span className="font-medium">{quote.customer}</span>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
@@ -602,19 +589,6 @@ export default function OverviewClient() {
         </CardContent>
       </Card>
 
-      {/* Customer Profile Modal */}
-      {selectedCustomer && (
-        <CustomerProfileModal
-          customerName={selectedCustomer}
-          companyName={selectedCompany}
-          isOpen={isProfileModalOpen}
-          onClose={() => {
-            setIsProfileModalOpen(false);
-            setSelectedCustomer(null);
-            setSelectedCompany(null);
-          }}
-        />
-      )}
     </div>
   );
 }

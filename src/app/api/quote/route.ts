@@ -204,6 +204,9 @@ export async function POST(req: Request) {
     const responseData = await response.text();
     console.log("Webhook response:", responseData);
     
+    // LinkedIn search feature is currently disabled
+    // To reactivate, uncomment the code below
+    /*
     // Trigger LinkedIn search automatically after successful quote submission
     // Extract customer info from enquiryData and trigger LinkedIn search
     try {
@@ -244,6 +247,7 @@ export async function POST(req: Request) {
       console.error('Error triggering LinkedIn search:', linkedInError);
       // Don't fail the quote submission if LinkedIn search fails
     }
+    */
     
     return NextResponse.json({ 
       ok: true, 
