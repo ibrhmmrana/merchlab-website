@@ -865,8 +865,8 @@ export default function BuildQuoteClient() {
                               step="0.01"
                               min="0"
                               value={basePrice.toFixed(2)}
-                              onChange={(e) => updateItemPrice(itemKey, parseFloat(e.target.value) || 0)}
-                              className="mt-1 h-8"
+                              readOnly
+                              className="mt-1 h-8 bg-gray-50 cursor-not-allowed"
                             />
                           </div>
 
