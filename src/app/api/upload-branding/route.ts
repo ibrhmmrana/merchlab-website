@@ -63,10 +63,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file type
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml', 'application/pdf', 'application/postscript', 'application/illustrator'];
+    const validExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.pdf', '.ai'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    
+    // Check MIME type or file extension (for .ai files, MIME type may vary)
+    const isValidType = validTypes.includes(file.type);
+    const isValidExtension = validExtensions.includes(fileExtension);
+    
+    // Special handling for .ai files - accept based on extension even if MIME type is unknown
+    const isAiFile = fileExtension === '.ai';
+    
+    if (!isValidType && !isValidExtension && !isAiFile) {
       return NextResponse.json(
-        { error: 'Invalid file type. Allowed: PNG, JPEG, WebP, SVG, PDF' },
+        { error: 'Invalid file type. Allowed: PNG, JPEG, WebP, SVG, PDF, AI (Illustrator)' },
         { status: 400 }
       );
     }

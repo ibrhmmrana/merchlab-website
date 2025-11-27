@@ -122,6 +122,17 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       for (const p of picked) {
         const draft = drafts[p];
         if (draft?.artwork_url && !draft.logo_file && !vectorized[p] && !draft.vectorizing) {
+          // Check if URL is PDF or .ai - skip vectorization for these
+          const artworkUrl = draft.artwork_url.toLowerCase();
+          const isPdf = artworkUrl.endsWith('.pdf') || artworkUrl.includes('.pdf');
+          const isAi = artworkUrl.endsWith('.ai') || artworkUrl.includes('.ai');
+          const shouldVectorize = !isPdf && !isAi;
+          
+          if (!shouldVectorize) {
+            // Skip vectorization for PDF and .ai files
+            continue;
+          }
+          
           // Mark as vectorizing to prevent duplicate calls
           setVectorized((prev) => ({ ...prev, [p]: true }));
           
@@ -376,65 +387,78 @@ export default function BrandingSheet(props: BrandingSheetProps) {
         throw new Error('No URL returned from upload');
       }
       
+      // Check if file is PDF or Illustrator (.ai) - skip vectorization for these
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const isAi = file.name.toLowerCase().endsWith('.ai') || file.type === 'application/postscript' || file.type === 'application/illustrator';
+      const shouldVectorize = !isPdf && !isAi;
+
       // Update draft with original image URL
       setDraft(position, { 
         artwork_url: url,
-        vectorizing: true,
+        vectorizing: shouldVectorize ? true : undefined,
         vectorizeError: undefined,
       });
       setUploadError((prev) => ({ ...prev, [position]: '' }));
 
-      // Auto-vectorize the uploaded image
-      try {
-        const vectorizeResponse = await fetch('/api/branding/vectorize', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({ url }),
-        });
+      // Auto-vectorize the uploaded image (skip for PDF and .ai files)
+      if (shouldVectorize) {
+        try {
+          const vectorizeResponse = await fetch('/api/branding/vectorize', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ url }),
+          });
 
-        if (vectorizeResponse.ok) {
-          const vectorizeData = await vectorizeResponse.json();
-          if (vectorizeData.logo_file) {
-            // Update draft with SVG URL (preserve existing fields)
-            const currentDraft = drafts[position];
-            const updatedDraft = {
-              ...currentDraft,
-              logo_file: vectorizeData.logo_file,
-              vectorizing: false,
-            };
-            setDraft(position, updatedDraft);
-            setVectorized((prev) => ({ ...prev, [position]: true }));
-            
-            console.debug('[branding] vectorized ready', {
-              position,
-              svgUrl: vectorizeData.logo_file,
-              draftForPositionAfterMerge: updatedDraft,
-            });
-            
-            // Save to DB if we have complete selection
-            if (currentDraft?.type && currentDraft?.size && itemKey) {
-              saveBrandingSelectionToDb(position, updatedDraft);
+          if (vectorizeResponse.ok) {
+            const vectorizeData = await vectorizeResponse.json();
+            if (vectorizeData.logo_file) {
+              // Update draft with SVG URL (preserve existing fields)
+              const currentDraft = drafts[position];
+              const updatedDraft = {
+                ...currentDraft,
+                logo_file: vectorizeData.logo_file,
+                vectorizing: false,
+              };
+              setDraft(position, updatedDraft);
+              setVectorized((prev) => ({ ...prev, [position]: true }));
+              
+              console.debug('[branding] vectorized ready', {
+                position,
+                svgUrl: vectorizeData.logo_file,
+                draftForPositionAfterMerge: updatedDraft,
+              });
+              
+              // Save to DB if we have complete selection
+              if (currentDraft?.type && currentDraft?.size && itemKey) {
+                saveBrandingSelectionToDb(position, updatedDraft);
+              }
+            } else {
+              throw new Error('No logo_file in response');
             }
           } else {
-            throw new Error('No logo_file in response');
+            const errorData = await vectorizeResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || `Vectorization failed: ${vectorizeResponse.status}`);
           }
-        } else {
-          const errorData = await vectorizeResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || `Vectorization failed: ${vectorizeResponse.status}`);
+        } catch (vectorizeError) {
+          // Vectorization failed, but keep the original image
+          const errorMessage = vectorizeError instanceof Error 
+            ? vectorizeError.message 
+            : 'Vectorization failed';
+          console.warn('Vectorization failed for position', position, errorMessage);
+          setDraft(position, {
+            vectorizing: false,
+            vectorizeError: errorMessage,
+          });
+          // Don't show error to user - they can still use the original image
         }
-      } catch (vectorizeError) {
-        // Vectorization failed, but keep the original image
-        const errorMessage = vectorizeError instanceof Error 
-          ? vectorizeError.message 
-          : 'Vectorization failed';
-        console.warn('Vectorization failed for position', position, errorMessage);
+      } else {
+        // For PDF and .ai files, skip vectorization and mark as complete
         setDraft(position, {
           vectorizing: false,
-          vectorizeError: errorMessage,
+          vectorizeError: undefined,
         });
-        // Don't show error to user - they can still use the original image
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to upload image';
@@ -654,7 +678,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                                   <input
                                     id={`file-upload-${p}`}
                                     type="file"
-                                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp,.ai,application/postscript,application/illustrator"
                                     className="hidden"
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
