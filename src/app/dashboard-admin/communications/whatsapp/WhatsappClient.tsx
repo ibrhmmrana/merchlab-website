@@ -407,11 +407,13 @@ export default function WhatsappClient() {
           });
           
           // Remove this conversation from unread list
-          setConversationsWithUnread((prev) => {
-            const updated = new Set(prev);
-            updated.delete(selectedSessionId);
-            return updated;
-          });
+          if (selectedSessionId) {
+            setConversationsWithUnread((prev) => {
+              const updated = new Set(prev);
+              updated.delete(selectedSessionId);
+              return updated;
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching messages:', error);
