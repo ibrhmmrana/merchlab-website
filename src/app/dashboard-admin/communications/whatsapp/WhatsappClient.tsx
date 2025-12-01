@@ -218,6 +218,35 @@ export default function WhatsappClient() {
   const searchMatchRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const [viewedMessageIds, setViewedMessageIds] = useState<Set<number>>(new Set());
+  const [conversationsWithUnread, setConversationsWithUnread] = useState<Set<string>>(new Set());
+  const viewedMessageIdsRef = useRef<Set<number>>(new Set());
+
+  // Load viewed message IDs from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('whatsapp-viewed-messages');
+      if (stored) {
+        const ids = JSON.parse(stored) as number[];
+        const idsSet = new Set(ids);
+        setViewedMessageIds(idsSet);
+        viewedMessageIdsRef.current = idsSet; // Initialize ref
+      }
+    } catch (error) {
+      console.error('Error loading viewed messages from localStorage:', error);
+    }
+  }, []);
+
+  // Save viewed message IDs to localStorage whenever they change
+  useEffect(() => {
+    try {
+      const idsArray = Array.from(viewedMessageIds);
+      localStorage.setItem('whatsapp-viewed-messages', JSON.stringify(idsArray));
+      viewedMessageIdsRef.current = viewedMessageIds; // Keep ref in sync
+    } catch (error) {
+      console.error('Error saving viewed messages to localStorage:', error);
+    }
+  }, [viewedMessageIds]);
 
   // Check if mobile view
   useEffect(() => {
@@ -249,6 +278,53 @@ export default function WhatsappClient() {
     }
     fetchConversations();
   }, []);
+
+  // Check for unread customer messages when conversations are first loaded
+  useEffect(() => {
+    if (conversations.length === 0) {
+      return;
+    }
+
+    async function checkUnreadMessages() {
+      const unreadConversations = new Set<string>();
+      const currentViewedIds = viewedMessageIdsRef.current; // Use ref to get latest value
+      
+      await Promise.all(
+        conversations.map(async (conv: WhatsappConversationSummary) => {
+          try {
+            const encodedSessionId = encodeURIComponent(conv.sessionId);
+            const messagesResponse = await fetch(`/api/admin/whatsapp/conversations/${encodedSessionId}`);
+            if (messagesResponse.ok) {
+              const messagesData = await messagesResponse.json();
+              const conversationMessages = messagesData.messages || [];
+              
+              // Check if there are any unread customer messages
+              const hasUnreadCustomerMessage = conversationMessages.some(
+                (msg: WhatsappMessage) => 
+                  msg.senderType === 'human' && !currentViewedIds.has(msg.id)
+              );
+              
+              if (hasUnreadCustomerMessage) {
+                unreadConversations.add(conv.sessionId);
+              }
+            }
+          } catch (error) {
+            console.error(`Error checking unread messages for conversation ${conv.sessionId}:`, error);
+          }
+        })
+      );
+      
+      setConversationsWithUnread(unreadConversations);
+    }
+
+    // Only check when conversations are loaded, not on every viewedMessageIds change
+    // We'll update unread status when messages are marked as viewed or new messages arrive
+    const timeoutId = setTimeout(() => {
+      checkUnreadMessages();
+    }, 500); // Small delay to avoid checking too frequently
+
+    return () => clearTimeout(timeoutId);
+  }, [conversations]); // Only depend on conversations, not viewedMessageIds
 
   // Filter conversations based on search
   useEffect(() => {
@@ -315,7 +391,28 @@ export default function WhatsappClient() {
           throw new Error('Failed to fetch messages');
         }
         const data = await response.json();
-        setMessages(data.messages || []);
+        const fetchedMessages = data.messages || [];
+        setMessages(fetchedMessages);
+        
+        // Mark all customer messages in this conversation as viewed
+        const customerMessageIds = fetchedMessages
+          .filter((msg: WhatsappMessage) => msg.senderType === 'human')
+          .map((msg: WhatsappMessage) => msg.id);
+        
+        if (customerMessageIds.length > 0) {
+          setViewedMessageIds((prev) => {
+            const updated = new Set(prev);
+            customerMessageIds.forEach((id: number) => updated.add(id));
+            return updated;
+          });
+          
+          // Remove this conversation from unread list
+          setConversationsWithUnread((prev) => {
+            const updated = new Set(prev);
+            updated.delete(selectedSessionId);
+            return updated;
+          });
+        }
       } catch (error) {
         console.error('Error fetching messages:', error);
         setMessages([]);
@@ -420,6 +517,15 @@ export default function WhatsappClient() {
               // Add new message and sort by idx
               const updated = [...prevMessages, newMessage].sort((a, b) => a.idx - b.idx);
               
+              // If it's a customer message and conversation is open, mark it as viewed
+              if (newMessage.senderType === 'human') {
+                setViewedMessageIds((prev) => {
+                  const updated = new Set(prev);
+                  updated.add(newMessage.id);
+                  return updated;
+                });
+              }
+              
               // Auto-scroll to bottom after a short delay to allow DOM update
               setTimeout(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -427,6 +533,15 @@ export default function WhatsappClient() {
               
               return updated;
             });
+          } else {
+            // If it's a customer message from another conversation, mark conversation as unread
+            if (newMessage.senderType === 'human' && !viewedMessageIds.has(newMessage.id)) {
+              setConversationsWithUnread((prev) => {
+                const updated = new Set(prev);
+                updated.add(sessionId);
+                return updated;
+              });
+            }
           }
 
           // Refresh conversations list to update last message preview
@@ -777,6 +892,7 @@ export default function WhatsappClient() {
                 <div>
                   {filteredConversations.map((conv) => {
                     const isSelected = conv.sessionId === selectedSessionId;
+                    const hasUnread = conversationsWithUnread.has(conv.sessionId);
                     return (
                       <button
                         key={conv.sessionId}
@@ -789,9 +905,14 @@ export default function WhatsappClient() {
                         <div className="flex items-center gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
-                              <h3 className="font-medium text-gray-900 truncate text-[17px]">
-                                {conv.customerName}
-                              </h3>
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <h3 className="font-medium text-gray-900 truncate text-[17px]">
+                                  {conv.customerName}
+                                </h3>
+                                {hasUnread && (
+                                  <span className="flex-shrink-0 w-4 h-4 bg-red-600 rounded-full border-2 border-white shadow-md ring-2 ring-red-200" />
+                                )}
+                              </div>
                               {conv.lastMessageAt && (
                                 <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                                   {formatMessageTime(conv.lastMessageAt)}
