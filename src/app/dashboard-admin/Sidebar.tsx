@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, X, MessageSquare, Mail, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, X, MessageSquare, Mail, ChevronLeft, ChevronRight, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -73,11 +73,6 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
       icon: LayoutDashboard,
     },
     {
-      href: '/dashboard-admin/best-selling',
-      label: 'Best Selling Items',
-      icon: TrendingUp,
-    },
-    {
       href: '/dashboard-admin/quotes',
       label: 'Quotes',
       icon: FileText,
@@ -86,6 +81,16 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
       href: '/dashboard-admin/invoices',
       label: 'Invoices',
       icon: Receipt,
+    },
+    {
+      href: '/dashboard-admin/orders',
+      label: 'Orders',
+      icon: ShoppingCart,
+    },
+    {
+      href: '/dashboard-admin/best-selling',
+      label: 'Best Selling Items',
+      icon: TrendingUp,
     },
     {
       href: '/dashboard-admin/customers',
