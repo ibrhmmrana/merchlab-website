@@ -42,6 +42,7 @@ type Order = {
 type OrdersData = {
   orders: Order[];
   total: number;
+  warning?: string;
 };
 
 const formatCurrency = (value: number | null) => {
@@ -283,8 +284,8 @@ export default function OrdersClient() {
             <div className="text-center py-12">
               <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
               <p className="text-gray-500 mb-2">No orders found</p>
-              {(data as any).warning && (
-                <p className="text-sm text-amber-600 mt-2">{(data as any).warning}</p>
+              {data.warning && (
+                <p className="text-sm text-amber-600 mt-2">{data.warning}</p>
               )}
               <p className="text-xs text-gray-400 mt-4">
                 Check the server console logs for more details.

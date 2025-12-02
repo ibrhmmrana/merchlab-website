@@ -135,7 +135,7 @@ function parsePayload(payload: unknown): Record<string, unknown> | null {
 
 function extractQuoteNumber(customerReference: string): string | null {
   if (!customerReference) return null;
-  let cleaned = customerReference.trim().replace(/^[\s*:]+|[\s*:]+$/g, '');
+  const cleaned = customerReference.trim().replace(/^[\s*:]+|[\s*:]+$/g, '');
   if (cleaned.startsWith('Q')) {
     const match = cleaned.match(/^(Q\d+[-]\w+)/);
     if (match) return match[1];
