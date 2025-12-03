@@ -136,12 +136,24 @@ function parsePayload(payload: unknown): Record<string, unknown> | null {
 function extractQuoteNumber(customerReference: string): string | null {
   if (!customerReference) return null;
   const cleaned = customerReference.trim().replace(/^[\s*:]+|[\s*:]+$/g, '');
+  
+  // Pattern 1: Q###-XXXXX or Q#########-XXXXX
   if (cleaned.startsWith('Q')) {
     const match = cleaned.match(/^(Q\d+[-]\w+)/);
     if (match) return match[1];
     const match2 = cleaned.match(/^(Q\d+[-][A-Z0-9]+)/);
     if (match2) return match2[1];
   }
+  
+  // Pattern 2: ML-[5 character string]
+  if (cleaned.startsWith('ML-')) {
+    const match = cleaned.match(/^(ML-[A-Z0-9]{5})/);
+    if (match) return match[1];
+    // Also try flexible pattern for ML- followed by alphanumeric
+    const match2 = cleaned.match(/^(ML-[A-Z0-9]+)/);
+    if (match2) return match2[1];
+  }
+  
   return null;
 }
 

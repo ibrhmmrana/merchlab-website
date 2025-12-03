@@ -319,13 +319,9 @@ function extractQuoteNumber(customerReference: string): string | null {
   if (!customerReference) return null;
   
   // Remove leading/trailing whitespace and special characters
-  let cleaned = customerReference.trim();
+  const cleaned = customerReference.trim().replace(/^[\s*:]+|[\s*:]+$/g, '');
   
-  // Remove leading/trailing asterisks, colons, and other special characters
-  cleaned = cleaned.replace(/^[\s*:]+|[\s*:]+$/g, '');
-  
-  // Pattern: Q###-XXXXX or Q#########-XXXXX
-  // Try to extract the quote number part
+  // Pattern 1: Q###-XXXXX or Q#########-XXXXX
   if (cleaned.startsWith('Q')) {
     // Extract Q followed by digits, dash, and alphanumeric characters
     const match = cleaned.match(/^(Q\d+[-]\w+)/);
@@ -340,8 +336,19 @@ function extractQuoteNumber(customerReference: string): string | null {
     }
   }
   
-  // If it starts with ML- or other prefixes, might still be a quote reference
-  // For now, only return if it starts with Q
+  // Pattern 2: ML-[5 character string]
+  if (cleaned.startsWith('ML-')) {
+    const match = cleaned.match(/^(ML-[A-Z0-9]{5})/);
+    if (match) {
+      return match[1];
+    }
+    // Also try flexible pattern for ML- followed by alphanumeric
+    const match2 = cleaned.match(/^(ML-[A-Z0-9]+)/);
+    if (match2) {
+      return match2[1];
+    }
+  }
+  
   return null;
 }
 
