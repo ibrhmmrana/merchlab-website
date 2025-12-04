@@ -1,42 +1,44 @@
 /**
- * Send a WhatsApp message using BotPenguin API
+ * Send a WhatsApp message using the WhatsApp Business API
  */
 export async function sendWhatsAppMessage(
   phoneNumber: string,
   message: string,
   customerName?: string
 ): Promise<void> {
-  const apiKey = process.env.BOTPENGUIN_API_KEY;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  // Use phone number ID if provided, otherwise fall back to business account ID
+  // Note: Phone number ID is typically required for sending messages
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '1877523409779615';
   
-  if (!apiKey) {
-    throw new Error('BOTPENGUIN_API_KEY environment variable is required');
+  if (!accessToken) {
+    throw new Error('WHATSAPP_ACCESS_TOKEN environment variable is required');
   }
   
   // Format phone number (ensure it's in international format without +)
   const formattedNumber = phoneNumber.replace(/^\+/, '').replace(/\D/g, '');
   
-  // Clean message text - replace ** with * (as shown in user's reference)
-  const cleanedMessage = message.replace(/\*\*/g, '*');
-  
-  const url = `https://api.v7.botpenguin.com/whatsapp-automation/wa/send-message?apiKey=${encodeURIComponent(apiKey)}`;
+  const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
   
   const response = await fetch(url, {
     method: 'POST',
     headers: {
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'apiKey': apiKey,
     },
     body: JSON.stringify({
-      userName: customerName || formattedNumber,
-      wa_id: formattedNumber,
+      messaging_product: 'whatsapp',
+      to: formattedNumber,
       type: 'text',
-      'message.text': cleanedMessage,
+      text: {
+        body: message,
+      },
     }),
   });
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('BotPenguin API error:', errorText);
+    console.error('WhatsApp API error:', errorText);
     throw new Error(`Failed to send WhatsApp message: ${response.status} ${errorText}`);
   }
   

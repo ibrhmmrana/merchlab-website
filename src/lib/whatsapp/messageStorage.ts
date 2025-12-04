@@ -45,15 +45,23 @@ export async function saveWhatsAppMessage(
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
   
-  // Get the current max idx to increment
-  const { data: maxData } = await supabase
-    .from('chatbot_history')
-    .select('idx')
-    .order('idx', { ascending: false })
-    .limit(1)
-    .single();
-  
-  const nextIdx = (maxData?.idx || 0) + 1;
+  // Try to get the current max idx to increment (if column exists)
+  let nextIdx: number | undefined = undefined;
+  try {
+    const { data: maxData } = await supabase
+      .from('chatbot_history')
+      .select('idx')
+      .order('idx', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (maxData?.idx !== undefined && maxData.idx !== null) {
+      nextIdx = (maxData.idx as number) + 1;
+    }
+  } catch (error) {
+    // idx column doesn't exist, that's okay - we'll insert without it
+    console.log('idx column not found, inserting without idx');
+  }
   
   // Build message object with all required fields
   const messageObject: WhatsAppMessage['message'] = {
@@ -79,15 +87,21 @@ export async function saveWhatsAppMessage(
     date_time: new Date().toISOString(),
   };
   
+  // Build insert object - only include idx if we have it
+  const insertData: Record<string, unknown> = {
+    session_id: messageData.session_id,
+    message: messageData.message,
+    customer: messageData.customer,
+    date_time: messageData.date_time,
+  };
+  
+  if (nextIdx !== undefined) {
+    insertData.idx = nextIdx;
+  }
+  
   const { error } = await supabase
     .from('chatbot_history')
-    .insert({
-      session_id: messageData.session_id,
-      message: messageData.message,
-      customer: messageData.customer,
-      date_time: messageData.date_time,
-      idx: nextIdx,
-    });
+    .insert(insertData);
   
   if (error) {
     console.error('Error saving message to Supabase:', error);

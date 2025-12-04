@@ -16,11 +16,10 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
   
   try {
     // Query the n8n_chat_histories table
-    // The table structure should have: session_id, messages (JSONB array)
-    // Based on n8n's memory structure, messages are stored as an array
+    // Based on error hint, the column is likely "message" (singular), not "messages"
     // Try different possible column names for messages
     const query = `
-      SELECT messages, history, chat_history
+      SELECT message, messages, history, chat_history
       FROM n8n_chat_histories 
       WHERE session_id = $1 
       ORDER BY created_at DESC NULLS LAST, updated_at DESC NULLS LAST
@@ -37,7 +36,19 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     const row = result.rows[0] as Record<string, unknown>;
     let messages: unknown[] = [];
     
-    if (row.messages && Array.isArray(row.messages)) {
+    // Try "message" first (singular, as suggested by error hint)
+    if (row.message) {
+      if (Array.isArray(row.message)) {
+        messages = row.message;
+      } else if (typeof row.message === 'string') {
+        try {
+          const parsed = JSON.parse(row.message);
+          messages = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          messages = [];
+        }
+      }
+    } else if (row.messages && Array.isArray(row.messages)) {
       messages = row.messages;
     } else if (row.history && Array.isArray(row.history)) {
       messages = row.history;
@@ -94,8 +105,9 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
   
   try {
     // First, try to get existing messages for this session
+    // Based on error hint, the column is likely "message" (singular)
     const selectQuery = `
-      SELECT messages, history, chat_history, created_at, updated_at
+      SELECT message, messages, history, chat_history, created_at, updated_at
       FROM n8n_chat_histories 
       WHERE session_id = $1 
       ORDER BY created_at DESC NULLS LAST, updated_at DESC NULLS LAST
@@ -105,12 +117,24 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
     const selectResult = await pool.query(selectQuery, [sessionId]);
     
     let messages: unknown[] = [];
-    let messagesColumn = 'messages'; // Default column name
+    let messagesColumn = 'message'; // Default to singular (as per error hint)
     
     if (selectResult.rows.length > 0) {
       const row = selectResult.rows[0] as Record<string, unknown>;
-      // Try to find which column has the messages
-      if (row.messages) {
+      // Try to find which column has the messages - try "message" first
+      if (row.message) {
+        if (Array.isArray(row.message)) {
+          messages = row.message;
+        } else if (typeof row.message === 'string') {
+          try {
+            const parsed = JSON.parse(row.message);
+            messages = Array.isArray(parsed) ? parsed : [];
+          } catch {
+            messages = [];
+          }
+        }
+        messagesColumn = 'message';
+      } else if (row.messages) {
         if (Array.isArray(row.messages)) {
           messages = row.messages;
         } else if (typeof row.messages === 'string') {
