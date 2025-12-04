@@ -16,12 +16,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // Log the entire incoming request for debugging
+    console.log('=== WhatsApp Webhook Received ===');
+    console.log('Full body:', JSON.stringify(body, null, 2));
+    console.log('Body keys:', Object.keys(body));
+    
     // Verify webhook verification (for initial setup)
     const mode = body.hub?.mode;
     const token = body.hub?.verify_token;
     const challenge = body.hub?.challenge;
     
     if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+      console.log('Webhook verification successful');
       // Return challenge as string for webhook verification
       return new NextResponse(challenge || '', { status: 200 });
     }
@@ -31,6 +37,8 @@ export async function POST(request: NextRequest) {
     let waId: string | null = null;
     let customerName: string | null = null;
     let messageText: string | null = null;
+    
+    console.log('Checking message format...');
     
     // Try standard WhatsApp Business API format
     if (body.object === 'whatsapp_business_account') {
@@ -72,25 +80,33 @@ export async function POST(request: NextRequest) {
     }
     // Try BotPenguin/n8n webhook format
     // Format: { event: { value: { contacts: [...], messages: [...] }, field: "messages" } }
-    else if (body.event?.value) {
+    if (body.event?.value) {
+      console.log('Found BotPenguin format: body.event.value');
       const eventValue = body.event.value;
       const contacts = eventValue.contacts || [];
       const messages = eventValue.messages || [];
+      
+      console.log('Contacts:', contacts.length, 'Messages:', messages.length);
       
       if (contacts.length > 0 && messages.length > 0) {
         waId = contacts[0].wa_id;
         customerName = contacts[0].profile?.name || waId || 'Unknown';
         const message = messages[0];
+        console.log('Message type:', message.type, 'Has text:', !!message.text);
         // Only process text messages
         if (message.type === 'text' && message.text?.body) {
           messageText = message.text.body;
+          console.log('Extracted message text:', messageText);
         } else {
-          console.log('Skipping non-text message in BotPenguin format');
+          console.log('Skipping non-text message in BotPenguin format. Type:', message.type);
         }
+      } else {
+        console.log('Missing contacts or messages in BotPenguin format');
       }
     }
     // Try nested body format (fallback for n8n)
     else if (body.body?.event?.value) {
+      console.log('Found nested format: body.body.event.value');
       const eventValue = body.body.event.value;
       const contacts = eventValue.contacts || [];
       const messages = eventValue.messages || [];
@@ -102,8 +118,9 @@ export async function POST(request: NextRequest) {
         // Only process text messages
         if (message.type === 'text' && message.text?.body) {
           messageText = message.text.body;
+          console.log('Extracted message text from nested format:', messageText);
         } else {
-          console.log('Skipping non-text message in nested format');
+          console.log('Skipping non-text message in nested format. Type:', message.type);
         }
       }
     }
@@ -115,12 +132,17 @@ export async function POST(request: NextRequest) {
     }
     
     // Process the message if we found one
+    console.log('Final extraction result:', { waId, customerName, messageText, hasMessage: !!messageText });
+    
     if (waId && messageText && messageText.trim().length > 0) {
       const customerNumber = waId;
       const sessionId = `ML-${waId}`;
       
+      console.log('Processing message:', { sessionId, customerNumber, messageText });
+      
       // Save incoming message to Supabase immediately
       try {
+        console.log('Saving message to Supabase...');
         await saveWhatsAppMessage(
           sessionId,
           'human',
@@ -130,8 +152,10 @@ export async function POST(request: NextRequest) {
             name: customerName || customerNumber,
           }
         );
+        console.log('Message saved to Supabase successfully');
       } catch (error) {
         console.error('Error saving incoming message to Supabase:', error);
+        console.error('Error details:', error instanceof Error ? error.stack : String(error));
         // Continue processing even if save fails
       }
       
@@ -200,7 +224,10 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      console.log('Received webhook with no processable message:', JSON.stringify(body).substring(0, 500));
+      console.log('=== No processable message found ===');
+      console.log('waId:', waId);
+      console.log('messageText:', messageText);
+      console.log('Full body structure:', JSON.stringify(body, null, 2).substring(0, 1000));
     }
     
     // Return 200 OK to acknowledge receipt
