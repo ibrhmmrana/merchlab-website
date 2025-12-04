@@ -15,6 +15,7 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
   const pool = getPostgresPool();
   
   try {
+    console.log(`Fetching chat history from Postgres for session: ${sessionId}`);
     // Query the n8n_chat_histories table
     // Based on error hint, the column is likely "message" (singular), not "messages"
     // Try different possible column names for messages
@@ -29,8 +30,11 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     const result = await pool.query(query, [sessionId]);
     
     if (result.rows.length === 0) {
+      console.log(`No chat history found in Postgres for session: ${sessionId}`);
       return [];
     }
+    
+    console.log(`Found chat history record in Postgres for session: ${sessionId}`);
     
     // Try to get messages from different possible column names
     const row = result.rows[0] as Record<string, unknown>;
@@ -89,8 +93,12 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
         content: String(content),
       };
     }).filter((msg): msg is ChatMessage => msg !== null && msg.content.length > 0);
+    
+    console.log(`Parsed ${recentMessages.length} messages from Postgres history`);
+    return recentMessages;
   } catch (error) {
-    console.error('Error fetching chat history:', error);
+    console.error('Error fetching chat history from Postgres:', error);
+    console.error('Falling back to empty history - memory will not be available');
     // If table doesn't exist or query fails, return empty array
     // This allows the system to work even without Postgres memory
     return [];
@@ -104,6 +112,7 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
   const pool = getPostgresPool();
   
   try {
+    console.log(`Saving ${role} message to Postgres memory for session: ${sessionId}`);
     // First, try to get existing messages for this session
     // Based on error hint, the column is likely "message" (singular)
     const selectQuery = `
@@ -196,9 +205,14 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
         VALUES ($1, $2, NOW(), NOW())
       `;
       await pool.query(insertQuery, [sessionId, JSON.stringify(messages)]);
+      console.log(`Inserted new chat history record for session: ${sessionId}`);
+    } else {
+      console.log(`Updated existing chat history record for session: ${sessionId}`);
     }
+    console.log(`Successfully saved ${role} message to Postgres memory`);
   } catch (error) {
     console.error('Error saving chat message to Postgres:', error);
+    console.error('Memory will not be persisted, but conversation will continue');
     // Don't throw - we'll still save to Supabase
     // This is a best-effort operation
   }
