@@ -51,14 +51,6 @@ When checking order status:
 - Report the status in a friendly, clear manner
 - If the order is not found, apologize and ask them to verify the invoice number`;
 
-export interface AIResponse {
-  content: string;
-  tool_calls?: any[];
-  invalid_tool_calls?: any[];
-  additional_kwargs?: Record<string, any>;
-  response_metadata?: Record<string, any>;
-}
-
 /**
  * Process a message with the AI agent
  */
