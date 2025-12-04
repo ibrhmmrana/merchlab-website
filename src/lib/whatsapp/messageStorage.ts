@@ -90,7 +90,8 @@ export async function saveWhatsAppMessage(
     date_time: new Date().toISOString(),
   };
   
-  // Build insert object - only include idx if we have it
+  // Build insert object - don't include idx since Supabase schema cache doesn't see it
+  // The idx column might exist but Supabase PostgREST doesn't recognize it
   const insertData: Record<string, unknown> = {
     session_id: messageData.session_id,
     message: messageData.message,
@@ -98,9 +99,8 @@ export async function saveWhatsAppMessage(
     date_time: messageData.date_time,
   };
   
-  if (nextIdx !== undefined) {
-    insertData.idx = nextIdx;
-  }
+  // Don't include idx - let the database handle it automatically if it exists
+  // If idx is an auto-increment or has a default, the database will handle it
   
   const { error } = await supabase
     .from('chatbot_history')
