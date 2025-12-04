@@ -394,6 +394,13 @@ export async function processMessage(
             });
             quoteCaption += `Created: ${createdDate}\n`;
           }
+          if (quoteInfo.value !== null) {
+            const formattedValue = new Intl.NumberFormat('en-ZA', {
+              style: 'currency',
+              currency: 'ZAR',
+            }).format(quoteInfo.value);
+            quoteCaption += `Total Amount: ${formattedValue}\n`;
+          }
           quoteCaption += '\nYour quote PDF is attached below. If you have any questions or would like to proceed with this quote, please let me know! 😊';
         } else {
           quoteCaption = aiResponseContent; // Fallback to AI response if quote not found
