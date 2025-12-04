@@ -18,12 +18,13 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
   try {
     console.log(`Fetching chat history from Postgres for session: ${sessionId}`);
     // Query the n8n_chat_histories table
-    // Table structure: idx, id, session_id, message (JSON string with type and content), customer
+    // Table structure: id, session_id, message (JSON string with type and content), customer
+    // Note: idx column may or may not exist, so we use id for ordering
     const query = `
-      SELECT idx, id, session_id, message, customer
+      SELECT id, session_id, message, customer
       FROM n8n_chat_histories 
       WHERE session_id = $1 
-      ORDER BY idx ASC
+      ORDER BY id ASC
       LIMIT $2
     `;
     
@@ -89,14 +90,14 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
   try {
     console.log(`Saving ${role} message to Postgres memory for session: ${sessionId}`);
     
-    // Get the next idx value
-    const maxIdxQuery = `
-      SELECT MAX(idx) as max_idx
+    // Get the next id value (use id instead of idx since idx might not exist)
+    const maxIdQuery = `
+      SELECT MAX(id) as max_id
       FROM n8n_chat_histories
       WHERE session_id = $1
     `;
-    const maxIdxResult = await pool.query(maxIdxQuery, [sessionId]);
-    const nextIdx = (maxIdxResult.rows[0]?.max_idx || 0) + 1;
+    const maxIdResult = await pool.query(maxIdQuery, [sessionId]);
+    const nextId = (maxIdResult.rows[0]?.max_id || 0) + 1;
     
     // Prepare message JSON
     const messageJson = {
@@ -107,13 +108,24 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
     };
     
     // Insert new row for this message
-    const insertQuery = `
-      INSERT INTO n8n_chat_histories (session_id, idx, message, customer)
-      VALUES ($1, $2, $3, NULL)
-    `;
-    
-    await pool.query(insertQuery, [sessionId, nextIdx, JSON.stringify(messageJson)]);
-    console.log(`Successfully saved ${role} message to Postgres memory (idx: ${nextIdx})`);
+    // Try with idx first, fallback to just id if idx doesn't exist
+    try {
+      const insertQueryWithIdx = `
+        INSERT INTO n8n_chat_histories (session_id, idx, message, customer)
+        VALUES ($1, $2, $3, NULL)
+      `;
+      await pool.query(insertQueryWithIdx, [sessionId, nextId, JSON.stringify(messageJson)]);
+      console.log(`Successfully saved ${role} message to Postgres memory (idx: ${nextId})`);
+    } catch (error) {
+      // If idx column doesn't exist, insert without it
+      console.log('idx column not found, inserting without idx');
+      const insertQueryWithoutIdx = `
+        INSERT INTO n8n_chat_histories (session_id, message, customer)
+        VALUES ($1, $2, NULL)
+      `;
+      await pool.query(insertQueryWithoutIdx, [sessionId, JSON.stringify(messageJson)]);
+      console.log(`Successfully saved ${role} message to Postgres memory (without idx)`);
+    }
   } catch (error) {
     console.error('Error saving chat message to Postgres:', error);
     console.error('Memory will not be persisted, but conversation will continue');

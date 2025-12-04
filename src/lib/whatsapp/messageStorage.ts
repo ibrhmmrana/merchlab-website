@@ -46,34 +46,24 @@ export async function saveWhatsAppMessage(
   const supabase = getSupabaseAdmin();
   
   // Try to get the current max idx to increment (if column exists)
+  // Note: chatbot_history table has idx column, but Supabase schema cache might not see it
   let nextIdx: number | undefined = undefined;
   try {
-    // Try idx first, fallback to id
-    const { data: maxDataIdx } = await supabase
+    // First try to get max id and use that as idx (since they should be similar)
+    const { data: maxDataId, error: idError } = await supabase
       .from('chatbot_history')
-      .select('idx')
-      .order('idx', { ascending: false })
+      .select('id')
+      .order('id', { ascending: false })
       .limit(1)
       .maybeSingle();
     
-    if (maxDataIdx?.idx !== undefined && maxDataIdx.idx !== null) {
-      nextIdx = (maxDataIdx.idx as number) + 1;
-    } else {
-      // Fallback to id
-      const { data: maxDataId } = await supabase
-        .from('chatbot_history')
-        .select('id')
-        .order('id', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (maxDataId?.id !== undefined && maxDataId.id !== null) {
-        nextIdx = (maxDataId.id as number) + 1;
-      }
+    if (!idError && maxDataId?.id !== undefined && maxDataId.id !== null) {
+      // Use id + 1 as idx (they should be in sync)
+      nextIdx = (maxDataId.id as number) + 1;
     }
   } catch (error) {
-    // idx/id column doesn't exist or query failed, that's okay - we'll insert without it
-    console.log('idx/id column not found or query failed, inserting without idx');
+    // Query failed, that's okay - we'll insert without idx
+    console.log('Could not get max id for idx calculation, inserting without idx');
   }
   
   // Build message object with all required fields
