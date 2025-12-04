@@ -48,6 +48,9 @@ IMPORTANT GUIDELINES:
 When checking order status:
 - Ask the customer for their invoice number
 - Once provided, use the get_order_status tool to check
+- The tool will return the order status and customer information
+- Always acknowledge the customer by name when providing order status (e.g., "Hi [Customer Name], your order...")
+- If customer information is available, personalize your response
 - Report the status in a friendly, clear manner
 - If the order is not found, apologize and ask them to verify the invoice number`;
 
@@ -128,8 +131,8 @@ export async function processMessage(
         const args = JSON.parse(toolCall.function.arguments) as { invoice_number: string };
         const invoiceNumber = args.invoice_number;
         
-        // Get order status
-        const orderStatus = await getOrderStatus(invoiceNumber);
+        // Get order status with customer information
+        const orderInfo = await getOrderStatus(invoiceNumber);
         
         // Add tool response to messages
         // Type guard ensures toolCall is a function tool call
@@ -150,12 +153,24 @@ export async function processMessage(
           });
         }
         
+        // Build tool response with order status and customer info
+        let toolResponse = '';
+        if (orderInfo) {
+          toolResponse = `Order status: ${orderInfo.status}`;
+          if (orderInfo.customer) {
+            toolResponse += `\nCustomer: ${orderInfo.customer.name}`;
+            if (orderInfo.customer.company && orderInfo.customer.company !== '-') {
+              toolResponse += ` (${orderInfo.customer.company})`;
+            }
+          }
+        } else {
+          toolResponse = `Order not found for invoice number: ${invoiceNumber}. Please verify the invoice number.`;
+        }
+        
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: orderStatus 
-            ? `Order status: ${orderStatus}`
-            : `Order not found for invoice number: ${invoiceNumber}. Please verify the invoice number.`,
+          content: toolResponse,
         });
         
         // Get final response from AI
