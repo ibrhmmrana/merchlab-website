@@ -63,8 +63,11 @@ When checking order status:
 When handling quote requests:
 - If a customer asks about their quote, wants to see their quote, needs the quote PDF, or asks "can you send me my quote", use the get_quote_info tool
 - Ask for the quote number if not provided (format: "Q553-HFKTH" or "ML-DM618")
-- The tool will return quote information including a PDF URL
+- The tool will return quote information including total amount, items, and all quote details
+- You can share ALL quote information with the customer EXCEPT base_price and beforeVAT fields (these are internal costs and should never be mentioned)
 - Always acknowledge the customer by name when providing quote information
+- If asked about the quote total, items, quantities, descriptions, or any other quote details, feel free to provide that information
+- The total amount is the final price the customer will pay (including VAT if applicable)
 - Provide a friendly message confirming you're sending their quote PDF
 - The PDF will be sent automatically after your message`;
 
@@ -298,6 +301,7 @@ export async function processMessage(
         }
         
         // Build tool response with quote information
+        // Include all shareable details (excluding base_price and beforeVAT)
         let toolResponse = '';
         if (quoteInfo) {
           toolResponse = `Quote found: ${quoteInfo.quoteNo}`;
@@ -315,7 +319,17 @@ export async function processMessage(
             });
             toolResponse += `\nCreated: ${createdDate}`;
           }
+          if (quoteInfo.value !== null) {
+            const formattedValue = new Intl.NumberFormat('en-ZA', {
+              style: 'currency',
+              currency: 'ZAR',
+            }).format(quoteInfo.value);
+            toolResponse += `\nTotal Amount: ${formattedValue}`;
+          }
           toolResponse += `\nPDF URL: ${quoteInfo.pdfUrl}`;
+          
+          // Include all shareable quote details as JSON for the AI to reference
+          toolResponse += `\n\nQuote Details (shareable with customer):\n${JSON.stringify(quoteInfo.shareableDetails, null, 2)}`;
         } else {
           toolResponse = `Quote not found for quote number: ${quoteNumber}. Please verify the quote number.`;
         }

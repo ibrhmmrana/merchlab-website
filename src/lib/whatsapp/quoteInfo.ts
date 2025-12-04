@@ -69,14 +69,15 @@ function formatPdfUrl(quoteNo: string): string {
 
 /**
  * Get quote information by quote number
- * Returns quote details including customer info, PDF URL, and creation date
+ * Returns quote details including customer info, PDF URL, creation date, total amount, and shareable quote details
  */
 export interface QuoteInfo {
   quoteNo: string;
   customer: CustomerInfo | null;
   pdfUrl: string;
   createdAt: string | null;
-  value: number | null;
+  value: number | null; // Grand total amount
+  shareableDetails: Record<string, unknown>; // All quote details except base_price and beforeVAT
 }
 
 export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | null> {
@@ -115,12 +116,14 @@ export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | nul
       if (altData) {
         const customer = extractCustomerFromPayload(altData.payload);
         const value = parseGrandTotal(altData.payload);
+        const shareableDetails = extractShareableQuoteDetails(altData.payload);
         return {
           quoteNo: altData.quote_no,
           customer,
           pdfUrl: formatPdfUrl(altData.quote_no),
           createdAt: altData.created_at,
           value,
+          shareableDetails,
         };
       }
     }
@@ -130,6 +133,7 @@ export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | nul
 
   const customer = extractCustomerFromPayload(data.payload);
   const value = parseGrandTotal(data.payload);
+  const shareableDetails = extractShareableQuoteDetails(data.payload);
   
   return {
     quoteNo: data.quote_no,
@@ -137,15 +141,27 @@ export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | nul
     pdfUrl: formatPdfUrl(data.quote_no),
     createdAt: data.created_at,
     value,
+    shareableDetails,
   };
 }
 
-// Parse grand total from payload (reused from metrics)
+// Parse grand total from payload (matches metrics.ts structure)
 function parseGrandTotal(payload: unknown): number | null {
   const p = parsePayload(payload);
   if (!p) return null;
   
-  // Try different possible field names for grand total
+  // Check totals.grand_total first (standard structure)
+  const totals = p.totals as Record<string, unknown> | undefined;
+  if (totals?.grand_total) {
+    const total = totals.grand_total;
+    if (typeof total === 'number') return total;
+    if (typeof total === 'string') {
+      const parsed = parseFloat(total);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  
+  // Fallback to other possible field names
   const grandTotal = p.grandTotal ?? p.grand_total ?? p.total ?? p.totalCost ?? p.total_cost;
   
   if (typeof grandTotal === 'number') {
@@ -160,5 +176,42 @@ function parseGrandTotal(payload: unknown): number | null {
   }
   
   return null;
+}
+
+// Extract shareable quote details from payload (excluding base_price and beforeVAT)
+function extractShareableQuoteDetails(payload: unknown): Record<string, unknown> {
+  const p = parsePayload(payload);
+  if (!p) return {};
+  
+  const shareable: Record<string, unknown> = {};
+  
+  // Copy all fields except base_price and beforeVAT
+  for (const [key, value] of Object.entries(p)) {
+    // Skip base_price and beforeVAT (case-insensitive)
+    if (key.toLowerCase() === 'base_price' || key.toLowerCase() === 'beforevat') {
+      continue;
+    }
+    
+    // If it's an items array, clean each item
+    if (key === 'items' && Array.isArray(value)) {
+      shareable[key] = value.map((item: unknown) => {
+        if (typeof item === 'object' && item !== null) {
+          const cleanedItem: Record<string, unknown> = {};
+          for (const [itemKey, itemValue] of Object.entries(item as Record<string, unknown>)) {
+            // Skip base_price and beforeVAT in items too
+            if (itemKey.toLowerCase() !== 'base_price' && itemKey.toLowerCase() !== 'beforevat') {
+              cleanedItem[itemKey] = itemValue;
+            }
+          }
+          return cleanedItem;
+        }
+        return item;
+      });
+    } else {
+      shareable[key] = value;
+    }
+  }
+  
+  return shareable;
 }
 
