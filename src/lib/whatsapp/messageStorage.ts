@@ -48,19 +48,32 @@ export async function saveWhatsAppMessage(
   // Try to get the current max idx to increment (if column exists)
   let nextIdx: number | undefined = undefined;
   try {
-    const { data: maxData } = await supabase
+    // Try idx first, fallback to id
+    const { data: maxDataIdx } = await supabase
       .from('chatbot_history')
       .select('idx')
       .order('idx', { ascending: false })
       .limit(1)
       .maybeSingle();
     
-    if (maxData?.idx !== undefined && maxData.idx !== null) {
-      nextIdx = (maxData.idx as number) + 1;
+    if (maxDataIdx?.idx !== undefined && maxDataIdx.idx !== null) {
+      nextIdx = (maxDataIdx.idx as number) + 1;
+    } else {
+      // Fallback to id
+      const { data: maxDataId } = await supabase
+        .from('chatbot_history')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (maxDataId?.id !== undefined && maxDataId.id !== null) {
+        nextIdx = (maxDataId.id as number) + 1;
+      }
     }
   } catch (error) {
-    // idx column doesn't exist, that's okay - we'll insert without it
-    console.log('idx column not found, inserting without idx');
+    // idx/id column doesn't exist or query failed, that's okay - we'll insert without it
+    console.log('idx/id column not found or query failed, inserting without idx');
   }
   
   // Build message object with all required fields

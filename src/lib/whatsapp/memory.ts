@@ -10,6 +10,7 @@ export interface ChatMessage {
 /**
  * Get chat history from Postgres n8n_chat_histories table
  * Returns the last N messages for a given session
+ * The table structure: idx, id, session_id, message (JSON string), customer
  */
 export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> {
   const pool = getPostgresPool();
@@ -17,82 +18,54 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
   try {
     console.log(`Fetching chat history from Postgres for session: ${sessionId}`);
     // Query the n8n_chat_histories table
-    // Based on error hint, the column is likely "message" (singular), not "messages"
-    // Try different possible column names for messages
+    // Table structure: idx, id, session_id, message (JSON string with type and content), customer
     const query = `
-      SELECT message, messages, history, chat_history
+      SELECT idx, id, session_id, message, customer
       FROM n8n_chat_histories 
       WHERE session_id = $1 
-      ORDER BY created_at DESC NULLS LAST, updated_at DESC NULLS LAST
-      LIMIT 1
+      ORDER BY idx ASC
+      LIMIT $2
     `;
     
-    const result = await pool.query(query, [sessionId]);
+    const result = await pool.query(query, [sessionId, CONTEXT_WINDOW_LENGTH]);
     
     if (result.rows.length === 0) {
       console.log(`No chat history found in Postgres for session: ${sessionId}`);
       return [];
     }
     
-    console.log(`Found chat history record in Postgres for session: ${sessionId}`);
+    console.log(`Found ${result.rows.length} chat history records in Postgres for session: ${sessionId}`);
     
-    // Try to get messages from different possible column names
-    const row = result.rows[0] as Record<string, unknown>;
-    let messages: unknown[] = [];
+    // Convert rows to ChatMessage format
+    const chatMessages: ChatMessage[] = [];
     
-    // Try "message" first (singular, as suggested by error hint)
-    if (row.message) {
-      if (Array.isArray(row.message)) {
-        messages = row.message;
-      } else if (typeof row.message === 'string') {
-        try {
-          const parsed = JSON.parse(row.message);
-          messages = Array.isArray(parsed) ? parsed : [];
-        } catch {
-          messages = [];
-        }
-      }
-    } else if (row.messages && Array.isArray(row.messages)) {
-      messages = row.messages;
-    } else if (row.history && Array.isArray(row.history)) {
-      messages = row.history;
-    } else if (row.chat_history && Array.isArray(row.chat_history)) {
-      messages = row.chat_history;
-    } else if (row.messages && typeof row.messages === 'string') {
-      // If it's a JSON string, parse it
+    for (const row of result.rows) {
       try {
-        const parsed = JSON.parse(row.messages);
-        if (Array.isArray(parsed)) {
-          messages = parsed;
+        // Parse the message JSON string
+        const messageData = typeof row.message === 'string' 
+          ? JSON.parse(row.message) 
+          : row.message;
+        
+        if (!messageData || typeof messageData !== 'object') {
+          continue;
         }
-      } catch {
-        messages = [];
+        
+        // Extract content and type from message
+        const content = messageData.content || '';
+        const messageType = messageData.type || 'human';
+        const role = messageType === 'ai' ? 'ai' : 'human';
+        
+        if (content && typeof content === 'string' && content.trim().length > 0) {
+          chatMessages.push({
+            role,
+            content: content.trim(),
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing message from row:', error);
+        // Skip this message and continue
       }
     }
-    
-    if (!Array.isArray(messages)) {
-      return [];
-    }
-    
-    // Get the last N messages (context window)
-    const recentMessages = messages.slice(-CONTEXT_WINDOW_LENGTH);
-    
-    // Convert to ChatMessage format
-    // Handle different possible message structures
-    const chatMessages = recentMessages.map((msg: unknown) => {
-      if (!msg || typeof msg !== 'object') {
-        return null;
-      }
-      const msgObj = msg as Record<string, unknown>;
-      // Try different possible field names
-      const content = msgObj.content || msgObj.text || msgObj.message || '';
-      const role = msgObj.role === 'ai' || msgObj.type === 'ai' ? 'ai' : 'human';
-      
-      return {
-        role,
-        content: String(content),
-      };
-    }).filter((msg): msg is ChatMessage => msg !== null && msg.content.length > 0);
     
     console.log(`Parsed ${chatMessages.length} messages from Postgres history`);
     return chatMessages;
@@ -107,108 +80,40 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
 
 /**
  * Save a message to Postgres n8n_chat_histories table
+ * Table structure: idx, id, session_id, message (JSON string), customer
+ * Each message is stored as a separate row
  */
 export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', content: string): Promise<void> {
   const pool = getPostgresPool();
   
   try {
     console.log(`Saving ${role} message to Postgres memory for session: ${sessionId}`);
-    // First, try to get existing messages for this session
-    // Based on error hint, the column is likely "message" (singular)
-    const selectQuery = `
-      SELECT message, messages, history, chat_history, created_at, updated_at
-      FROM n8n_chat_histories 
-      WHERE session_id = $1 
-      ORDER BY created_at DESC NULLS LAST, updated_at DESC NULLS LAST
-      LIMIT 1
+    
+    // Get the next idx value
+    const maxIdxQuery = `
+      SELECT MAX(idx) as max_idx
+      FROM n8n_chat_histories
+      WHERE session_id = $1
+    `;
+    const maxIdxResult = await pool.query(maxIdxQuery, [sessionId]);
+    const nextIdx = (maxIdxResult.rows[0]?.max_idx || 0) + 1;
+    
+    // Prepare message JSON
+    const messageJson = {
+      type: role,
+      content: content,
+      additional_kwargs: {},
+      response_metadata: {},
+    };
+    
+    // Insert new row for this message
+    const insertQuery = `
+      INSERT INTO n8n_chat_histories (session_id, idx, message, customer)
+      VALUES ($1, $2, $3, NULL)
     `;
     
-    const selectResult = await pool.query(selectQuery, [sessionId]);
-    
-    let messages: unknown[] = [];
-    let messagesColumn = 'message'; // Default to singular (as per error hint)
-    
-    if (selectResult.rows.length > 0) {
-      const row = selectResult.rows[0] as Record<string, unknown>;
-      // Try to find which column has the messages - try "message" first
-      if (row.message) {
-        if (Array.isArray(row.message)) {
-          messages = row.message;
-        } else if (typeof row.message === 'string') {
-          try {
-            const parsed = JSON.parse(row.message);
-            messages = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            messages = [];
-          }
-        }
-        messagesColumn = 'message';
-      } else if (row.messages) {
-        if (Array.isArray(row.messages)) {
-          messages = row.messages;
-        } else if (typeof row.messages === 'string') {
-          try {
-            const parsed = JSON.parse(row.messages);
-            messages = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            messages = [];
-          }
-        }
-        messagesColumn = 'messages';
-      } else if (row.history) {
-        if (Array.isArray(row.history)) {
-          messages = row.history;
-        } else if (typeof row.history === 'string') {
-          try {
-            const parsed = JSON.parse(row.history);
-            messages = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            messages = [];
-          }
-        }
-        messagesColumn = 'history';
-      } else if (row.chat_history) {
-        if (Array.isArray(row.chat_history)) {
-          messages = row.chat_history;
-        } else if (typeof row.chat_history === 'string') {
-          try {
-            const parsed = JSON.parse(row.chat_history);
-            messages = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            messages = [];
-          }
-        }
-        messagesColumn = 'chat_history';
-      }
-    }
-    
-    // Add the new message
-    messages.push({
-      role,
-      content,
-      timestamp: new Date().toISOString(),
-    });
-    
-    // Update or insert
-    if (selectResult.rows.length > 0) {
-      // Update existing record
-      const updateQuery = `
-        UPDATE n8n_chat_histories 
-        SET ${messagesColumn} = $1, updated_at = NOW() 
-        WHERE session_id = $2
-      `;
-      await pool.query(updateQuery, [JSON.stringify(messages), sessionId]);
-      console.log(`Updated existing chat history record for session: ${sessionId}`);
-    } else {
-      // Insert new record
-      const insertQuery = `
-        INSERT INTO n8n_chat_histories (session_id, ${messagesColumn}, created_at, updated_at)
-        VALUES ($1, $2, NOW(), NOW())
-      `;
-      await pool.query(insertQuery, [sessionId, JSON.stringify(messages)]);
-      console.log(`Inserted new chat history record for session: ${sessionId}`);
-    }
-    console.log(`Successfully saved ${role} message to Postgres memory`);
+    await pool.query(insertQuery, [sessionId, nextIdx, JSON.stringify(messageJson)]);
+    console.log(`Successfully saved ${role} message to Postgres memory (idx: ${nextIdx})`);
   } catch (error) {
     console.error('Error saving chat message to Postgres:', error);
     console.error('Memory will not be persisted, but conversation will continue');
