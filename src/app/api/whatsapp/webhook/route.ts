@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveWhatsAppMessage } from '@/lib/whatsapp/messageStorage';
 import { processMessage } from '@/lib/whatsapp/aiAgent';
-import { sendWhatsAppMessage } from '@/lib/whatsapp/sender';
+import { sendWhatsAppMessage, sendWhatsAppDocument } from '@/lib/whatsapp/sender';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -190,6 +190,23 @@ export async function POST(request: NextRequest) {
         // Send response via WhatsApp
         try {
           await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
+          
+          // If quote PDF URL is present, send the document
+          if (aiResponse.quotePdfUrl && aiResponse.quoteCaption) {
+            try {
+              console.log('Sending quote PDF:', aiResponse.quotePdfUrl);
+              await sendWhatsAppDocument(
+                customerNumber,
+                aiResponse.quotePdfUrl,
+                aiResponse.quoteCaption,
+                `quote-${Date.now()}.pdf`
+              );
+              console.log('Quote PDF sent successfully');
+            } catch (docError) {
+              console.error('Error sending quote PDF:', docError);
+              // Don't throw - text message was already sent
+            }
+          }
         } catch (error) {
           console.error('Error sending WhatsApp message:', error);
           // Don't throw - we've already saved the response

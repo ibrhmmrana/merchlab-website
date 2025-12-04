@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { getChatHistory, saveChatMessage } from './memory';
 import { getOrderStatus } from './orderStatus';
+import { getQuoteInfo } from './quoteInfo';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -23,6 +24,8 @@ export interface AIResponse {
   invalid_tool_calls?: ToolCall[];
   additional_kwargs?: Record<string, unknown>;
   response_metadata?: Record<string, unknown>;
+  quotePdfUrl?: string; // PDF URL to send if quote info was retrieved
+  quoteCaption?: string; // Caption for the PDF document
 }
 
 /**
@@ -54,7 +57,15 @@ When checking order status:
 - Always acknowledge the customer by name when providing order status (e.g., "Hi [Customer Name], your order...")
 - If customer information is available, personalize your response
 - Report the status in a friendly, clear manner
-- If the order is not found, apologize and ask them to verify the invoice number`;
+- If the order is not found, apologize and ask them to verify the invoice number
+
+When handling quote requests:
+- If a customer asks about their quote, wants to see their quote, needs the quote PDF, or asks "can you send me my quote", use the get_quote_info tool
+- Ask for the quote number if not provided (format: "Q553-HFKTH" or "ML-DM618")
+- The tool will return quote information including a PDF URL
+- Always acknowledge the customer by name when providing quote information
+- Provide a friendly message confirming you're sending their quote PDF
+- The PDF will be sent automatically after your message`;
 
 /**
  * Process a message with the AI agent
@@ -118,6 +129,23 @@ export async function processMessage(
                 },
               },
               required: ['invoice_number'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_quote_info',
+            description: 'Get quote information by quote number. The quote number can be in formats like "Q553-HFKTH" or "ML-DM618". Use this when customers ask about their quote, want to see their quote, need the quote PDF, or want to know quote details. Always ask for the quote number if not provided.',
+            parameters: {
+              type: 'object',
+              properties: {
+                quote_number: {
+                  type: 'string',
+                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618")',
+                },
+              },
+              required: ['quote_number'],
             },
           },
         },
@@ -231,6 +259,123 @@ export async function processMessage(
             model: finalCompletion.model,
             finish_reason: finalCompletion.choices[0].finish_reason,
           },
+        };
+        
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+        
+        return aiResponse;
+      }
+      
+      // Handle get_quote_info tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_quote_info') {
+        const args = JSON.parse(toolCall.function.arguments) as { quote_number: string };
+        const quoteNumber = args.quote_number;
+        
+        // Get quote information
+        const quoteInfo = await getQuoteInfo(quoteNumber);
+        
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'get_quote_info',
+                  arguments: toolCall.function.arguments,
+                },
+              },
+            ],
+          });
+        }
+        
+        // Build tool response with quote information
+        let toolResponse = '';
+        if (quoteInfo) {
+          toolResponse = `Quote found: ${quoteInfo.quoteNo}`;
+          if (quoteInfo.customer) {
+            toolResponse += `\nCustomer: ${quoteInfo.customer.name}`;
+            if (quoteInfo.customer.company && quoteInfo.customer.company !== '-') {
+              toolResponse += ` (${quoteInfo.customer.company})`;
+            }
+          }
+          if (quoteInfo.createdAt) {
+            const createdDate = new Date(quoteInfo.createdAt).toLocaleDateString('en-ZA', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            });
+            toolResponse += `\nCreated: ${createdDate}`;
+          }
+          toolResponse += `\nPDF URL: ${quoteInfo.pdfUrl}`;
+        } else {
+          toolResponse = `Quote not found for quote number: ${quoteNumber}. Please verify the quote number.`;
+        }
+        
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResponse,
+        });
+        
+        // Add customer information to system context if available
+        if (quoteInfo?.customer) {
+          const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${quoteInfo.customer.name}${quoteInfo.customer.company && quoteInfo.customer.company !== '-' ? ` from ${quoteInfo.customer.company}` : ''}.${quoteInfo.customer.email && quoteInfo.customer.email !== '-' ? ` Their email is ${quoteInfo.customer.email}.` : ''}${quoteInfo.customer.phone && quoteInfo.customer.phone !== '-' ? ` Their phone number is ${quoteInfo.customer.phone}.` : ''} Remember this information for the rest of the conversation.`;
+          
+          const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+          if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
+            messages[systemMessageIndex].content += customerContext;
+          }
+        }
+        
+        // Get final response from AI
+        const finalCompletion = await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+        });
+        
+        const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+        
+        // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
+          }
+        }
+        
+        // Build caption for PDF
+        const quoteCaption = quoteInfo 
+          ? `Your quote ${quoteInfo.quoteNo}${quoteInfo.customer ? ` for ${quoteInfo.customer.name}` : ''} 📄`
+          : 'Quote PDF';
+        
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: toolCalls,
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: finalCompletion.model,
+            finish_reason: finalCompletion.choices[0].finish_reason,
+          },
+          quotePdfUrl: quoteInfo?.pdfUrl,
+          quoteCaption: quoteInfo ? quoteCaption : undefined,
         };
         
         // Save messages to memory
