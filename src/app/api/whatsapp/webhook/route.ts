@@ -120,8 +120,7 @@ export async function POST(request: NextRequest) {
       try {
         const aiResponse = await processMessage(
           sessionId,
-          messageText,
-          customerName || undefined
+          messageText
         );
         
         // Save AI response to Supabase with all metadata

@@ -1,14 +1,23 @@
 import { getSupabaseAdmin } from '../supabaseAdmin';
 
+interface ToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface WhatsAppMessage {
   session_id: string;
   message: {
     type: 'human' | 'ai';
     content: string;
-    additional_kwargs?: Record<string, any>;
-    response_metadata?: Record<string, any>;
-    tool_calls?: any[];
-    invalid_tool_calls?: any[];
+    additional_kwargs?: Record<string, unknown>;
+    response_metadata?: Record<string, unknown>;
+    tool_calls?: ToolCall[];
+    invalid_tool_calls?: ToolCall[];
   };
   customer: {
     number: string;
@@ -20,17 +29,19 @@ export interface WhatsAppMessage {
 /**
  * Save a WhatsApp message to Supabase chatbot_history table
  */
+interface AIMetadata {
+  tool_calls?: ToolCall[];
+  invalid_tool_calls?: ToolCall[];
+  additional_kwargs?: Record<string, unknown>;
+  response_metadata?: Record<string, unknown>;
+}
+
 export async function saveWhatsAppMessage(
   sessionId: string,
   messageType: 'human' | 'ai',
   content: string,
   customer: { number: string; name?: string },
-  aiMetadata?: {
-    tool_calls?: any[];
-    invalid_tool_calls?: any[];
-    additional_kwargs?: Record<string, any>;
-    response_metadata?: Record<string, any>;
-  }
+  aiMetadata?: AIMetadata
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
   
@@ -45,7 +56,7 @@ export async function saveWhatsAppMessage(
   const nextIdx = (maxData?.idx || 0) + 1;
   
   // Build message object with all required fields
-  const messageObject: any = {
+  const messageObject: WhatsAppMessage['message'] = {
     type: messageType,
     content,
     additional_kwargs: aiMetadata?.additional_kwargs || {},

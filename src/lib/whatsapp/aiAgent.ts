@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { getChatHistory, saveChatMessage, type ChatMessage } from './memory';
+import { getChatHistory, saveChatMessage } from './memory';
 import { getOrderStatus } from './orderStatus';
 
 const openai = new OpenAI({
@@ -8,12 +8,21 @@ const openai = new OpenAI({
 
 const MODEL = 'gpt-4o-mini';
 
+interface ToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface AIResponse {
   content: string;
-  tool_calls?: any[];
-  invalid_tool_calls?: any[];
-  additional_kwargs?: Record<string, any>;
-  response_metadata?: Record<string, any>;
+  tool_calls?: ToolCall[];
+  invalid_tool_calls?: ToolCall[];
+  additional_kwargs?: Record<string, unknown>;
+  response_metadata?: Record<string, unknown>;
 }
 
 /**
@@ -55,8 +64,7 @@ export interface AIResponse {
  */
 export async function processMessage(
   sessionId: string,
-  userMessage: string,
-  customerName?: string
+  userMessage: string
 ): Promise<AIResponse> {
   try {
     // Get chat history from Postgres
@@ -163,16 +171,23 @@ export async function processMessage(
         const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
         
         // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            toolCalls.push({
+              id: tc.id,
+              type: tc.type,
+              function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments,
+              },
+            });
+          }
+        }
+        
         const aiResponse: AIResponse = {
           content: aiResponseContent,
-          tool_calls: finalCompletion.choices[0].message.tool_calls?.map((tc: any) => ({
-            id: tc.id,
-            type: tc.type,
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments,
-            },
-          })) || [],
+          tool_calls: toolCalls,
           invalid_tool_calls: [],
           additional_kwargs: {},
           response_metadata: {
@@ -193,16 +208,23 @@ export async function processMessage(
     const aiResponseContent = response.message.content || 'I apologize, but I encountered an error processing your request.';
     
     // Extract metadata from the completion
+    const toolCalls: ToolCall[] = [];
+    if (response.message.tool_calls) {
+      for (const tc of response.message.tool_calls) {
+        toolCalls.push({
+          id: tc.id,
+          type: tc.type,
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments,
+          },
+        });
+      }
+    }
+    
     const aiResponse: AIResponse = {
       content: aiResponseContent,
-      tool_calls: response.message.tool_calls?.map((tc: any) => ({
-        id: tc.id,
-        type: tc.type,
-        function: {
-          name: tc.function.name,
-          arguments: tc.function.arguments,
-        },
-      })) || [],
+      tool_calls: toolCalls,
       invalid_tool_calls: [],
       additional_kwargs: {},
       response_metadata: {

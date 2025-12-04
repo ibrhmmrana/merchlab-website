@@ -34,8 +34,8 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     }
     
     // Try to get messages from different possible column names
-    const row = result.rows[0];
-    let messages: any[] = [];
+    const row = result.rows[0] as Record<string, unknown>;
+    let messages: unknown[] = [];
     
     if (row.messages && Array.isArray(row.messages)) {
       messages = row.messages;
@@ -46,7 +46,10 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     } else if (row.messages && typeof row.messages === 'string') {
       // If it's a JSON string, parse it
       try {
-        messages = JSON.parse(row.messages);
+        const parsed = JSON.parse(row.messages);
+        if (Array.isArray(parsed)) {
+          messages = parsed;
+        }
       } catch {
         messages = [];
       }
@@ -61,16 +64,20 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     
     // Convert to ChatMessage format
     // Handle different possible message structures
-    return recentMessages.map((msg: any) => {
+    return recentMessages.map((msg: unknown) => {
+      if (!msg || typeof msg !== 'object') {
+        return null;
+      }
+      const msgObj = msg as Record<string, unknown>;
       // Try different possible field names
-      const content = msg.content || msg.text || msg.message || '';
-      const role = msg.role === 'ai' || msg.type === 'ai' ? 'ai' : 'human';
+      const content = msgObj.content || msgObj.text || msgObj.message || '';
+      const role = msgObj.role === 'ai' || msgObj.type === 'ai' ? 'ai' : 'human';
       
       return {
         role,
         content: String(content),
       };
-    }).filter((msg) => msg.content.length > 0);
+    }).filter((msg): msg is ChatMessage => msg !== null && msg.content.length > 0);
   } catch (error) {
     console.error('Error fetching chat history:', error);
     // If table doesn't exist or query fails, return empty array
@@ -97,20 +104,47 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
     
     const selectResult = await pool.query(selectQuery, [sessionId]);
     
-    let messages: any[] = [];
+    let messages: unknown[] = [];
     let messagesColumn = 'messages'; // Default column name
     
     if (selectResult.rows.length > 0) {
-      const row = selectResult.rows[0];
+      const row = selectResult.rows[0] as Record<string, unknown>;
       // Try to find which column has the messages
       if (row.messages) {
-        messages = Array.isArray(row.messages) ? row.messages : (typeof row.messages === 'string' ? JSON.parse(row.messages) : []);
+        if (Array.isArray(row.messages)) {
+          messages = row.messages;
+        } else if (typeof row.messages === 'string') {
+          try {
+            const parsed = JSON.parse(row.messages);
+            messages = Array.isArray(parsed) ? parsed : [];
+          } catch {
+            messages = [];
+          }
+        }
         messagesColumn = 'messages';
       } else if (row.history) {
-        messages = Array.isArray(row.history) ? row.history : (typeof row.history === 'string' ? JSON.parse(row.history) : []);
+        if (Array.isArray(row.history)) {
+          messages = row.history;
+        } else if (typeof row.history === 'string') {
+          try {
+            const parsed = JSON.parse(row.history);
+            messages = Array.isArray(parsed) ? parsed : [];
+          } catch {
+            messages = [];
+          }
+        }
         messagesColumn = 'history';
       } else if (row.chat_history) {
-        messages = Array.isArray(row.chat_history) ? row.chat_history : (typeof row.chat_history === 'string' ? JSON.parse(row.chat_history) : []);
+        if (Array.isArray(row.chat_history)) {
+          messages = row.chat_history;
+        } else if (typeof row.chat_history === 'string') {
+          try {
+            const parsed = JSON.parse(row.chat_history);
+            messages = Array.isArray(parsed) ? parsed : [];
+          } catch {
+            messages = [];
+          }
+        }
         messagesColumn = 'chat_history';
       }
     }

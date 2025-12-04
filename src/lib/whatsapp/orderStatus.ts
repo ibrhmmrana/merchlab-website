@@ -45,25 +45,43 @@ async function fetchOrdersFromBarron(): Promise<Order[]> {
   const data = await response.json();
   
   // The API returns an array with one object containing results
-  if (Array.isArray(data) && data.length > 0 && data[0].results) {
-    return data[0].results.map((order: any) => ({
-      orderId: order.orderId,
-      customerReference: order.customerReference,
-      status: order.status,
-      orderDate: order.orderDate,
-      isDelivery: order.isDelivery,
-    }));
+  if (Array.isArray(data) && data.length > 0) {
+    const firstItem = data[0] as { results?: unknown[] };
+    if (firstItem.results && Array.isArray(firstItem.results)) {
+      return firstItem.results.map((order: unknown) => {
+        if (!order || typeof order !== 'object') {
+          throw new Error('Invalid order format');
+        }
+        const orderObj = order as Record<string, unknown>;
+        return {
+          orderId: String(orderObj.orderId || ''),
+          customerReference: String(orderObj.customerReference || ''),
+          status: String(orderObj.status || ''),
+          orderDate: String(orderObj.orderDate || ''),
+          isDelivery: Boolean(orderObj.isDelivery),
+        };
+      });
+    }
   }
   
   // Try alternative structure
-  if (data && typeof data === 'object' && !Array.isArray(data) && data.results) {
-    return data.results.map((order: any) => ({
-      orderId: order.orderId,
-      customerReference: order.customerReference,
-      status: order.status,
-      orderDate: order.orderDate,
-      isDelivery: order.isDelivery,
-    }));
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const dataObj = data as { results?: unknown[] };
+    if (dataObj.results && Array.isArray(dataObj.results)) {
+      return dataObj.results.map((order: unknown) => {
+        if (!order || typeof order !== 'object') {
+          throw new Error('Invalid order format');
+        }
+        const orderObj = order as Record<string, unknown>;
+        return {
+          orderId: String(orderObj.orderId || ''),
+          customerReference: String(orderObj.customerReference || ''),
+          status: String(orderObj.status || ''),
+          orderDate: String(orderObj.orderDate || ''),
+          isDelivery: Boolean(orderObj.isDelivery),
+        };
+      });
+    }
   }
   
   return [];
