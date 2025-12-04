@@ -79,7 +79,7 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     
     // Convert to ChatMessage format
     // Handle different possible message structures
-    return recentMessages.map((msg: unknown) => {
+    const chatMessages = recentMessages.map((msg: unknown) => {
       if (!msg || typeof msg !== 'object') {
         return null;
       }
@@ -94,8 +94,8 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
       };
     }).filter((msg): msg is ChatMessage => msg !== null && msg.content.length > 0);
     
-    console.log(`Parsed ${recentMessages.length} messages from Postgres history`);
-    return recentMessages;
+    console.log(`Parsed ${chatMessages.length} messages from Postgres history`);
+    return chatMessages;
   } catch (error) {
     console.error('Error fetching chat history from Postgres:', error);
     console.error('Falling back to empty history - memory will not be available');
