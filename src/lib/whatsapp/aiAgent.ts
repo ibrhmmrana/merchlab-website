@@ -123,9 +123,8 @@ export async function processMessage(
     if (response.message.tool_calls && response.message.tool_calls.length > 0) {
       const toolCall = response.message.tool_calls[0];
       
-      // Type guard: check if it's a function tool call
-      if (toolCall.type === 'function' && toolCall.function.name === 'get_order_status') {
-        const args = JSON.parse(toolCall.function.arguments) as { invoice_number: string };
+      if (toolCall.function.name === 'get_order_status') {
+        const args = JSON.parse(toolCall.function.arguments);
         const invoiceNumber = args.invoice_number;
         
         // Get order status
@@ -167,14 +166,17 @@ export async function processMessage(
         const toolCalls: ToolCall[] = [];
         if (finalCompletion.choices[0].message.tool_calls) {
           for (const tc of finalCompletion.choices[0].message.tool_calls) {
-            toolCalls.push({
-              id: tc.id,
-              type: tc.type,
-              function: {
-                name: tc.function.name,
-                arguments: tc.function.arguments,
-              },
-            });
+            // Type guard: check if it's a function tool call
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
           }
         }
         
@@ -204,14 +206,17 @@ export async function processMessage(
     const toolCalls: ToolCall[] = [];
     if (response.message.tool_calls) {
       for (const tc of response.message.tool_calls) {
-        toolCalls.push({
-          id: tc.id,
-          type: tc.type,
-          function: {
-            name: tc.function.name,
-            arguments: tc.function.arguments,
-          },
-        });
+        // Type guard: check if it's a function tool call
+        if (tc.type === 'function' && 'function' in tc) {
+          toolCalls.push({
+            id: tc.id,
+            type: tc.type,
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments,
+            },
+          });
+        }
       }
     }
     
