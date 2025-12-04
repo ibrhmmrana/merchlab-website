@@ -198,6 +198,7 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
         WHERE session_id = $2
       `;
       await pool.query(updateQuery, [JSON.stringify(messages), sessionId]);
+      console.log(`Updated existing chat history record for session: ${sessionId}`);
     } else {
       // Insert new record
       const insertQuery = `
@@ -206,8 +207,6 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
       `;
       await pool.query(insertQuery, [sessionId, JSON.stringify(messages)]);
       console.log(`Inserted new chat history record for session: ${sessionId}`);
-    } else {
-      console.log(`Updated existing chat history record for session: ${sessionId}`);
     }
     console.log(`Successfully saved ${role} message to Postgres memory`);
   } catch (error) {
