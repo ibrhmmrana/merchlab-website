@@ -70,7 +70,26 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    // Try n8n webhook format (from user's reference)
+    // Try BotPenguin/n8n webhook format
+    // Format: { event: { value: { contacts: [...], messages: [...] }, field: "messages" } }
+    else if (body.event?.value) {
+      const eventValue = body.event.value;
+      const contacts = eventValue.contacts || [];
+      const messages = eventValue.messages || [];
+      
+      if (contacts.length > 0 && messages.length > 0) {
+        waId = contacts[0].wa_id;
+        customerName = contacts[0].profile?.name || waId || 'Unknown';
+        const message = messages[0];
+        // Only process text messages
+        if (message.type === 'text' && message.text?.body) {
+          messageText = message.text.body;
+        } else {
+          console.log('Skipping non-text message in BotPenguin format');
+        }
+      }
+    }
+    // Try nested body format (fallback for n8n)
     else if (body.body?.event?.value) {
       const eventValue = body.body.event.value;
       const contacts = eventValue.contacts || [];
@@ -81,10 +100,10 @@ export async function POST(request: NextRequest) {
         customerName = contacts[0].profile?.name || waId || 'Unknown';
         const message = messages[0];
         // Only process text messages
-        if (message.text?.body) {
+        if (message.type === 'text' && message.text?.body) {
           messageText = message.text.body;
         } else {
-          console.log('Skipping non-text message in n8n format');
+          console.log('Skipping non-text message in nested format');
         }
       }
     }
@@ -146,7 +165,7 @@ export async function POST(request: NextRequest) {
         
         // Send response via WhatsApp
         try {
-          await sendWhatsAppMessage(customerNumber, aiResponse.content);
+          await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
         } catch (error) {
           console.error('Error sending WhatsApp message:', error);
           // Don't throw - we've already saved the response
@@ -157,7 +176,7 @@ export async function POST(request: NextRequest) {
         // Send error message to customer
         const errorMessage = "I apologize, but I'm experiencing technical difficulties. Please try again in a moment or contact our support team.";
         try {
-          await sendWhatsAppMessage(customerNumber, errorMessage);
+          await sendWhatsAppMessage(customerNumber, errorMessage, customerName || undefined);
           await saveWhatsAppMessage(
             sessionId,
             'ai',

@@ -14,12 +14,9 @@ Replace `your-domain.com` with your actual domain name.
 Add these to your `.env` file:
 
 ```env
-# WhatsApp Business API
-WHATSAPP_CLIENT_ID=1151073903648784
-WHATSAPP_CLIENT_SECRET=your_client_secret_here
-WHATSAPP_BUSINESS_ACCOUNT_ID=1877523409779615
-WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id_here  # Optional: Use this if you have it, otherwise business account ID will be used
-WHATSAPP_ACCESS_TOKEN=your_access_token_here
+# WhatsApp / BotPenguin API
+BOTPENGUIN_API_KEY=your_botpenguin_api_key_here
+# Format: BP978*jakalm!987.674ffa3fbb598903fffdcbb8.6929ee033a9fd7c62aa1cb35.846365651892463
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_verify_token_here
 
 # OpenAI
