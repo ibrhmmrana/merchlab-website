@@ -61,18 +61,17 @@ When checking order status:
 - If the order is not found, apologize and ask them to verify the invoice number
 
 When handling quote requests:
-- IMPORTANT: Check the conversation history FIRST before calling get_quote_info tool
-- If quote information was already retrieved in recent messages, use that information to answer questions
-- Only call get_quote_info tool if: 1) Customer explicitly asks to resend/send the quote PDF, 2) The quote number is different from what was discussed, 3) Quote information is not in the conversation history
-- If customer asks follow-up questions about a quote already discussed (e.g., "What items are in the quote?", "What's the total?", "What's in quote Q548-RE6B4?"), use the information from the conversation history - DO NOT call the tool again
+- ALWAYS use the get_quote_info tool to get accurate quote information - do not rely on memory or conversation history
+- If a customer asks about their quote (items, total, quantities, descriptions, etc.), call get_quote_info tool to get the current quote data
+- If the customer asks to resend/send the quote PDF, call get_quote_info tool - the PDF will be sent automatically
+- If the customer asks follow-up questions about a quote (e.g., "What items are in my quote?", "What's the total?", "What products did I order?"), call get_quote_info tool again to get accurate information
 - Ask for the quote number if not provided (format: "Q553-HFKTH" or "ML-DM618")
-- The tool will return quote information including total amount, items, and all quote details
+- The tool will return quote information including total amount, items with quantities and descriptions, and all quote details
+- You MUST share the quote total amount with customers - it is the final price they will pay (including VAT if applicable)
 - You can share ALL quote information with the customer EXCEPT base_price and beforeVAT fields (these are internal costs and should never be mentioned)
 - Always acknowledge the customer by name when providing quote information
-- If asked about the quote total, items, quantities, descriptions, or any other quote details, feel free to provide that information from the conversation context
-- The total amount is the final price the customer will pay (including VAT if applicable)
-- When sending a quote PDF, provide a friendly message confirming you're sending it
-- The PDF will be sent automatically after your message`;
+- When answering questions about quote items, use the items array from the tool response to list products, quantities, descriptions, colors, sizes, etc.
+- When sending a quote PDF, the PDF will be sent automatically with a caption`;
 
 /**
  * Process a message with the AI agent
@@ -143,13 +142,13 @@ export async function processMessage(
           type: 'function',
           function: {
             name: 'get_quote_info',
-            description: 'Get quote information by quote number. ONLY use this tool if: 1) The customer is asking for a quote PDF to be sent, 2) The quote number is NEW or different from what was already discussed, 3) You need to retrieve quote information that is NOT already in the conversation history. DO NOT use this tool if the quote information was already retrieved in recent messages - instead, use the information from the conversation history to answer questions about items, totals, or other quote details.',
+            description: 'Get quote information by quote number. Use this tool whenever a customer asks about their quote, including: 1) When they ask to resend/send the quote PDF, 2) When they ask about quote details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about a quote (e.g., "What items are in my quote?", "What\'s the total?", "What products did I order?"). Always call this tool to get accurate, up-to-date quote information rather than relying on memory. The tool will return all quote details including items, quantities, descriptions, total amount, and customer information.',
             parameters: {
               type: 'object',
               properties: {
                 quote_number: {
                   type: 'string',
-                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618")',
+                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618"). If the customer mentions a quote number in the conversation, use that. If they ask about "my quote" or "the quote" without specifying, check the conversation history for the most recent quote number mentioned.',
                 },
               },
               required: ['quote_number'],
@@ -353,13 +352,20 @@ export async function processMessage(
           }
         }
         
-        // Build a well-structured caption for PDF that includes all the information
-        // No need for a second OpenAI call - we can generate the caption directly
+        // Check if this is a follow-up question (not a request to send PDF)
+        // Look at the user message to determine intent
+        const userMessageLower = userMessage.toLowerCase();
+        const isPdfRequest = userMessageLower.includes('resend') || 
+                            userMessageLower.includes('send') || 
+                            userMessageLower.includes('pdf') ||
+                            userMessageLower.includes('quote') && (userMessageLower.includes('please') || userMessageLower.includes('can you'));
+        
         let quoteCaption = '';
         let aiResponseContent = '';
+        let shouldSendPdf = false;
         
         if (quoteInfo) {
-          // Build caption directly from quote info (no AI call needed)
+          // Build caption for PDF (only if explicitly requested)
           quoteCaption = `📄 Your Quote: ${quoteInfo.quoteNo}\n\n`;
           if (quoteInfo.customer) {
             quoteCaption += `Customer: ${quoteInfo.customer.name}`;
@@ -385,10 +391,24 @@ export async function processMessage(
           }
           quoteCaption += '\nYour quote PDF is attached below. If you have any questions or would like to proceed with this quote, please let me know! 😊';
           
-          // Use caption as the content for memory/logging
-          aiResponseContent = quoteCaption;
+          // If it's a PDF request, use caption and send PDF
+          // If it's a follow-up question, generate text response with AI
+          if (isPdfRequest) {
+            shouldSendPdf = true;
+            aiResponseContent = quoteCaption;
+          } else {
+            // Follow-up question - generate text response using AI
+            shouldSendPdf = false;
+            const finalCompletion = await openai.chat.completions.create({
+              model: MODEL,
+              messages,
+            });
+            aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+            // Don't set quoteCaption for follow-up questions
+          }
         } else {
           // Quote not found - need AI to generate a response
+          shouldSendPdf = false;
           const finalCompletion = await openai.chat.completions.create({
             model: MODEL,
             messages,
@@ -409,12 +429,13 @@ export async function processMessage(
           }],
           invalid_tool_calls: [],
           additional_kwargs: {},
-          response_metadata: quoteInfo ? {
+          response_metadata: {
             model: MODEL,
             finish_reason: 'stop',
-          } : {},
-          quotePdfUrl: quoteInfo?.pdfUrl,
-          quoteCaption: quoteInfo ? quoteCaption : undefined,
+          },
+          // Only include PDF info if it's a PDF request
+          quotePdfUrl: (quoteInfo && shouldSendPdf) ? quoteInfo.pdfUrl : undefined,
+          quoteCaption: (quoteInfo && shouldSendPdf) ? quoteCaption : undefined,
           quoteNumber: quoteInfo?.quoteNo,
         };
         
