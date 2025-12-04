@@ -123,28 +123,32 @@ export async function processMessage(
     if (response.message.tool_calls && response.message.tool_calls.length > 0) {
       const toolCall = response.message.tool_calls[0];
       
-      if (toolCall.function.name === 'get_order_status') {
-        const args = JSON.parse(toolCall.function.arguments);
+      // Type guard: check if it's a function tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_order_status') {
+        const args = JSON.parse(toolCall.function.arguments) as { invoice_number: string };
         const invoiceNumber = args.invoice_number;
         
         // Get order status
         const orderStatus = await getOrderStatus(invoiceNumber);
         
         // Add tool response to messages
-        messages.push({
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            {
-              id: toolCall.id,
-              type: 'function',
-              function: {
-                name: 'get_order_status',
-                arguments: toolCall.function.arguments,
+        // Type guard ensures toolCall is a function tool call
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'get_order_status',
+                  arguments: toolCall.function.arguments,
+                },
               },
-            },
-          ],
-        });
+            ],
+          });
+        }
         
         messages.push({
           role: 'tool',
