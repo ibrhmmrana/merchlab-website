@@ -166,36 +166,17 @@ export async function POST(request: NextRequest) {
           messageText
         );
         
-        // Save AI response to Supabase with all metadata
+        // Send response via WhatsApp and save accordingly
         try {
-          await saveWhatsAppMessage(
-            sessionId,
-            'ai',
-            aiResponse.content,
-            {
-              number: customerNumber,
-              name: customerName || customerNumber,
-            },
-            {
-              tool_calls: aiResponse.tool_calls,
-              invalid_tool_calls: aiResponse.invalid_tool_calls,
-              additional_kwargs: aiResponse.additional_kwargs,
-              response_metadata: aiResponse.response_metadata,
-            }
-          );
-        } catch (error) {
-          console.error('Error saving AI response to Supabase:', error);
-        }
-        
-        // Send response via WhatsApp
-        try {
-          // If quote PDF URL is present, send only the document (skip text message)
+          // If quote PDF URL is present, send only the document and save the caption
           if (aiResponse.quotePdfUrl && aiResponse.quoteCaption) {
             try {
               console.log('Sending quote PDF:', aiResponse.quotePdfUrl);
               const filename = aiResponse.quoteNumber 
                 ? `${aiResponse.quoteNumber}.pdf`
                 : `quote-${Date.now()}.pdf`;
+              
+              // Send the PDF document
               await sendWhatsAppDocument(
                 customerNumber,
                 aiResponse.quotePdfUrl,
@@ -203,18 +184,86 @@ export async function POST(request: NextRequest) {
                 filename
               );
               console.log('Quote PDF sent successfully');
+              
+              // Save the PDF caption (not the text message) to Supabase
+              try {
+                await saveWhatsAppMessage(
+                  sessionId,
+                  'ai',
+                  aiResponse.quoteCaption, // Save the caption as the message content
+                  {
+                    number: customerNumber,
+                    name: customerName || customerNumber,
+                  },
+                  {
+                    tool_calls: aiResponse.tool_calls,
+                    invalid_tool_calls: aiResponse.invalid_tool_calls,
+                    additional_kwargs: {
+                      ...aiResponse.additional_kwargs,
+                      document_url: aiResponse.quotePdfUrl,
+                      document_filename: filename,
+                    },
+                    response_metadata: aiResponse.response_metadata,
+                  }
+                );
+                console.log('Quote PDF message saved to Supabase');
+              } catch (saveError) {
+                console.error('Error saving quote PDF message to Supabase:', saveError);
+              }
             } catch (docError) {
               console.error('Error sending quote PDF:', docError);
               // Fallback to text message if PDF sending fails
               await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
+              
+              // Save the text message as fallback
+              try {
+                await saveWhatsAppMessage(
+                  sessionId,
+                  'ai',
+                  aiResponse.content,
+                  {
+                    number: customerNumber,
+                    name: customerName || customerNumber,
+                  },
+                  {
+                    tool_calls: aiResponse.tool_calls,
+                    invalid_tool_calls: aiResponse.invalid_tool_calls,
+                    additional_kwargs: aiResponse.additional_kwargs,
+                    response_metadata: aiResponse.response_metadata,
+                  }
+                );
+              } catch (saveError) {
+                console.error('Error saving fallback message to Supabase:', saveError);
+              }
             }
           } else {
             // Send regular text message if no PDF
             await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
+            
+            // Save AI response to Supabase with all metadata
+            try {
+              await saveWhatsAppMessage(
+                sessionId,
+                'ai',
+                aiResponse.content,
+                {
+                  number: customerNumber,
+                  name: customerName || customerNumber,
+                },
+                {
+                  tool_calls: aiResponse.tool_calls,
+                  invalid_tool_calls: aiResponse.invalid_tool_calls,
+                  additional_kwargs: aiResponse.additional_kwargs,
+                  response_metadata: aiResponse.response_metadata,
+                }
+              );
+            } catch (error) {
+              console.error('Error saving AI response to Supabase:', error);
+            }
           }
         } catch (error) {
           console.error('Error sending WhatsApp message:', error);
-          // Don't throw - we've already saved the response
+          // Don't throw - try to save anyway
         }
       } catch (error) {
         console.error('Error processing message with AI:', error);
