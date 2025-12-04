@@ -42,6 +42,8 @@ IMPORTANT GUIDELINES:
 - Invoice numbers can be in formats like "INV-Q553-HFKTH" or "INV-ML-DM618" or just "Q553-HFKTH" or "ML-DM618"
 - NEVER mention the cost or price (totalIncVat) of orders to customers
 - Only provide the order status, not financial information
+- REMEMBER customer information from previous interactions - if you've checked an order status, you know the customer's name, email, and other details
+- When a customer asks about their information (name, email, etc.), use the information you've already retrieved from order status checks
 - If you don't know something, politely say you'll need to check with the team
 - Use emojis sparingly and only when appropriate
 
@@ -64,6 +66,7 @@ export async function processMessage(
   try {
     // Get chat history from Postgres
     const history = await getChatHistory(sessionId);
+    console.log(`Retrieved ${history.length} messages from chat history for session ${sessionId}`);
     
     // Convert history to OpenAI format
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -87,6 +90,8 @@ export async function processMessage(
         });
       }
     }
+    
+    console.log(`Total messages in context: ${messages.length} (including system message)`);
     
     // Add current user message
     messages.push({
@@ -158,9 +163,15 @@ export async function processMessage(
         if (orderInfo) {
           toolResponse = `Order status: ${orderInfo.status}`;
           if (orderInfo.customer) {
-            toolResponse += `\nCustomer: ${orderInfo.customer.name}`;
+            toolResponse += `\nCustomer Information:\n- Name: ${orderInfo.customer.name}`;
             if (orderInfo.customer.company && orderInfo.customer.company !== '-') {
-              toolResponse += ` (${orderInfo.customer.company})`;
+              toolResponse += `\n- Company: ${orderInfo.customer.company}`;
+            }
+            if (orderInfo.customer.email && orderInfo.customer.email !== '-') {
+              toolResponse += `\n- Email: ${orderInfo.customer.email}`;
+            }
+            if (orderInfo.customer.phone && orderInfo.customer.phone !== '-') {
+              toolResponse += `\n- Phone: ${orderInfo.customer.phone}`;
             }
           }
         } else {
@@ -172,6 +183,18 @@ export async function processMessage(
           tool_call_id: toolCall.id,
           content: toolResponse,
         });
+        
+        // Add customer information to system context if available
+        if (orderInfo?.customer) {
+          // Update system message with customer context
+          const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${orderInfo.customer.name}${orderInfo.customer.company && orderInfo.customer.company !== '-' ? ` from ${orderInfo.customer.company}` : ''}.${orderInfo.customer.email && orderInfo.customer.email !== '-' ? ` Their email is ${orderInfo.customer.email}.` : ''}${orderInfo.customer.phone && orderInfo.customer.phone !== '-' ? ` Their phone number is ${orderInfo.customer.phone}.` : ''} Remember this information for the rest of the conversation.`;
+          
+          // Update the system message in the messages array
+          const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+          if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
+            messages[systemMessageIndex].content += customerContext;
+          }
+        }
         
         // Get final response from AI
         const finalCompletion = await openai.chat.completions.create({
@@ -211,8 +234,10 @@ export async function processMessage(
         };
         
         // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
         await saveChatMessage(sessionId, 'human', userMessage);
         await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
         
         return aiResponse;
       }
@@ -251,8 +276,10 @@ export async function processMessage(
     };
     
     // Save messages to memory
+    console.log('Saving messages to Postgres memory...');
     await saveChatMessage(sessionId, 'human', userMessage);
     await saveChatMessage(sessionId, 'ai', aiResponseContent);
+    console.log('Messages saved to Postgres memory');
     
     return aiResponse;
   } catch (error) {
