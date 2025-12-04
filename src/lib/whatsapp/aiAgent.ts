@@ -326,12 +326,40 @@ export async function processMessage(
               style: 'currency',
               currency: 'ZAR',
             }).format(quoteInfo.value);
-            toolResponse += `\nTotal Amount: ${formattedValue}`;
+            toolResponse += `\nTotal Amount (YOU CAN AND MUST SHARE THIS WITH THE CUSTOMER): ${formattedValue}`;
           }
           toolResponse += `\nPDF URL: ${quoteInfo.pdfUrl}`;
           
+          // Extract and format items for easy reference
+          const shareable = quoteInfo.shareableDetails;
+          if (shareable.items && Array.isArray(shareable.items)) {
+            toolResponse += `\n\nItems in quote (${shareable.items.length} items):`;
+            shareable.items.forEach((item: unknown, index: number) => {
+              if (typeof item === 'object' && item !== null) {
+                const itemObj = item as Record<string, unknown>;
+                const description = itemObj.description || itemObj.stock_code || 'Item';
+                const quantity = itemObj.quantity || 0;
+                const price = itemObj.price || itemObj.discountedPrice || itemObj.discounted_price || 0;
+                const colour = itemObj.colour || itemObj.color || '';
+                const size = itemObj.size || '';
+                
+                toolResponse += `\n${index + 1}. ${description}`;
+                if (quantity) toolResponse += ` - Quantity: ${quantity}`;
+                if (colour) toolResponse += ` - Color: ${colour}`;
+                if (size) toolResponse += ` - Size: ${size}`;
+                if (price) {
+                  const formattedPrice = new Intl.NumberFormat('en-ZA', {
+                    style: 'currency',
+                    currency: 'ZAR',
+                  }).format(typeof price === 'number' ? price : parseFloat(String(price)) || 0);
+                  toolResponse += ` - Price: ${formattedPrice}`;
+                }
+              }
+            });
+          }
+          
           // Include all shareable quote details as JSON for the AI to reference
-          toolResponse += `\n\nQuote Details (shareable with customer):\n${JSON.stringify(quoteInfo.shareableDetails, null, 2)}`;
+          toolResponse += `\n\nFull Quote Details (all shareable with customer, excluding base_price and beforeVAT):\n${JSON.stringify(shareable, null, 2)}`;
         } else {
           toolResponse = `Quote not found for quote number: ${quoteNumber}. Please verify the quote number.`;
         }
