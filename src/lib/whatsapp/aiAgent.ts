@@ -26,6 +26,7 @@ export interface AIResponse {
   response_metadata?: Record<string, unknown>;
   quotePdfUrl?: string; // PDF URL to send if quote info was retrieved
   quoteCaption?: string; // Caption for the PDF document
+  quoteNumber?: string; // Quote number for filename
 }
 
 /**
@@ -360,13 +361,32 @@ export async function processMessage(
           }
         }
         
-        // Build caption for PDF
-        const quoteCaption = quoteInfo 
-          ? `Your quote ${quoteInfo.quoteNo}${quoteInfo.customer ? ` for ${quoteInfo.customer.name}` : ''} 📄`
-          : 'Quote PDF';
+        // Build a well-structured caption for PDF that includes all the information
+        let quoteCaption = '';
+        if (quoteInfo) {
+          quoteCaption = `📄 Your Quote: ${quoteInfo.quoteNo}\n\n`;
+          if (quoteInfo.customer) {
+            quoteCaption += `Customer: ${quoteInfo.customer.name}`;
+            if (quoteInfo.customer.company && quoteInfo.customer.company !== '-') {
+              quoteCaption += ` (${quoteInfo.customer.company})`;
+            }
+            quoteCaption += '\n';
+          }
+          if (quoteInfo.createdAt) {
+            const createdDate = new Date(quoteInfo.createdAt).toLocaleDateString('en-ZA', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+            quoteCaption += `Created: ${createdDate}\n`;
+          }
+          quoteCaption += '\nYour quote PDF is attached below. If you have any questions or would like to proceed with this quote, please let me know! 😊';
+        } else {
+          quoteCaption = aiResponseContent; // Fallback to AI response if quote not found
+        }
         
         const aiResponse: AIResponse = {
-          content: aiResponseContent,
+          content: aiResponseContent, // Keep for logging/memory, but won't be sent
           tool_calls: toolCalls,
           invalid_tool_calls: [],
           additional_kwargs: {},
@@ -376,6 +396,7 @@ export async function processMessage(
           },
           quotePdfUrl: quoteInfo?.pdfUrl,
           quoteCaption: quoteInfo ? quoteCaption : undefined,
+          quoteNumber: quoteInfo?.quoteNo, // Add quote number for filename
         };
         
         // Save messages to memory

@@ -189,23 +189,28 @@ export async function POST(request: NextRequest) {
         
         // Send response via WhatsApp
         try {
-          await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
-          
-          // If quote PDF URL is present, send the document
+          // If quote PDF URL is present, send only the document (skip text message)
           if (aiResponse.quotePdfUrl && aiResponse.quoteCaption) {
             try {
               console.log('Sending quote PDF:', aiResponse.quotePdfUrl);
+              const filename = aiResponse.quoteNumber 
+                ? `${aiResponse.quoteNumber}.pdf`
+                : `quote-${Date.now()}.pdf`;
               await sendWhatsAppDocument(
                 customerNumber,
                 aiResponse.quotePdfUrl,
                 aiResponse.quoteCaption,
-                `quote-${Date.now()}.pdf`
+                filename
               );
               console.log('Quote PDF sent successfully');
             } catch (docError) {
               console.error('Error sending quote PDF:', docError);
-              // Don't throw - text message was already sent
+              // Fallback to text message if PDF sending fails
+              await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
             }
+          } else {
+            // Send regular text message if no PDF
+            await sendWhatsAppMessage(customerNumber, aiResponse.content, customerName || undefined);
           }
         } catch (error) {
           console.error('Error sending WhatsApp message:', error);
