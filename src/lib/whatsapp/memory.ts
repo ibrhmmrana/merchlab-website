@@ -20,11 +20,12 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     // Query the n8n_chat_histories table
     // Table structure: id, session_id, message (JSON string with type and content), customer
     // Note: idx column may or may not exist, so we use id for ordering
+    // Get the most recent messages (DESC) then reverse to chronological order
     const query = `
       SELECT id, session_id, message, customer
       FROM n8n_chat_histories 
       WHERE session_id = $1 
-      ORDER BY id ASC
+      ORDER BY id DESC
       LIMIT $2
     `;
     
@@ -69,7 +70,8 @@ export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> 
     }
     
     console.log(`Parsed ${chatMessages.length} messages from Postgres history`);
-    return chatMessages;
+    // Reverse to get chronological order (oldest to newest) for OpenAI context
+    return chatMessages.reverse();
   } catch (error) {
     console.error('Error fetching chat history from Postgres:', error);
     console.error('Falling back to empty history - memory will not be available');
