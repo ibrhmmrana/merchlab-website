@@ -350,34 +350,13 @@ export async function processMessage(
           }
         }
         
-        // Get final response from AI
-        const finalCompletion = await openai.chat.completions.create({
-          model: MODEL,
-          messages,
-        });
-        
-        const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
-        
-        // Extract metadata from the completion
-        const toolCalls: ToolCall[] = [];
-        if (finalCompletion.choices[0].message.tool_calls) {
-          for (const tc of finalCompletion.choices[0].message.tool_calls) {
-            if (tc.type === 'function' && 'function' in tc) {
-              toolCalls.push({
-                id: tc.id,
-                type: tc.type,
-                function: {
-                  name: tc.function.name,
-                  arguments: tc.function.arguments,
-                },
-              });
-            }
-          }
-        }
-        
         // Build a well-structured caption for PDF that includes all the information
+        // No need for a second OpenAI call - we can generate the caption directly
         let quoteCaption = '';
+        let aiResponseContent = '';
+        
         if (quoteInfo) {
+          // Build caption directly from quote info (no AI call needed)
           quoteCaption = `📄 Your Quote: ${quoteInfo.quoteNo}\n\n`;
           if (quoteInfo.customer) {
             quoteCaption += `Customer: ${quoteInfo.customer.name}`;
@@ -402,22 +381,38 @@ export async function processMessage(
             quoteCaption += `Total Amount: ${formattedValue}\n`;
           }
           quoteCaption += '\nYour quote PDF is attached below. If you have any questions or would like to proceed with this quote, please let me know! 😊';
+          
+          // Use caption as the content for memory/logging
+          aiResponseContent = quoteCaption;
         } else {
-          quoteCaption = aiResponseContent; // Fallback to AI response if quote not found
+          // Quote not found - need AI to generate a response
+          const finalCompletion = await openai.chat.completions.create({
+            model: MODEL,
+            messages,
+          });
+          aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I could not find the quote. Please verify the quote number.';
+          quoteCaption = aiResponseContent;
         }
         
         const aiResponse: AIResponse = {
-          content: aiResponseContent, // Keep for logging/memory, but won't be sent
-          tool_calls: toolCalls,
+          content: aiResponseContent,
+          tool_calls: [{
+            id: toolCall.id,
+            type: 'function',
+            function: {
+              name: 'get_quote_info',
+              arguments: toolCall.function.arguments,
+            },
+          }],
           invalid_tool_calls: [],
           additional_kwargs: {},
-          response_metadata: {
-            model: finalCompletion.model,
-            finish_reason: finalCompletion.choices[0].finish_reason,
-          },
+          response_metadata: quoteInfo ? {
+            model: MODEL,
+            finish_reason: 'stop',
+          } : {},
           quotePdfUrl: quoteInfo?.pdfUrl,
           quoteCaption: quoteInfo ? quoteCaption : undefined,
-          quoteNumber: quoteInfo?.quoteNo, // Add quote number for filename
+          quoteNumber: quoteInfo?.quoteNo,
         };
         
         // Save messages to memory
