@@ -61,14 +61,17 @@ When checking order status:
 - If the order is not found, apologize and ask them to verify the invoice number
 
 When handling quote requests:
-- If a customer asks about their quote, wants to see their quote, needs the quote PDF, or asks "can you send me my quote", use the get_quote_info tool
+- IMPORTANT: Check the conversation history FIRST before calling get_quote_info tool
+- If quote information was already retrieved in recent messages, use that information to answer questions
+- Only call get_quote_info tool if: 1) Customer explicitly asks to resend/send the quote PDF, 2) The quote number is different from what was discussed, 3) Quote information is not in the conversation history
+- If customer asks follow-up questions about a quote already discussed (e.g., "What items are in the quote?", "What's the total?", "What's in quote Q548-RE6B4?"), use the information from the conversation history - DO NOT call the tool again
 - Ask for the quote number if not provided (format: "Q553-HFKTH" or "ML-DM618")
 - The tool will return quote information including total amount, items, and all quote details
 - You can share ALL quote information with the customer EXCEPT base_price and beforeVAT fields (these are internal costs and should never be mentioned)
 - Always acknowledge the customer by name when providing quote information
-- If asked about the quote total, items, quantities, descriptions, or any other quote details, feel free to provide that information
+- If asked about the quote total, items, quantities, descriptions, or any other quote details, feel free to provide that information from the conversation context
 - The total amount is the final price the customer will pay (including VAT if applicable)
-- Provide a friendly message confirming you're sending their quote PDF
+- When sending a quote PDF, provide a friendly message confirming you're sending it
 - The PDF will be sent automatically after your message`;
 
 /**
@@ -140,7 +143,7 @@ export async function processMessage(
           type: 'function',
           function: {
             name: 'get_quote_info',
-            description: 'Get quote information by quote number. The quote number can be in formats like "Q553-HFKTH" or "ML-DM618". Use this when customers ask about their quote, want to see their quote, need the quote PDF, or want to know quote details. Always ask for the quote number if not provided.',
+            description: 'Get quote information by quote number. ONLY use this tool if: 1) The customer is asking for a quote PDF to be sent, 2) The quote number is NEW or different from what was already discussed, 3) You need to retrieve quote information that is NOT already in the conversation history. DO NOT use this tool if the quote information was already retrieved in recent messages - instead, use the information from the conversation history to answer questions about items, totals, or other quote details.',
             parameters: {
               type: 'object',
               properties: {
