@@ -123,8 +123,9 @@ export async function processMessage(
     if (response.message.tool_calls && response.message.tool_calls.length > 0) {
       const toolCall = response.message.tool_calls[0];
       
-      if (toolCall.function.name === 'get_order_status') {
-        const args = JSON.parse(toolCall.function.arguments);
+      // Type guard: check if it's a function tool call
+      if (toolCall.type === 'function' && toolCall.function.name === 'get_order_status') {
+        const args = JSON.parse(toolCall.function.arguments) as { invoice_number: string };
         const invoiceNumber = args.invoice_number;
         
         // Get order status
