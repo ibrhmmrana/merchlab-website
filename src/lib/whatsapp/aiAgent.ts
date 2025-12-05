@@ -451,7 +451,7 @@ export async function processMessage(
         const isPdfRequest = userMessageLower.includes('resend') || 
                             userMessageLower.includes('send') || 
                             userMessageLower.includes('pdf') ||
-                            userMessageLower.includes('quote') && (userMessageLower.includes('please') || userMessageLower.includes('can you'));
+                            (userMessageLower.includes('quote') && (userMessageLower.includes('please') || userMessageLower.includes('can you') || userMessageLower.includes('my')));
         
         let quoteCaption = '';
         let aiResponseContent = '';
@@ -682,10 +682,11 @@ export async function processMessage(
         
         // Check if this is a follow-up question (not a request to send PDF)
         const userMessageLower = userMessage.toLowerCase();
+        // For invoices, if they say "my invoice" or "send me my invoice", always send PDF
         const isPdfRequest = userMessageLower.includes('resend') || 
                             userMessageLower.includes('send') || 
                             userMessageLower.includes('pdf') ||
-                            userMessageLower.includes('invoice') && (userMessageLower.includes('please') || userMessageLower.includes('can you'));
+                            (userMessageLower.includes('invoice') && (userMessageLower.includes('please') || userMessageLower.includes('can you') || userMessageLower.includes('my')));
         
         let invoiceCaption = '';
         let aiResponseContent = '';
@@ -718,14 +719,16 @@ export async function processMessage(
           }
           invoiceCaption += '\nYour invoice PDF is attached below. If you have any questions, please let me know! 😊';
           
-          // If it's a PDF request, use caption and send PDF
-          // If it's a follow-up question, generate text response with AI
+          // If it's a PDF request (including "my invoice" or "send me my invoice"), use caption and send PDF
+          // If it's a follow-up question about invoice details, generate text response with AI
           if (isPdfRequest) {
             shouldSendPdf = true;
             aiResponseContent = invoiceCaption;
+            console.log('Invoice PDF request detected - will send PDF with caption');
           } else {
             // Follow-up question - generate text response using AI
             shouldSendPdf = false;
+            console.log('Invoice follow-up question detected - generating text response');
             const finalCompletion = await openai.chat.completions.create({
               model: MODEL,
               messages,
