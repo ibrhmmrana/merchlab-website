@@ -3,15 +3,12 @@ import { saveWhatsAppMessage } from '@/lib/whatsapp/messageStorage';
 import { processMessage } from '@/lib/whatsapp/aiAgent';
 import { sendWhatsAppMessage, sendWhatsAppDocument } from '@/lib/whatsapp/sender';
 
-// Type alias for BotPenguin/n8n webhook format
-type BotPenguinWebhookBody = {
-  event?: {
-    value?: {
-      contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
-      messages?: Array<{ from?: string; type?: string; text?: { body?: string } }>;
-    };
-  };
-};
+// Type aliases for WhatsApp webhook formats
+type WaContact = { wa_id?: string; profile?: { name?: string } };
+type WaMessage = { from?: string; type?: string; text?: { body?: string } };
+type EventValue = { contacts?: WaContact[]; messages?: WaMessage[] };
+type EventBodyFormat = { event?: { value?: EventValue } };
+type NestedEventBodyFormat = { body?: { event?: { value?: EventValue } } };
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -60,7 +57,7 @@ export async function POST(request: NextRequest) {
     // Format 1: Direct WhatsApp Business API array format
     // [ { "contacts": [...], "messages": [...], "field": "messages" } ]
     if (Array.isArray(rawBody) && rawBody.length > 0) {
-      const firstItem = rawBody[0] as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> } };
+      const firstItem = rawBody[0] as DirectFormat;
       console.log('Found direct WhatsApp Business API array format');
       const contacts = firstItem.contacts || [];
       const messages = firstItem.messages || [];
@@ -158,7 +155,7 @@ export async function POST(request: NextRequest) {
     }
     // Format 4: Nested body format (body.body.event.value)
     // { "body": { "event": { "value": { "contacts": [...], "messages": [...] } } } }
-    const bodyWithNestedEvent = body as { body?: { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } };
+    const bodyWithNestedEvent = body as NestedEventBodyFormat;
     if (!waId && bodyWithNestedEvent.body?.event?.value) {
       console.log('Found nested format: body.body.event.value');
       const eventValue = bodyWithNestedEvent.body.event.value;
@@ -180,7 +177,7 @@ export async function POST(request: NextRequest) {
     }
     // Format 5: Direct format (fallback)
     // { "contacts": [...], "messages": [...] }
-    const bodyWithDirect = body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> };
+    const bodyWithDirect = body as DirectFormat;
     if (!waId && bodyWithDirect.contacts && bodyWithDirect.messages) {
       console.log('Found direct format: body.contacts and body.messages');
       const contacts = bodyWithDirect.contacts;
