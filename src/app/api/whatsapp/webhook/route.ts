@@ -73,7 +73,8 @@ export async function POST(request: NextRequest) {
     // { "object": "whatsapp_business_account", "entry": [...] }
     if (!waId && (body as { object?: string }).object === 'whatsapp_business_account') {
       console.log('Found standard WhatsApp Business API format');
-      const entries = ((body as { entry?: unknown[] }).entry || []) as Array<{ changes?: Array<{ field?: string; value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> }>;
+      const bodyWithEntry = body as { entry?: Array<{ changes?: Array<{ field?: string; value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> }> };
+      const entries = bodyWithEntry.entry || [];
       
       for (const entry of entries) {
         const changes = entry.changes || [];
