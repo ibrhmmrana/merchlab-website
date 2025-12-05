@@ -102,7 +102,23 @@ When handling customer account information requests:
 - If the customer provides a quote or invoice number, you can use that to identify them and get their account information
 - The tool will return: order count, total order value, last order date, and lists of quotes and invoices
 - Always acknowledge the customer by name when providing account information
-- Format the response in a friendly, clear manner with the key information highlighted`;
+- Format the response in a friendly, clear manner with the key information highlighted
+
+When handling order details requests:
+- ALWAYS use the get_order_details tool to get accurate order information - do not rely on memory or conversation history
+- If a customer asks "What items are in my order?" or "What products did I order?" or "What's the quantity of [product] in my order?", you MUST call the get_order_details tool with their invoice number
+- The tool requires an invoice number - if the customer hasn't provided one, ask them for their invoice number first
+- The tool will return: product list with descriptions, quantities, colors, sizes, and prices
+- Always acknowledge the customer by name when providing order details
+- Format the response in a friendly, clear manner listing all items
+
+When handling delivery information requests:
+- ALWAYS use the get_delivery_info tool to get accurate delivery information - do not rely on memory or conversation history
+- If a customer asks "Is my order being delivered or collected?" or "What's my delivery address?" or "When will my order be delivered?", you MUST call the get_delivery_info tool with their invoice number
+- The tool requires an invoice number - if the customer hasn't provided one, ask them for their invoice number first
+- The tool will return: whether the order is delivery or collection, delivery address (if applicable), and customer information
+- Always acknowledge the customer by name when providing delivery information
+- Format the response in a friendly, clear manner`;
 
 /**
  * Process a message with the AI agent
@@ -948,6 +964,264 @@ export async function processMessage(
         // Add customer information to system context if available
         if (accountInfo?.customer) {
           const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${accountInfo.customer.name}${accountInfo.customer.company && accountInfo.customer.company !== '-' ? ` from ${accountInfo.customer.company}` : ''}.${accountInfo.customer.email && accountInfo.customer.email !== '-' ? ` Their email is ${accountInfo.customer.email}.` : ''}${accountInfo.customer.phone && accountInfo.customer.phone !== '-' ? ` Their phone number is ${accountInfo.customer.phone}.` : ''} They have ${accountInfo.orderCount} orders with a total value of ${new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(accountInfo.totalOrderValue)}. Remember this information for the rest of the conversation.`;
+
+          const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+          if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
+            messages[systemMessageIndex].content += customerContext;
+          }
+        }
+
+        // Get final response from AI
+        const finalCompletion = await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+        });
+
+        const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+
+        // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
+          }
+        }
+
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: toolCalls,
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: finalCompletion.model,
+            finish_reason: finalCompletion.choices[0].finish_reason,
+          },
+        };
+
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+
+        return aiResponse;
+      }
+
+      // Handle get_order_details tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_order_details') {
+        const args = JSON.parse(toolCall.function.arguments) as { invoice_number: string };
+        const invoiceNumber = args.invoice_number;
+
+        console.log(`get_order_details tool called with invoice number: ${invoiceNumber}`);
+
+        // Get order details
+        const orderDetails = await getOrderDetails(invoiceNumber);
+
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'get_order_details',
+                  arguments: toolCall.function.arguments,
+                },
+              },
+            ],
+          });
+        }
+
+        // Build tool response with order details
+        let toolResponse = '';
+        if (orderDetails) {
+          toolResponse = `Order Details for Invoice: ${orderDetails.invoiceNumber}\n`;
+          toolResponse += `Quote Number: ${orderDetails.quoteNumber}\n\n`;
+          toolResponse += `Items (${orderDetails.items.length} items):\n`;
+          
+          orderDetails.items.forEach((item, index) => {
+            toolResponse += `\n${index + 1}. ${item.description}`;
+            if (item.quantity) {
+              toolResponse += ` - Quantity: ${item.quantity}`;
+            }
+            if (item.colour) {
+              toolResponse += ` - Color: ${item.colour}`;
+            }
+            if (item.size) {
+              toolResponse += ` - Size: ${item.size}`;
+            }
+            if (item.price) {
+              const formattedPrice = new Intl.NumberFormat('en-ZA', {
+                style: 'currency',
+                currency: 'ZAR',
+              }).format(item.price);
+              toolResponse += ` - Price: ${formattedPrice}`;
+            }
+            if (item.stock_code) {
+              toolResponse += ` - Stock Code: ${item.stock_code}`;
+            }
+          });
+
+          if (orderDetails.customer) {
+            toolResponse += `\n\nCustomer: ${orderDetails.customer.name}`;
+            if (orderDetails.customer.company && orderDetails.customer.company !== '-') {
+              toolResponse += ` (${orderDetails.customer.company})`;
+            }
+          }
+        } else {
+          toolResponse = `Order not found for invoice number: ${invoiceNumber}. Please verify the invoice number.`;
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResponse,
+        });
+
+        // Add customer information to system context if available
+        if (orderDetails?.customer) {
+          const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${orderDetails.customer.name}${orderDetails.customer.company && orderDetails.customer.company !== '-' ? ` from ${orderDetails.customer.company}` : ''}.${orderDetails.customer.email && orderDetails.customer.email !== '-' ? ` Their email is ${orderDetails.customer.email}.` : ''}${orderDetails.customer.phone && orderDetails.customer.phone !== '-' ? ` Their phone number is ${orderDetails.customer.phone}.` : ''} Remember this information for the rest of the conversation.`;
+
+          const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+          if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
+            messages[systemMessageIndex].content += customerContext;
+          }
+        }
+
+        // Get final response from AI
+        const finalCompletion = await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+        });
+
+        const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+
+        // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
+          }
+        }
+
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: toolCalls,
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: finalCompletion.model,
+            finish_reason: finalCompletion.choices[0].finish_reason,
+          },
+        };
+
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+
+        return aiResponse;
+      }
+
+      // Handle get_delivery_info tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_delivery_info') {
+        const args = JSON.parse(toolCall.function.arguments) as { invoice_number: string };
+        const invoiceNumber = args.invoice_number;
+
+        console.log(`get_delivery_info tool called with invoice number: ${invoiceNumber}`);
+
+        // Get delivery information
+        const deliveryInfo = await getDeliveryInfo(invoiceNumber);
+
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'get_delivery_info',
+                  arguments: toolCall.function.arguments,
+                },
+              },
+            ],
+          });
+        }
+
+        // Build tool response with delivery information
+        let toolResponse = '';
+        if (deliveryInfo) {
+          toolResponse = `Delivery Information for Invoice: ${deliveryInfo.invoiceNumber}\n\n`;
+          toolResponse += `Delivery Method: ${deliveryInfo.isDelivery ? 'Delivery' : 'Collection'}\n`;
+          
+          if (deliveryInfo.isDelivery && deliveryInfo.deliveryAddress) {
+            toolResponse += `\nDelivery Address:\n`;
+            const addr = deliveryInfo.deliveryAddress;
+            if (addr.street) toolResponse += `${addr.street}\n`;
+            if (addr.suburb) toolResponse += `${addr.suburb}\n`;
+            if (addr.city) toolResponse += `${addr.city}`;
+            if (addr.province) {
+              toolResponse += addr.city ? `, ${addr.province}` : addr.province;
+            }
+            if (addr.postal_code) {
+              toolResponse += addr.province || addr.city ? ` ${addr.postal_code}` : addr.postal_code;
+            }
+            if (addr.country) {
+              toolResponse += `\n${addr.country}`;
+            }
+          } else if (!deliveryInfo.isDelivery) {
+            toolResponse += `\nThis order is for collection. Please collect from our warehouse.`;
+          } else {
+            toolResponse += `\nDelivery address not available.`;
+          }
+
+          if (deliveryInfo.customer) {
+            toolResponse += `\n\nCustomer: ${deliveryInfo.customer.name}`;
+            if (deliveryInfo.customer.company && deliveryInfo.customer.company !== '-') {
+              toolResponse += ` (${deliveryInfo.customer.company})`;
+            }
+          }
+
+          // Note: Delivery date is not available from Barron API, so we don't include it
+          toolResponse += `\n\nNote: For delivery date information, please contact our support team.`;
+        } else {
+          toolResponse = `Order not found for invoice number: ${invoiceNumber}. Please verify the invoice number.`;
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResponse,
+        });
+
+        // Add customer information to system context if available
+        if (deliveryInfo?.customer) {
+          const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${deliveryInfo.customer.name}${deliveryInfo.customer.company && deliveryInfo.customer.company !== '-' ? ` from ${deliveryInfo.customer.company}` : ''}.${deliveryInfo.customer.email && deliveryInfo.customer.email !== '-' ? ` Their email is ${deliveryInfo.customer.email}.` : ''}${deliveryInfo.customer.phone && deliveryInfo.customer.phone !== '-' ? ` Their phone number is ${deliveryInfo.customer.phone}.` : ''} Remember this information for the rest of the conversation.`;
 
           const systemMessageIndex = messages.findIndex(m => m.role === 'system');
           if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
