@@ -684,7 +684,9 @@ export async function processMessage(
         const userMessageLower = userMessage.toLowerCase();
         // For invoices, if they say "my invoice" or "send me my invoice", always send PDF
         // Also check if they're asking to send/resend the invoice
-        const isPdfRequest = userMessageLower.includes('resend') || 
+        // If no invoice number was provided in the tool call, it's likely a "my invoice" request - always send PDF
+        const isPdfRequest = !invoiceNumber || // If no invoice number provided, it's a "my invoice" request
+                            userMessageLower.includes('resend') || 
                             (userMessageLower.includes('send') && userMessageLower.includes('invoice')) ||
                             userMessageLower.includes('pdf') ||
                             (userMessageLower.includes('invoice') && (userMessageLower.includes('please') || userMessageLower.includes('can you') || userMessageLower.includes('my')));
@@ -694,7 +696,7 @@ export async function processMessage(
         let shouldSendPdf = false;
         
         if (invoiceInfo) {
-          // Build caption for PDF (only if explicitly requested)
+          // Build caption for PDF
           invoiceCaption = `📄 Your Invoice: ${invoiceInfo.invoiceNo}\n\n`;
           if (invoiceInfo.customer) {
             invoiceCaption += `Customer: ${invoiceInfo.customer.name}`;
