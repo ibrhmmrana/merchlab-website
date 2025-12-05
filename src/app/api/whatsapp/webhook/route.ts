@@ -3,6 +3,16 @@ import { saveWhatsAppMessage } from '@/lib/whatsapp/messageStorage';
 import { processMessage } from '@/lib/whatsapp/aiAgent';
 import { sendWhatsAppMessage, sendWhatsAppDocument } from '@/lib/whatsapp/sender';
 
+// Type alias for BotPenguin/n8n webhook format
+type BotPenguinWebhookBody = {
+  event?: {
+    value?: {
+      contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
+      messages?: Array<{ from?: string; type?: string; text?: { body?: string } }>;
+    };
+  };
+};
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
