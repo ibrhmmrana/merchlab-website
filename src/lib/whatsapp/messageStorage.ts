@@ -47,7 +47,7 @@ export async function saveWhatsAppMessage(
   
   // Try to get the current max idx to increment (if column exists)
   // Note: chatbot_history table has idx column, but Supabase schema cache might not see it
-  let nextIdx: number | undefined = undefined;
+  // Note: idx is now handled automatically by the database, so we don't need to calculate it
   try {
     // First try to get max id and use that as idx (since they should be similar)
     const { data: maxDataId, error: idError } = await supabase
@@ -57,11 +57,11 @@ export async function saveWhatsAppMessage(
       .limit(1)
       .maybeSingle();
     
-    if (!idError && maxDataId?.id !== undefined && maxDataId.id !== null) {
-      // Use id + 1 as idx (they should be in sync)
-      nextIdx = (maxDataId.id as number) + 1;
+    if (idError || !maxDataId?.id) {
+      // Query failed or no data, that's okay - we'll insert without idx
+      console.log('Could not get max id for idx calculation, inserting without idx');
     }
-  } catch (error) {
+  } catch {
     // Query failed, that's okay - we'll insert without idx
     console.log('Could not get max id for idx calculation, inserting without idx');
   }
