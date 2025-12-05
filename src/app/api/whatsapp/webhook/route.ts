@@ -84,10 +84,7 @@ export async function POST(request: NextRequest) {
       const entries = (bodyWithEntry.entry || []) as Array<{
         changes?: Array<{
           field?: string;
-          value?: {
-            contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
-            messages?: Array<{ from?: string; type?: string; text?: { body?: string } }>;
-          };
+          value?: EventValue;
         }>;
       }>;
       
