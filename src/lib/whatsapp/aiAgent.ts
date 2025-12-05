@@ -142,17 +142,17 @@ export async function processMessage(
           type: 'function',
           function: {
             name: 'get_quote_info',
-            description: 'Get quote information by quote number or phone number. Use this tool whenever a customer asks about their quote, including: 1) When they ask to resend/send the quote PDF, 2) When they ask about quote details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about a quote (e.g., "What items are in my quote?", "What\'s the total?", "What products did I order?"). IMPORTANT: If the customer says "my quote" or "send me my quote" without providing a quote number, you MUST call this tool with the phone_number parameter (the customer\'s phone number is automatically available to you). Always call this tool to get accurate, up-to-date quote information rather than relying on memory. The tool will return all quote details including items, quantities, descriptions, total amount, and customer information.',
+            description: 'Get quote information by quote number or phone number. Use this tool whenever a customer asks about their quote, including: 1) When they ask to resend/send the quote PDF, 2) When they ask about quote details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about a quote (e.g., "What items are in my quote?", "What\'s the total?", "What products did I order?"), 4) When they say "my quote" or "send me my quote" without providing a quote number. IMPORTANT: If the customer says "my quote" or "send me my quote" without providing a quote number, you MUST call this tool. You do NOT need to provide the phone_number parameter - it will be automatically injected from the conversation context. Just call the tool with an empty quote_number. Always call this tool to get accurate, up-to-date quote information rather than relying on memory. The tool will return all quote details including items, quantities, descriptions, total amount, and customer information.',
             parameters: {
               type: 'object',
               properties: {
                 quote_number: {
                   type: 'string',
-                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618"). If the customer mentions a specific quote number, use that. If they ask about "my quote" or "the quote" without specifying a quote number, leave this empty and use phone_number instead.',
+                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618"). If the customer mentions a specific quote number, use that. If they ask about "my quote" or "the quote" without specifying a quote number, leave this empty (the phone number will be used automatically).',
                 },
                 phone_number: {
                   type: 'string',
-                  description: 'The customer\'s phone number. ALWAYS use this when the customer asks about "my quote" or "send me my quote" without providing a specific quote number. The phone number is automatically available from the conversation context - you do not need to ask the customer for it. The phone number will be used to find their most recent quote automatically.',
+                  description: 'The customer\'s phone number. This is optional - if not provided, the phone number from the conversation context will be used automatically. Only provide this if you have a specific phone number to use.',
                 },
               },
               required: [],
@@ -285,6 +285,8 @@ export async function processMessage(
         let args = JSON.parse(toolCall.function.arguments) as { quote_number?: string; phone_number?: string };
         const quoteNumber = args.quote_number;
         
+        console.log(`get_quote_info tool called with args:`, { quote_number: quoteNumber, phone_number: args.phone_number, customerPhoneNumber });
+        
         // If no quote number provided but we have customer phone number, automatically inject it
         if (!quoteNumber && customerPhoneNumber && !args.phone_number) {
           console.log(`No quote number provided, automatically using customer phone number: ${customerPhoneNumber}`);
@@ -294,6 +296,7 @@ export async function processMessage(
         }
         
         const phoneNumber = args.phone_number || customerPhoneNumber;
+        console.log(`Using phone number for quote lookup: ${phoneNumber} (from args: ${args.phone_number}, from context: ${customerPhoneNumber})`);
         
         // Get quote information
         let quoteInfo: Awaited<ReturnType<typeof getQuoteInfo>> | null = null;

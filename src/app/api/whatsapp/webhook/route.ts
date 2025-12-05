@@ -193,7 +193,8 @@ export async function POST(request: NextRequest) {
       const customerNumber = waId;
       const sessionId = `ML-${waId}`;
       
-      console.log('Processing message:', { sessionId, customerNumber, messageText });
+      console.log('Processing message:', { sessionId, customerNumber, messageText, waId });
+      console.log(`Passing customerNumber (${customerNumber}) to AI agent for quote lookup`);
       
       // Save incoming message to Supabase immediately
       try {
