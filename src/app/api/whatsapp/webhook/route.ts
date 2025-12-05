@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
     // Format 3: BotPenguin/n8n webhook format (body.event.value)
     // { "event": { "value": { "contacts": [...], "messages": [...] }, "field": "messages" } }
-    const bodyWithEvent = body as { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } };
+    const bodyWithEvent = body as BotPenguinWebhookBody;
     if (!waId && bodyWithEvent.event?.value) {
       console.log('Found BotPenguin format: body.event.value');
       const eventValue = bodyWithEvent.event.value;
