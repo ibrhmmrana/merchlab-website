@@ -823,6 +823,174 @@ export async function processMessage(
         
         return aiResponse;
       }
+
+      // Handle get_customer_account_info tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_customer_account_info') {
+        const args = JSON.parse(toolCall.function.arguments) as { identifier?: string };
+        let identifier = args.identifier;
+
+        // If no identifier provided, use customer phone number
+        if (!identifier && customerPhoneNumber) {
+          console.log(`No identifier provided, using customer phone number: ${customerPhoneNumber}`);
+          identifier = customerPhoneNumber;
+        }
+
+        console.log(`get_customer_account_info tool called with identifier: ${identifier}`);
+
+        // Get customer account information
+        const accountInfo = await getCustomerAccountInfo(identifier || '');
+
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'get_customer_account_info',
+                  arguments: toolCall.function.arguments,
+                },
+              },
+            ],
+          });
+        }
+
+        // Build tool response with account information
+        let toolResponse = '';
+        if (accountInfo) {
+          toolResponse = `Customer Account Information:\n`;
+          if (accountInfo.customer) {
+            toolResponse += `Customer: ${accountInfo.customer.name}`;
+            if (accountInfo.customer.company && accountInfo.customer.company !== '-') {
+              toolResponse += ` (${accountInfo.customer.company})`;
+            }
+            toolResponse += '\n';
+          }
+          toolResponse += `Order Count: ${accountInfo.orderCount}\n`;
+          
+          const formattedTotal = new Intl.NumberFormat('en-ZA', {
+            style: 'currency',
+            currency: 'ZAR',
+          }).format(accountInfo.totalOrderValue);
+          toolResponse += `Total Order Value: ${formattedTotal}\n`;
+          
+          if (accountInfo.lastOrderDate) {
+            const lastOrderDate = new Date(accountInfo.lastOrderDate).toLocaleDateString('en-ZA', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+            toolResponse += `Last Order Date: ${lastOrderDate}\n`;
+          } else {
+            toolResponse += `Last Order Date: No orders yet\n`;
+          }
+          
+          toolResponse += `\nQuotes (${accountInfo.quotes.length}):\n`;
+          if (accountInfo.quotes.length > 0) {
+            accountInfo.quotes.forEach((quote, index) => {
+              const quoteDate = new Date(quote.createdAt).toLocaleDateString('en-ZA', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              });
+              const quoteValue = quote.value !== null
+                ? new Intl.NumberFormat('en-ZA', {
+                    style: 'currency',
+                    currency: 'ZAR',
+                  }).format(quote.value)
+                : 'N/A';
+              toolResponse += `${index + 1}. ${quote.quoteNo} - ${quoteDate} - ${quoteValue}\n`;
+            });
+          } else {
+            toolResponse += 'No quotes found\n';
+          }
+          
+          toolResponse += `\nInvoices/Orders (${accountInfo.invoices.length}):\n`;
+          if (accountInfo.invoices.length > 0) {
+            accountInfo.invoices.forEach((invoice, index) => {
+              const invoiceDate = new Date(invoice.createdAt).toLocaleDateString('en-ZA', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              });
+              const invoiceValue = invoice.value !== null
+                ? new Intl.NumberFormat('en-ZA', {
+                    style: 'currency',
+                    currency: 'ZAR',
+                  }).format(invoice.value)
+                : 'N/A';
+              toolResponse += `${index + 1}. ${invoice.invoiceNo} - ${invoiceDate} - ${invoiceValue}\n`;
+            });
+          } else {
+            toolResponse += 'No invoices/orders found\n';
+          }
+        } else {
+          toolResponse = `No customer account information found for identifier: ${identifier || 'provided identifier'}. Please verify the identifier or contact support.`;
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResponse,
+        });
+
+        // Add customer information to system context if available
+        if (accountInfo?.customer) {
+          const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${accountInfo.customer.name}${accountInfo.customer.company && accountInfo.customer.company !== '-' ? ` from ${accountInfo.customer.company}` : ''}.${accountInfo.customer.email && accountInfo.customer.email !== '-' ? ` Their email is ${accountInfo.customer.email}.` : ''}${accountInfo.customer.phone && accountInfo.customer.phone !== '-' ? ` Their phone number is ${accountInfo.customer.phone}.` : ''} They have ${accountInfo.orderCount} orders with a total value of ${new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(accountInfo.totalOrderValue)}. Remember this information for the rest of the conversation.`;
+
+          const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+          if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
+            messages[systemMessageIndex].content += customerContext;
+          }
+        }
+
+        // Get final response from AI
+        const finalCompletion = await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+        });
+
+        const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+
+        // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
+          }
+        }
+
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: toolCalls,
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: finalCompletion.model,
+            finish_reason: finalCompletion.choices[0].finish_reason,
+          },
+        };
+
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+
+        return aiResponse;
+      }
     }
     
     // No tool calls, just return the response
