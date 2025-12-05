@@ -141,38 +141,62 @@ function extractPhoneCore(phone: string): string | null {
   const cleaned = phone.replace(/[\s\-()]/g, '');
   
   // Extract 9 digits - try different patterns
-  // Pattern 1: Starts with 27 followed by 9 digits
+  // Pattern 1: Starts with 27 followed by 9 digits (e.g., "27693475825" -> "693475825")
   const match27 = cleaned.match(/^27(\d{9})$/);
-  if (match27) return match27[1];
+  if (match27) {
+    console.log(`Extracted phone core from ${cleaned}: ${match27[1]} (removed country code 27)`);
+    return match27[1];
+  }
   
-  // Pattern 2: Starts with 0 followed by 9 digits
+  // Pattern 2: Starts with 0 followed by 9 digits (e.g., "0693475825" -> "693475825")
   const match0 = cleaned.match(/^0(\d{9})$/);
-  if (match0) return match0[1];
+  if (match0) {
+    console.log(`Extracted phone core from ${cleaned}: ${match0[1]} (removed leading 0)`);
+    return match0[1];
+  }
   
-  // Pattern 3: Just 9 digits
+  // Pattern 3: Just 9 digits (e.g., "693475825" -> "693475825")
   const match9 = cleaned.match(/^(\d{9})$/);
-  if (match9) return match9[1];
+  if (match9) {
+    console.log(`Extracted phone core from ${cleaned}: ${match9[1]} (already 9 digits)`);
+    return match9[1];
+  }
   
+  console.log(`Could not extract phone core from: ${cleaned}`);
   return null;
 }
 
 // Helper to check if phone number in payload matches target phone core
 function phoneMatches(payload: unknown, targetPhoneCore: string): boolean {
-  if (!targetPhoneCore) return false;
+  if (!targetPhoneCore) {
+    console.log('phoneMatches: No target phone core provided');
+    return false;
+  }
   
   const p = parsePayload(payload);
-  if (!p || typeof p !== 'object') return false;
+  if (!p || typeof p !== 'object') {
+    console.log('phoneMatches: Could not parse payload');
+    return false;
+  }
   
   // Check both customer and enquiryCustomer
   const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
-  if (!customerUnknown || typeof customerUnknown !== 'object') return false;
+  if (!customerUnknown || typeof customerUnknown !== 'object') {
+    console.log('phoneMatches: No customer or enquiryCustomer found in payload');
+    return false;
+  }
   
   const customer = customerUnknown as Record<string, unknown>;
   const phone = pickStr(customer, ['phone', 'telephone', 'telephoneNumber', 'phoneNumber']);
-  if (!phone) return false;
+  if (!phone) {
+    console.log('phoneMatches: No phone number found in customer data');
+    return false;
+  }
   
   const phoneCore = extractPhoneCore(phone);
-  return phoneCore === targetPhoneCore;
+  const matches = phoneCore === targetPhoneCore;
+  console.log(`phoneMatches: Comparing "${phoneCore}" (from payload: "${phone}") with "${targetPhoneCore}" -> ${matches}`);
+  return matches;
 }
 
 export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | null> {
