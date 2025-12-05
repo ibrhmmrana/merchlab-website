@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { getChatHistory, saveChatMessage } from './memory';
 import { getOrderStatus } from './orderStatus';
 import { getQuoteInfo, getMostRecentQuoteByPhone } from './quoteInfo';
+import { getInvoiceInfo, getMostRecentInvoiceByPhone } from './invoiceInfo';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -27,6 +28,9 @@ export interface AIResponse {
   quotePdfUrl?: string; // PDF URL to send if quote info was retrieved
   quoteCaption?: string; // Caption for the PDF document
   quoteNumber?: string; // Quote number for filename
+  invoicePdfUrl?: string; // PDF URL to send if invoice info was retrieved
+  invoiceCaption?: string; // Caption for the PDF document
+  invoiceNumber?: string; // Invoice number for filename
 }
 
 /**
@@ -149,6 +153,27 @@ export async function processMessage(
                 quote_number: {
                   type: 'string',
                   description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618"). If the customer mentions a specific quote number, use that. If they ask about "my quote" or "the quote" without specifying a quote number, leave this empty (the phone number will be used automatically).',
+                },
+                phone_number: {
+                  type: 'string',
+                  description: 'The customer\'s phone number. This is optional - if not provided, the phone number from the conversation context will be used automatically. Only provide this if you have a specific phone number to use.',
+                },
+              },
+              required: [],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_invoice_info',
+            description: 'Get invoice information by invoice number or phone number. Use this tool whenever a customer asks about their invoice, including: 1) When they ask to resend/send the invoice PDF, 2) When they ask about invoice details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about an invoice (e.g., "What items are in my invoice?", "What\'s the total?", "What products did I order?"), 4) When they say "my invoice" or "send me my invoice" without providing an invoice number. IMPORTANT: If the customer says "my invoice" or "send me my invoice" without providing an invoice number, you MUST call this tool. You do NOT need to provide the phone_number parameter - it will be automatically injected from the conversation context. Just call the tool with an empty invoice_number. Always call this tool to get accurate, up-to-date invoice information rather than relying on memory. The tool will return all invoice details including items, quantities, descriptions, total amount, and customer information.',
+            parameters: {
+              type: 'object',
+              properties: {
+                invoice_number: {
+                  type: 'string',
+                  description: 'The invoice number provided by the customer (e.g., "INV-Q553-HFKTH", "INV-ML-DM618", or just "Q553-HFKTH", "ML-DM618"). If the customer mentions a specific invoice number, use that. If they ask about "my invoice" or "the invoice" without specifying an invoice number, leave this empty (the phone number will be used automatically).',
                 },
                 phone_number: {
                   type: 'string',
@@ -505,6 +530,238 @@ export async function processMessage(
           quotePdfUrl: (quoteInfo && shouldSendPdf) ? quoteInfo.pdfUrl : undefined,
           quoteCaption: (quoteInfo && shouldSendPdf) ? quoteCaption : undefined,
           quoteNumber: quoteInfo?.quoteNo,
+        };
+        
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+        
+        return aiResponse;
+      }
+
+      // Handle get_invoice_info tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_invoice_info') {
+        let args = JSON.parse(toolCall.function.arguments) as { invoice_number?: string; phone_number?: string };
+        const invoiceNumber = args.invoice_number;
+        
+        console.log(`get_invoice_info tool called with args:`, { invoice_number: invoiceNumber, phone_number: args.phone_number, customerPhoneNumber });
+        
+        // If no invoice number provided but we have customer phone number, automatically inject it
+        if (!invoiceNumber && customerPhoneNumber && !args.phone_number) {
+          console.log(`No invoice number provided, automatically using customer phone number: ${customerPhoneNumber}`);
+          args = { ...args, phone_number: customerPhoneNumber };
+          // Update the tool call arguments for logging
+          toolCall.function.arguments = JSON.stringify(args);
+        }
+        
+        const phoneNumber = args.phone_number || customerPhoneNumber;
+        console.log(`Using phone number for invoice lookup: ${phoneNumber} (from args: ${args.phone_number}, from context: ${customerPhoneNumber})`);
+        
+        // Get invoice information
+        let invoiceInfo: Awaited<ReturnType<typeof getInvoiceInfo>> | null = null;
+        
+        if (invoiceNumber) {
+          // Invoice number provided - use it
+          invoiceInfo = await getInvoiceInfo(invoiceNumber);
+        } else if (phoneNumber) {
+          // No invoice number but phone number available - find most recent invoice
+          console.log(`No invoice number provided, searching for most recent invoice by phone: ${phoneNumber}`);
+          invoiceInfo = await getMostRecentInvoiceByPhone(phoneNumber);
+          if (invoiceInfo) {
+            console.log(`Found most recent invoice: ${invoiceInfo.invoiceNo} for phone: ${phoneNumber}`);
+          } else {
+            console.log(`No invoices found for phone: ${phoneNumber}`);
+          }
+        } else {
+          // Neither provided
+          invoiceInfo = null;
+        }
+        
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'get_invoice_info',
+                  arguments: JSON.stringify(args), // Use updated args with phone number if injected
+                },
+              },
+            ],
+          });
+        }
+        
+        // Build tool response with invoice information
+        let toolResponse = '';
+        if (invoiceInfo) {
+          toolResponse = `Invoice found: ${invoiceInfo.invoiceNo}`;
+          if (invoiceInfo.customer) {
+            toolResponse += `\nCustomer: ${invoiceInfo.customer.name}`;
+            if (invoiceInfo.customer.company && invoiceInfo.customer.company !== '-') {
+              toolResponse += ` (${invoiceInfo.customer.company})`;
+            }
+          }
+          if (invoiceInfo.createdAt) {
+            const createdDate = new Date(invoiceInfo.createdAt).toLocaleDateString('en-ZA', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            });
+            toolResponse += `\nCreated: ${createdDate}`;
+          }
+          if (invoiceInfo.value !== null) {
+            const formattedValue = new Intl.NumberFormat('en-ZA', {
+              style: 'currency',
+              currency: 'ZAR',
+            }).format(invoiceInfo.value);
+            toolResponse += `\nTotal Amount (YOU CAN AND MUST SHARE THIS WITH THE CUSTOMER): ${formattedValue}`;
+          }
+          toolResponse += `\nPDF URL: ${invoiceInfo.pdfUrl}`;
+
+          // Extract and format items for easy reference
+          const shareable = invoiceInfo.shareableDetails;
+          if (shareable.items && Array.isArray(shareable.items)) {
+            toolResponse += `\n\nItems in invoice (${shareable.items.length} items):`;
+            shareable.items.forEach((item: unknown, index: number) => {
+              if (typeof item === 'object' && item !== null) {
+                const itemObj = item as Record<string, unknown>;
+                const description = itemObj.description || itemObj.stock_code || 'Item';
+                const quantity = itemObj.quantity || 0;
+                const price = itemObj.price || itemObj.discountedPrice || itemObj.discounted_price || 0;
+                const colour = itemObj.colour || itemObj.color || '';
+                const size = itemObj.size || '';
+
+                toolResponse += `\n${index + 1}. ${description}`;
+                if (quantity) toolResponse += ` - Quantity: ${quantity}`;
+                if (colour) toolResponse += ` - Color: ${colour}`;
+                if (size) toolResponse += ` - Size: ${size}`;
+                if (price) {
+                  const formattedPrice = new Intl.NumberFormat('en-ZA', {
+                    style: 'currency',
+                    currency: 'ZAR',
+                  }).format(typeof price === 'number' ? price : parseFloat(String(price)) || 0);
+                  toolResponse += ` - Price: ${formattedPrice}`;
+                }
+              }
+            });
+          }
+
+          // Include all shareable invoice details as JSON for the AI to reference
+          toolResponse += `\n\nFull Invoice Details (all shareable with customer, excluding base_price and beforeVAT):\n${JSON.stringify(shareable, null, 2)}`;
+        } else {
+          if (invoiceNumber) {
+            toolResponse = `Invoice not found for invoice number: ${invoiceNumber}. Please verify the invoice number.`;
+          } else if (phoneNumber) {
+            toolResponse = `No invoices found for this phone number. Please provide a specific invoice number or contact support.`;
+          } else {
+            toolResponse = `Please provide an invoice number or ensure your phone number is available to find your invoice.`;
+          }
+        }
+        
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResponse,
+        });
+        
+        // Add customer information to system context if available
+        if (invoiceInfo?.customer) {
+          const customerContext = `\n\nCUSTOMER CONTEXT: The customer you are speaking with is ${invoiceInfo.customer.name}${invoiceInfo.customer.company && invoiceInfo.customer.company !== '-' ? ` from ${invoiceInfo.customer.company}` : ''}.${invoiceInfo.customer.email && invoiceInfo.customer.email !== '-' ? ` Their email is ${invoiceInfo.customer.email}.` : ''}${invoiceInfo.customer.phone && invoiceInfo.customer.phone !== '-' ? ` Their phone number is ${invoiceInfo.customer.phone}.` : ''} Remember this information for the rest of the conversation.`;
+          
+          const systemMessageIndex = messages.findIndex(m => m.role === 'system');
+          if (systemMessageIndex !== -1 && typeof messages[systemMessageIndex].content === 'string') {
+            messages[systemMessageIndex].content += customerContext;
+          }
+        }
+        
+        // Check if this is a follow-up question (not a request to send PDF)
+        const userMessageLower = userMessage.toLowerCase();
+        const isPdfRequest = userMessageLower.includes('resend') || 
+                            userMessageLower.includes('send') || 
+                            userMessageLower.includes('pdf') ||
+                            userMessageLower.includes('invoice') && (userMessageLower.includes('please') || userMessageLower.includes('can you'));
+        
+        let invoiceCaption = '';
+        let aiResponseContent = '';
+        let shouldSendPdf = false;
+        
+        if (invoiceInfo) {
+          // Build caption for PDF (only if explicitly requested)
+          invoiceCaption = `📄 Your Invoice: ${invoiceInfo.invoiceNo}\n\n`;
+          if (invoiceInfo.customer) {
+            invoiceCaption += `Customer: ${invoiceInfo.customer.name}`;
+            if (invoiceInfo.customer.company && invoiceInfo.customer.company !== '-') {
+              invoiceCaption += ` (${invoiceInfo.customer.company})`;
+            }
+            invoiceCaption += '\n';
+          }
+          if (invoiceInfo.createdAt) {
+            const createdDate = new Date(invoiceInfo.createdAt).toLocaleDateString('en-ZA', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+            invoiceCaption += `Created: ${createdDate}\n`;
+          }
+          if (invoiceInfo.value !== null) {
+            const formattedValue = new Intl.NumberFormat('en-ZA', {
+              style: 'currency',
+              currency: 'ZAR',
+            }).format(invoiceInfo.value);
+            invoiceCaption += `Total Amount: ${formattedValue}\n`;
+          }
+          invoiceCaption += '\nYour invoice PDF is attached below. If you have any questions, please let me know! 😊';
+          
+          // If it's a PDF request, use caption and send PDF
+          // If it's a follow-up question, generate text response with AI
+          if (isPdfRequest) {
+            shouldSendPdf = true;
+            aiResponseContent = invoiceCaption;
+          } else {
+            // Follow-up question - generate text response using AI
+            shouldSendPdf = false;
+            const finalCompletion = await openai.chat.completions.create({
+              model: MODEL,
+              messages,
+            });
+            aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+          }
+        } else {
+          // Invoice not found - need AI to generate a response
+          shouldSendPdf = false;
+          const finalCompletion = await openai.chat.completions.create({
+            model: MODEL,
+            messages,
+          });
+          aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I could not find the invoice. Please verify the invoice number.';
+        }
+        
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: [{
+            id: toolCall.id,
+            type: 'function',
+            function: {
+              name: 'get_invoice_info',
+              arguments: toolCall.function.arguments,
+            },
+          }],
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: MODEL,
+            finish_reason: 'stop',
+          },
+          // Only include PDF info if it's a PDF request
+          invoicePdfUrl: (invoiceInfo && shouldSendPdf) ? invoiceInfo.pdfUrl : undefined,
+          invoiceCaption: (invoiceInfo && shouldSendPdf) ? invoiceCaption : undefined,
+          invoiceNumber: invoiceInfo?.invoiceNo,
         };
         
         // Save messages to memory
