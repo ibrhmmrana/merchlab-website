@@ -74,7 +74,23 @@ When handling quote requests:
 - You can share ALL quote information with the customer EXCEPT base_price and beforeVAT fields (these are internal costs and should never be mentioned)
 - Always acknowledge the customer by name when providing quote information
 - When answering questions about quote items, use the items array from the tool response to list products, quantities, descriptions, colors, sizes, etc.
-- When sending a quote PDF, the PDF will be sent automatically with a caption`;
+- When sending a quote PDF, the PDF will be sent automatically with a caption
+
+When handling invoice requests:
+- ALWAYS use the get_invoice_info tool to get accurate invoice information - do not rely on memory or conversation history
+- CRITICAL: If a customer provides an invoice number (e.g., "INV-Q453-4G5L6", "INV-Q553-HFKTH", "INV-ML-DM618", or just "Q553-HFKTH", "ML-DM618"), you MUST IMMEDIATELY call the get_invoice_info tool with that invoice number. Do NOT say you can't find it without calling the tool first.
+- If a customer asks to send/resend an invoice PDF and provides an invoice number, call get_invoice_info tool with that invoice number - the PDF will be sent automatically
+- If a customer asks about their invoice (items, total, quantities, descriptions, etc.) and provides an invoice number, call get_invoice_info tool with that invoice number
+- If the customer asks to resend/send the invoice PDF without providing an invoice number, call get_invoice_info tool with empty invoice_number - the phone number will be used automatically
+- If the customer asks follow-up questions about an invoice (e.g., "What items are in my invoice?", "What's the total?", "What products did I order?"), call get_invoice_info tool again to get accurate information
+- CRITICAL: If a customer says "my invoice" or "send me my invoice" without providing an invoice number, you MUST call the get_invoice_info tool. You do NOT need to provide any parameters - just call the tool with an empty invoice_number. The phone number will be automatically used from the conversation context to find their most recent invoice. DO NOT ask the customer for their phone number or invoice number in this case.
+- Invoice numbers can be in formats like "INV-Q453-4G5L6", "INV-Q553-HFKTH", "INV-ML-DM618" or just "Q553-HFKTH", "ML-DM618" - always try the tool with the exact format the customer provided
+- The tool will return invoice information including total amount, items with quantities and descriptions, and all invoice details
+- You MUST share the invoice total amount with customers - it is the final price they paid (including VAT if applicable)
+- You can share ALL invoice information with the customer EXCEPT base_price and beforeVAT fields (these are internal costs and should never be mentioned)
+- Always acknowledge the customer by name when providing invoice information
+- When answering questions about invoice items, use the items array from the tool response to list products, quantities, descriptions, colors, sizes, etc.
+- When sending an invoice PDF, the PDF will be sent automatically with a caption`;
 
 /**
  * Process a message with the AI agent
@@ -167,7 +183,7 @@ export async function processMessage(
           type: 'function',
           function: {
             name: 'get_invoice_info',
-            description: 'Get invoice information by invoice number or phone number. Use this tool whenever a customer asks about their invoice, including: 1) When they ask to resend/send the invoice PDF, 2) When they ask about invoice details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about an invoice (e.g., "What items are in my invoice?", "What\'s the total?", "What products did I order?"), 4) When they say "my invoice" or "send me my invoice" or "please send me my invoice" without providing an invoice number. CRITICAL: If the customer says "my invoice" or "send me my invoice" or "please send me my invoice" without providing an invoice number, you MUST IMMEDIATELY call this tool with an empty invoice_number. Do NOT ask the customer for their invoice number. The phone number will be automatically injected from the conversation context. Always call this tool to get accurate, up-to-date invoice information rather than relying on memory. The tool will return all invoice details including items, quantities, descriptions, total amount, and customer information.',
+            description: 'Get invoice information by invoice number or phone number. Use this tool whenever a customer asks about their invoice, including: 1) When they provide an invoice number (e.g., "INV-Q453-4G5L6", "INV-Q553-HFKTH", "INV-ML-DM618") - you MUST call this tool immediately with that invoice number, 2) When they ask to resend/send the invoice PDF, 3) When they ask about invoice details (items, total, quantities, descriptions, etc.), 4) When they ask follow-up questions about an invoice (e.g., "What items are in my invoice?", "What\'s the total?", "What products did I order?"), 5) When they say "my invoice" or "send me my invoice" without providing an invoice number. CRITICAL: If the customer provides an invoice number (in any format like "INV-Q453-4G5L6" or just "Q453-4G5L6"), you MUST IMMEDIATELY call this tool with that invoice number. Do NOT say you cannot find the invoice without calling the tool first. If the customer says "my invoice" or "send me my invoice" without providing an invoice number, you MUST IMMEDIATELY call this tool with an empty invoice_number. Do NOT ask the customer for their invoice number. The phone number will be automatically injected from the conversation context. Always call this tool to get accurate, up-to-date invoice information rather than relying on memory. The tool will return all invoice details including items, quantities, descriptions, total amount, and customer information.',
             parameters: {
               type: 'object',
               properties: {
