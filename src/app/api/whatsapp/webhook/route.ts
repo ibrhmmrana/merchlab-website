@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       const messages = bodyWithDirect.messages;
       waId = contacts[0]?.wa_id || messages[0]?.from || null;
       customerName = contacts[0]?.profile?.name || waId || 'Unknown';
-      messageText = messages[0]?.text?.body || messages[0]?.body || '';
+      messageText = messages[0]?.text?.body || '';
       console.log('Extracted from direct format:', { waId, customerName, messageText });
     }
     
