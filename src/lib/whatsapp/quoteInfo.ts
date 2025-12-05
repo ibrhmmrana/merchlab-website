@@ -87,11 +87,16 @@ export interface QuoteInfo {
 export async function getMostRecentQuoteByPhone(phoneNumber: string): Promise<QuoteInfo | null> {
   const supabase = getSupabaseAdmin();
   
+  console.log(`getMostRecentQuoteByPhone: Looking up quote for phone number: ${phoneNumber}`);
+  
   // Extract phone core (9 digits) from phone number
   const phoneCore = extractPhoneCore(phoneNumber);
   if (!phoneCore) {
+    console.log(`getMostRecentQuoteByPhone: Could not extract phone core from: ${phoneNumber}`);
     return null;
   }
+  
+  console.log(`getMostRecentQuoteByPhone: Extracted phone core: ${phoneCore} from input: ${phoneNumber}`);
   
   try {
     // Fetch all quotes ordered by creation date (most recent first)
@@ -105,10 +110,15 @@ export async function getMostRecentQuoteByPhone(phoneNumber: string): Promise<Qu
       return null;
     }
     
+    console.log(`getMostRecentQuoteByPhone: Fetched ${quotes.length} quotes from database`);
+    
     // Find quotes matching the phone number
     const matchingQuotes = quotes.filter((q) => phoneMatches(q.payload, phoneCore));
     
+    console.log(`getMostRecentQuoteByPhone: Found ${matchingQuotes.length} matching quotes for phone core: ${phoneCore}`);
+    
     if (matchingQuotes.length === 0) {
+      console.log(`getMostRecentQuoteByPhone: No quotes found matching phone core: ${phoneCore}`);
       return null;
     }
     
