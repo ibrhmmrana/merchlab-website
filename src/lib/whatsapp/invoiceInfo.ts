@@ -259,6 +259,7 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
       .single();
 
     if (!error && data) {
+      console.log(`Found invoice: ${data.invoice_no} (matched variation: ${variation})`);
       const customer = extractCustomerFromPayload(data.payload);
       const value = parseGrandTotal(data.payload);
       const shareableDetails = extractShareableInvoiceDetails(data.payload);
@@ -273,6 +274,7 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
     }
   }
 
+  console.log(`Invoice not found for: ${invoiceNumber} (tried variations: ${variations.join(', ')})`);
   return null;
 }
 

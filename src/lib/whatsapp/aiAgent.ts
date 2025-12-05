@@ -684,10 +684,11 @@ export async function processMessage(
         const userMessageLower = userMessage.toLowerCase();
         // For invoices, if they say "my invoice" or "send me my invoice", always send PDF
         // Also check if they're asking to send/resend the invoice
+        // If an invoice number was provided in the tool call AND they said "send", it's a PDF request
         // If no invoice number was provided in the tool call, it's likely a "my invoice" request - always send PDF
         const isPdfRequest = !invoiceNumber || // If no invoice number provided, it's a "my invoice" request
                             userMessageLower.includes('resend') || 
-                            (userMessageLower.includes('send') && userMessageLower.includes('invoice')) ||
+                            (userMessageLower.includes('send') && (userMessageLower.includes('invoice') || invoiceNumber)) || // If they said "send" and provided invoice number, send PDF
                             userMessageLower.includes('pdf') ||
                             (userMessageLower.includes('invoice') && (userMessageLower.includes('please') || userMessageLower.includes('can you') || userMessageLower.includes('my')));
         
