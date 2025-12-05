@@ -68,9 +68,10 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    
     // Format 2: Standard WhatsApp Business API format
     // { "object": "whatsapp_business_account", "entry": [...] }
-    else if ((body as { object?: string }).object === 'whatsapp_business_account') {
+    if (!waId && (body as { object?: string }).object === 'whatsapp_business_account') {
       console.log('Found standard WhatsApp Business API format');
       const entries = ((body as { entry?: unknown[] }).entry || []) as Array<{ changes?: Array<{ field?: string; value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> }>;
       
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
     // Format 3: BotPenguin/n8n webhook format (body.event.value)
     // { "event": { "value": { "contacts": [...], "messages": [...] }, "field": "messages" } }
-    else if ((body as { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event?.value) {
+    if (!waId && (body as { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event?.value) {
       console.log('Found BotPenguin format: body.event.value');
       const eventValue = (body as { event: { value: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event.value;
       const contacts = eventValue.contacts || [];
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
     // Format 4: Nested body format (body.body.event.value)
     // { "body": { "event": { "value": { "contacts": [...], "messages": [...] } } } }
-    else if ((body as { body?: { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body?.event?.value) {
+    if (!waId && (body as { body?: { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body?.event?.value) {
       console.log('Found nested format: body.body.event.value');
       const eventValue = (body as { body: { event: { value: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body.event.value;
       const contacts = eventValue.contacts || [];
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     }
     // Format 5: Direct format (fallback)
     // { "contacts": [...], "messages": [...] }
-    else if ((body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts && (body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages) {
+    if (!waId && (body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts && (body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages) {
       console.log('Found direct format: body.contacts and body.messages');
       const contacts = (body as { contacts: Array<{ wa_id?: string; profile?: { name?: string } }>; messages: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts;
       const messages = (body as { contacts: Array<{ wa_id?: string; profile?: { name?: string } }>; messages: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages;
