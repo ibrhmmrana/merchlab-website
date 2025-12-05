@@ -136,7 +136,8 @@ When handling escalations:
 export async function processMessage(
   sessionId: string,
   userMessage: string,
-  customerPhoneNumber?: string
+  customerPhoneNumber?: string,
+  customerWhatsAppName?: string
 ): Promise<AIResponse> {
   try {
     // Get chat history from Postgres
@@ -1330,6 +1331,9 @@ export async function processMessage(
         // Try to get customer info from recent tool calls or conversation
         if (customerPhoneNumber) {
           escalationContext.customerPhone = customerPhoneNumber;
+        }
+        if (customerWhatsAppName) {
+          escalationContext.customerName = customerWhatsAppName;
         }
 
         // Add tool response to messages

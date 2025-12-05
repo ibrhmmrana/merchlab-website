@@ -93,7 +93,7 @@ export async function sendEscalationEmail(context: EscalationContext): Promise<v
   body += `<p><strong>Reason:</strong> ${context.reason}</p>`;
   
   if (context.customerName) {
-    body += `<p><strong>Customer Name:</strong> ${context.customerName}</p>`;
+    body += `<p><strong>Customer Name (WhatsApp Profile):</strong> ${context.customerName}</p>`;
   }
   
   if (context.customerPhone) {
