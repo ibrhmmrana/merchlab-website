@@ -281,11 +281,29 @@ export async function processMessage(
       
       // Handle get_quote_info tool call
       if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'get_quote_info') {
-        const args = JSON.parse(toolCall.function.arguments) as { quote_number: string };
+        const args = JSON.parse(toolCall.function.arguments) as { quote_number?: string; phone_number?: string };
         const quoteNumber = args.quote_number;
+        const phoneNumber = args.phone_number || customerPhoneNumber;
         
         // Get quote information
-        const quoteInfo = await getQuoteInfo(quoteNumber);
+        let quoteInfo: Awaited<ReturnType<typeof getQuoteInfo>> | null = null;
+        
+        if (quoteNumber) {
+          // Quote number provided - use it
+          quoteInfo = await getQuoteInfo(quoteNumber);
+        } else if (phoneNumber) {
+          // No quote number but phone number available - find most recent quote
+          console.log(`No quote number provided, searching for most recent quote by phone: ${phoneNumber}`);
+          quoteInfo = await getMostRecentQuoteByPhone(phoneNumber);
+          if (quoteInfo) {
+            console.log(`Found most recent quote: ${quoteInfo.quoteNo} for phone: ${phoneNumber}`);
+          } else {
+            console.log(`No quotes found for phone: ${phoneNumber}`);
+          }
+        } else {
+          // Neither provided
+          quoteInfo = null;
+        }
         
         // Add tool response to messages
         if (toolCall.type === 'function' && 'function' in toolCall) {
