@@ -80,6 +80,101 @@ export interface QuoteInfo {
   shareableDetails: Record<string, unknown>; // All quote details except base_price and beforeVAT
 }
 
+/**
+ * Find the most recent quote by phone number
+ * Returns the most recent quote for the given phone number
+ */
+export async function getMostRecentQuoteByPhone(phoneNumber: string): Promise<QuoteInfo | null> {
+  const supabase = getSupabaseAdmin();
+  
+  // Extract phone core (9 digits) from phone number
+  const phoneCore = extractPhoneCore(phoneNumber);
+  if (!phoneCore) {
+    return null;
+  }
+  
+  try {
+    // Fetch all quotes ordered by creation date (most recent first)
+    const { data: quotes, error } = await supabase
+      .from('quote_docs')
+      .select('quote_no, created_at, payload')
+      .order('created_at', { ascending: false });
+    
+    if (error || !quotes) {
+      console.error('Error fetching quotes:', error);
+      return null;
+    }
+    
+    // Find quotes matching the phone number
+    const matchingQuotes = quotes.filter((q) => phoneMatches(q.payload, phoneCore));
+    
+    if (matchingQuotes.length === 0) {
+      return null;
+    }
+    
+    // Get the most recent quote (first in the array since we ordered by created_at desc)
+    const mostRecentQuote = matchingQuotes[0];
+    
+    const customer = extractCustomerFromPayload(mostRecentQuote.payload);
+    const value = parseGrandTotal(mostRecentQuote.payload);
+    const shareableDetails = extractShareableQuoteDetails(mostRecentQuote.payload);
+    
+    return {
+      quoteNo: mostRecentQuote.quote_no,
+      customer,
+      pdfUrl: formatPdfUrl(mostRecentQuote.quote_no),
+      createdAt: mostRecentQuote.created_at,
+      value,
+      shareableDetails,
+    };
+  } catch (error) {
+    console.error('Error finding quote by phone number:', error);
+    return null;
+  }
+}
+
+// Helper to extract phone core (9 digits) from phone number
+function extractPhoneCore(phone: string): string | null {
+  if (!phone) return null;
+  
+  // Remove all spaces, dashes, and parentheses
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  
+  // Extract 9 digits - try different patterns
+  // Pattern 1: Starts with 27 followed by 9 digits
+  const match27 = cleaned.match(/^27(\d{9})$/);
+  if (match27) return match27[1];
+  
+  // Pattern 2: Starts with 0 followed by 9 digits
+  const match0 = cleaned.match(/^0(\d{9})$/);
+  if (match0) return match0[1];
+  
+  // Pattern 3: Just 9 digits
+  const match9 = cleaned.match(/^(\d{9})$/);
+  if (match9) return match9[1];
+  
+  return null;
+}
+
+// Helper to check if phone number in payload matches target phone core
+function phoneMatches(payload: unknown, targetPhoneCore: string): boolean {
+  if (!targetPhoneCore) return false;
+  
+  const p = parsePayload(payload);
+  if (!p || typeof p !== 'object') return false;
+  
+  // Check both customer and enquiryCustomer
+  const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
+  if (!customerUnknown || typeof customerUnknown !== 'object') return false;
+  
+  const customer = customerUnknown as Record<string, unknown>;
+  const phone = pickStr(customer, ['phone', 'telephone', 'telephoneNumber', 'phoneNumber']);
+  if (!phone) return false;
+  
+  const phoneCore = extractPhoneCore(phone);
+  return phoneCore === targetPhoneCore;
+}
+
 export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | null> {
   const supabase = getSupabaseAdmin();
   

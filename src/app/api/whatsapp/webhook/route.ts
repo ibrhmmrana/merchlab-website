@@ -163,7 +163,8 @@ export async function POST(request: NextRequest) {
       try {
         const aiResponse = await processMessage(
           sessionId,
-          messageText
+          messageText,
+          customerNumber // Pass phone number so AI can find quotes by phone
         );
         
         // Send response via WhatsApp and save accordingly

@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { getChatHistory, saveChatMessage } from './memory';
 import { getOrderStatus } from './orderStatus';
-import { getQuoteInfo } from './quoteInfo';
+import { getQuoteInfo, getMostRecentQuoteByPhone } from './quoteInfo';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -76,7 +76,8 @@ When handling quote requests:
  */
 export async function processMessage(
   sessionId: string,
-  userMessage: string
+  userMessage: string,
+  customerPhoneNumber?: string
 ): Promise<AIResponse> {
   try {
     // Get chat history from Postgres
@@ -140,16 +141,20 @@ export async function processMessage(
           type: 'function',
           function: {
             name: 'get_quote_info',
-            description: 'Get quote information by quote number. Use this tool whenever a customer asks about their quote, including: 1) When they ask to resend/send the quote PDF, 2) When they ask about quote details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about a quote (e.g., "What items are in my quote?", "What\'s the total?", "What products did I order?"). Always call this tool to get accurate, up-to-date quote information rather than relying on memory. The tool will return all quote details including items, quantities, descriptions, total amount, and customer information.',
+            description: 'Get quote information by quote number or phone number. Use this tool whenever a customer asks about their quote, including: 1) When they ask to resend/send the quote PDF, 2) When they ask about quote details (items, total, quantities, descriptions, etc.), 3) When they ask follow-up questions about a quote (e.g., "What items are in my quote?", "What\'s the total?", "What products did I order?"). If the customer says "my quote" or "send me my quote" without providing a quote number, use their phone number to find their most recent quote. Always call this tool to get accurate, up-to-date quote information rather than relying on memory. The tool will return all quote details including items, quantities, descriptions, total amount, and customer information.',
             parameters: {
               type: 'object',
               properties: {
                 quote_number: {
                   type: 'string',
-                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618"). If the customer mentions a quote number in the conversation, use that. If they ask about "my quote" or "the quote" without specifying, check the conversation history for the most recent quote number mentioned.',
+                  description: 'The quote number provided by the customer (e.g., "Q553-HFKTH" or "ML-DM618"). If the customer mentions a quote number in the conversation, use that. If they ask about "my quote" or "the quote" without specifying a quote number, leave this empty and use phone_number instead.',
+                },
+                phone_number: {
+                  type: 'string',
+                  description: 'The customer\'s phone number. Use this when the customer asks about "my quote" or "send me my quote" without providing a specific quote number. The phone number will be used to find their most recent quote.',
                 },
               },
-              required: ['quote_number'],
+              required: [],
             },
           },
         },
@@ -359,7 +364,13 @@ export async function processMessage(
           // Include all shareable quote details as JSON for the AI to reference
           toolResponse += `\n\nFull Quote Details (all shareable with customer, excluding base_price and beforeVAT):\n${JSON.stringify(shareable, null, 2)}`;
         } else {
-          toolResponse = `Quote not found for quote number: ${quoteNumber}. Please verify the quote number.`;
+          if (quoteNumber) {
+            toolResponse = `Quote not found for quote number: ${quoteNumber}. Please verify the quote number.`;
+          } else if (phoneNumber) {
+            toolResponse = `No quotes found for this phone number. Please provide a specific quote number or contact support.`;
+          } else {
+            toolResponse = `Please provide a quote number or ensure your phone number is available to find your quote.`;
+          }
         }
         
         messages.push({
