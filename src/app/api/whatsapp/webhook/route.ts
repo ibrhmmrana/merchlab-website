@@ -121,9 +121,10 @@ export async function POST(request: NextRequest) {
     }
     // Format 3: BotPenguin/n8n webhook format (body.event.value)
     // { "event": { "value": { "contacts": [...], "messages": [...] }, "field": "messages" } }
-    if (!waId && (body as { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event?.value) {
+    const bodyWithEvent = body as { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } };
+    if (!waId && bodyWithEvent.event?.value) {
       console.log('Found BotPenguin format: body.event.value');
-      const eventValue = (body as { event: { value: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event.value;
+      const eventValue = bodyWithEvent.event.value;
       const contacts = eventValue.contacts || [];
       const messages = eventValue.messages || [];
       
@@ -168,10 +169,11 @@ export async function POST(request: NextRequest) {
     }
     // Format 5: Direct format (fallback)
     // { "contacts": [...], "messages": [...] }
-    if (!waId && (body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts && (body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages) {
+    const bodyWithDirect = body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> };
+    if (!waId && bodyWithDirect.contacts && bodyWithDirect.messages) {
       console.log('Found direct format: body.contacts and body.messages');
-      const contacts = (body as { contacts: Array<{ wa_id?: string; profile?: { name?: string } }>; messages: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts;
-      const messages = (body as { contacts: Array<{ wa_id?: string; profile?: { name?: string } }>; messages: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages;
+      const contacts = bodyWithDirect.contacts;
+      const messages = bodyWithDirect.messages;
       waId = contacts[0]?.wa_id || messages[0]?.from || null;
       customerName = contacts[0]?.profile?.name || contacts[0]?.name || waId || 'Unknown';
       messageText = messages[0]?.text?.body || messages[0]?.body || '';
