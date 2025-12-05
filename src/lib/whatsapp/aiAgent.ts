@@ -3,6 +3,7 @@ import { getChatHistory, saveChatMessage } from './memory';
 import { getOrderStatus } from './orderStatus';
 import { getQuoteInfo, getMostRecentQuoteByPhone } from './quoteInfo';
 import { getInvoiceInfo, getMostRecentInvoiceByPhone } from './invoiceInfo';
+import { getCustomerAccountInfo } from './customerAccount';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -90,7 +91,17 @@ When handling invoice requests:
 - You can share ALL invoice information with the customer EXCEPT base_price and beforeVAT fields (these are internal costs and should never be mentioned)
 - Always acknowledge the customer by name when providing invoice information
 - When answering questions about invoice items, use the items array from the tool response to list products, quantities, descriptions, colors, sizes, etc.
-- When sending an invoice PDF, the PDF will be sent automatically with a caption`;
+- When sending an invoice PDF, the PDF will be sent automatically with a caption
+
+When handling customer account information requests:
+- ALWAYS use the get_customer_account_info tool to get accurate customer account information
+- If a customer asks about their orders, quotes, order history, total order value, or last order date, call get_customer_account_info tool
+- The tool can identify customers by: phone number, email, name, quote number, or invoice number
+- If the customer asks "What orders do I have?" or "What quotes do I have?" or "What's my order history?", use their phone number from the conversation context to call the tool
+- If the customer provides a quote or invoice number, you can use that to identify them and get their account information
+- The tool will return: order count, total order value, last order date, and lists of quotes and invoices
+- Always acknowledge the customer by name when providing account information
+- Format the response in a friendly, clear manner with the key information highlighted`;
 
 /**
  * Process a message with the AI agent
@@ -194,6 +205,23 @@ export async function processMessage(
                 phone_number: {
                   type: 'string',
                   description: 'The customer\'s phone number. This is optional - if not provided, the phone number from the conversation context will be used automatically. Only provide this if you have a specific phone number to use.',
+                },
+              },
+              required: [],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'get_customer_account_info',
+            description: 'Get customer account information including orders, quotes, order history, total order value, and last order date. Use this tool when a customer asks about: 1) Their orders ("What orders do I have?", "What\'s my order history?"), 2) Their quotes ("What quotes do I have?"), 3) Their total order value ("What\'s my total order value?"), 4) Their last order ("When was my last order?"). The tool can identify customers by phone number, email, name, quote number, or invoice number. If the customer asks about their account without providing an identifier, use their phone number from the conversation context.',
+            parameters: {
+              type: 'object',
+              properties: {
+                identifier: {
+                  type: 'string',
+                  description: 'Customer identifier: phone number, email, name, quote number (e.g., "Q553-HFKTH"), or invoice number (e.g., "INV-Q553-HFKTH"). If not provided, the customer\'s phone number from the conversation context will be used automatically.',
                 },
               },
               required: [],
