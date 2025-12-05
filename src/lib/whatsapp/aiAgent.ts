@@ -683,8 +683,9 @@ export async function processMessage(
         // Check if this is a follow-up question (not a request to send PDF)
         const userMessageLower = userMessage.toLowerCase();
         // For invoices, if they say "my invoice" or "send me my invoice", always send PDF
+        // Also check if they're asking to send/resend the invoice
         const isPdfRequest = userMessageLower.includes('resend') || 
-                            userMessageLower.includes('send') || 
+                            (userMessageLower.includes('send') && userMessageLower.includes('invoice')) ||
                             userMessageLower.includes('pdf') ||
                             (userMessageLower.includes('invoice') && (userMessageLower.includes('please') || userMessageLower.includes('can you') || userMessageLower.includes('my')));
         
