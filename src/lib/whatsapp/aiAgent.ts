@@ -246,6 +246,27 @@ export async function processMessage(
             },
           },
         },
+        {
+          type: 'function',
+          function: {
+            name: 'escalate_to_human',
+            description: 'Escalate the conversation to a human staff member. Use this tool when: 1) A customer explicitly asks to "speak to a human", "talk to a person", "speak to someone", or requests escalation, 2) A customer\'s request is too complex or outside your capabilities, 3) A customer is frustrated, angry, or dissatisfied and needs human assistance. The tool will send an email to staff with all conversation context and customer information. After escalating, inform the customer that a team member will be in touch shortly.',
+            parameters: {
+              type: 'object',
+              properties: {
+                reason: {
+                  type: 'string',
+                  description: 'The reason for escalation (e.g., "Customer requested to speak with human", "Complex issue requiring human assistance", "Customer is frustrated and needs human support")',
+                },
+                conversation_summary: {
+                  type: 'string',
+                  description: 'A brief summary of the conversation context and what the customer needs help with',
+                },
+              },
+              required: ['reason'],
+            },
+          },
+        },
       ],
       tool_choice: 'auto',
     });
@@ -1237,6 +1258,113 @@ export async function processMessage(
         });
 
         const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
+
+        // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
+          }
+        }
+
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: toolCalls,
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: finalCompletion.model,
+            finish_reason: finalCompletion.choices[0].finish_reason,
+          },
+        };
+
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+
+        return aiResponse;
+      }
+
+      // Handle escalate_to_human tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'escalate_to_human') {
+        const args = JSON.parse(toolCall.function.arguments) as { reason: string; conversation_summary?: string };
+        const reason = args.reason;
+        const conversationSummary = args.conversation_summary;
+
+        console.log(`escalate_to_human tool called with reason: ${reason}`);
+
+        // Get conversation history for context
+        const history = await getChatHistory(sessionId);
+        const conversationContext = history
+          .slice(-10) // Last 10 messages for context
+          .map(msg => `${msg.role === 'human' ? 'Customer' : 'AI'}: ${msg.content}`)
+          .join('\n');
+
+        // Build escalation context
+        const escalationContext: EscalationContext = {
+          reason,
+          conversationSummary: conversationSummary || conversationContext,
+          whatsappSessionId: sessionId,
+        };
+
+        // Try to get customer info from recent tool calls or conversation
+        if (customerPhoneNumber) {
+          escalationContext.customerPhone = customerPhoneNumber;
+        }
+
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'escalate_to_human',
+                  arguments: toolCall.function.arguments,
+                },
+              },
+            ],
+          });
+        }
+
+        // Send escalation email
+        let escalationResult = '';
+        try {
+          await sendEscalationEmail(escalationContext);
+          escalationResult = 'Escalation email sent successfully to staff. Staff will take over the conversation shortly.';
+          console.log('Escalation email sent successfully');
+        } catch (error) {
+          console.error('Error sending escalation email:', error);
+          escalationResult = `Escalation requested but email failed to send: ${error instanceof Error ? error.message : String(error)}. Please contact support directly.`;
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: escalationResult,
+        });
+
+        // Get final response from AI
+        const finalCompletion = await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+        });
+
+        const aiResponseContent = finalCompletion.choices[0].message.content || 'I have escalated your request to our team. A team member will be in touch with you shortly. Thank you for your patience!';
 
         // Extract metadata from the completion
         const toolCalls: ToolCall[] = [];
