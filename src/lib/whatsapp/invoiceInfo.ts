@@ -226,6 +226,7 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
 
   // Clean the invoice number
   const cleanInvoiceNo = invoiceNumber.trim();
+  console.log(`getInvoiceInfo: Looking up invoice with number: "${cleanInvoiceNo}"`);
 
   // The database stores invoice numbers with "INV-" prefix (e.g., "INV-Q450-Z6IYO" or "INV-ML-FL1KC")
   // Try both with and without the prefix
@@ -233,6 +234,7 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
   
   // If it already has INV- prefix, use it as is
   if (cleanInvoiceNo.toUpperCase().startsWith('INV-')) {
+    // Try exact match first (most common case)
     variations.push(cleanInvoiceNo);
     variations.push(cleanInvoiceNo.toUpperCase());
     variations.push(cleanInvoiceNo.toLowerCase());
@@ -242,24 +244,33 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
     variations.push(cleanInvoiceNo.substring(4).toLowerCase());
   } else {
     // If no prefix, try with and without
-    variations.push(cleanInvoiceNo);
-    variations.push(cleanInvoiceNo.toUpperCase());
-    variations.push(cleanInvoiceNo.toLowerCase());
     variations.push(`INV-${cleanInvoiceNo}`);
     variations.push(`INV-${cleanInvoiceNo.toUpperCase()}`);
     variations.push(`INV-${cleanInvoiceNo.toLowerCase()}`);
+    variations.push(cleanInvoiceNo);
+    variations.push(cleanInvoiceNo.toUpperCase());
+    variations.push(cleanInvoiceNo.toLowerCase());
   }
+
+  console.log(`getInvoiceInfo: Trying variations: ${variations.join(', ')}`);
 
   // Try to find the invoice with each variation
   for (const variation of variations) {
+    console.log(`getInvoiceInfo: Trying variation: "${variation}"`);
     const { data, error } = await supabase
       .from('invoice_docs')
       .select('invoice_no, created_at, payload')
       .eq('invoice_no', variation)
       .single();
 
-    if (!error && data) {
-      console.log(`Found invoice: ${data.invoice_no} (matched variation: ${variation})`);
+    if (error) {
+      console.log(`getInvoiceInfo: Error for variation "${variation}":`, error.message, error.code);
+      // Continue to next variation
+      continue;
+    }
+
+    if (data) {
+      console.log(`getInvoiceInfo: Found invoice: ${data.invoice_no} (matched variation: "${variation}")`);
       const customer = extractCustomerFromPayload(data.payload);
       const value = parseGrandTotal(data.payload);
       const shareableDetails = extractShareableInvoiceDetails(data.payload);
@@ -274,7 +285,33 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
     }
   }
 
-  console.log(`Invoice not found for: ${invoiceNumber} (tried variations: ${variations.join(', ')})`);
+  console.log(`getInvoiceInfo: Invoice not found for: "${invoiceNumber}" (tried ${variations.length} variations: ${variations.join(', ')})`);
+  
+  // As a last resort, try a case-insensitive search using ilike (PostgreSQL)
+  // This is a fallback in case there are any hidden characters or encoding issues
+  console.log(`getInvoiceInfo: Trying case-insensitive search as fallback`);
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from('invoice_docs')
+    .select('invoice_no, created_at, payload')
+    .ilike('invoice_no', cleanInvoiceNo)
+    .limit(1)
+    .maybeSingle();
+
+  if (!fallbackError && fallbackData) {
+    console.log(`getInvoiceInfo: Found invoice using case-insensitive search: ${fallbackData.invoice_no}`);
+    const customer = extractCustomerFromPayload(fallbackData.payload);
+    const value = parseGrandTotal(fallbackData.payload);
+    const shareableDetails = extractShareableInvoiceDetails(fallbackData.payload);
+    return {
+      invoiceNo: fallbackData.invoice_no,
+      customer,
+      pdfUrl: formatPdfUrl(fallbackData.invoice_no),
+      createdAt: fallbackData.created_at,
+      value,
+      shareableDetails,
+    };
+  }
+
   return null;
 }
 
