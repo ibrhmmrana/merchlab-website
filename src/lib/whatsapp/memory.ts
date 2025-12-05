@@ -118,7 +118,7 @@ export async function saveChatMessage(sessionId: string, role: 'human' | 'ai', c
       `;
       await pool.query(insertQueryWithIdx, [sessionId, nextId, JSON.stringify(messageJson)]);
       console.log(`Successfully saved ${role} message to Postgres memory (idx: ${nextId})`);
-    } catch (error) {
+    } catch {
       // If idx column doesn't exist, insert without it
       console.log('idx column not found, inserting without idx');
       const insertQueryWithoutIdx = `

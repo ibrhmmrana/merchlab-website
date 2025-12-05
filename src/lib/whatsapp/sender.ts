@@ -4,6 +4,7 @@
 export async function sendWhatsAppMessage(
   phoneNumber: string,
   message: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _customerName?: string // Reserved for future use (e.g., personalization)
 ): Promise<void> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;

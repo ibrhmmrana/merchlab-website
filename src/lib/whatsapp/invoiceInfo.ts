@@ -225,7 +225,7 @@ export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo
   const supabase = getSupabaseAdmin();
 
   // Clean the invoice number
-  let cleanInvoiceNo = invoiceNumber.trim();
+  const cleanInvoiceNo = invoiceNumber.trim();
 
   // The database stores invoice numbers with "INV-" prefix (e.g., "INV-Q450-Z6IYO" or "INV-ML-FL1KC")
   // Try both with and without the prefix

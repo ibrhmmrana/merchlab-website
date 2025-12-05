@@ -30,7 +30,7 @@ export async function uploadBrandingImage(
   const filePath = `${folder}/${fileName}`;
 
   // Upload to Supabase Storage
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from('branding')
     .upload(filePath, file, {
       cacheControl: '3600',
