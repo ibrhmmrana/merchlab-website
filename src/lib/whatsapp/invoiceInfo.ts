@@ -224,66 +224,56 @@ export interface InvoiceInfo {
 export async function getInvoiceInfo(invoiceNumber: string): Promise<InvoiceInfo | null> {
   const supabase = getSupabaseAdmin();
 
-  // Clean the invoice number (remove any prefixes if needed)
+  // Clean the invoice number
   let cleanInvoiceNo = invoiceNumber.trim();
 
-  // Remove common prefixes if present
+  // The database stores invoice numbers with "INV-" prefix (e.g., "INV-Q450-Z6IYO" or "INV-ML-FL1KC")
+  // Try both with and without the prefix
+  const variations: string[] = [];
+  
+  // If it already has INV- prefix, use it as is
   if (cleanInvoiceNo.toUpperCase().startsWith('INV-')) {
-    cleanInvoiceNo = cleanInvoiceNo.substring(4);
+    variations.push(cleanInvoiceNo);
+    variations.push(cleanInvoiceNo.toUpperCase());
+    variations.push(cleanInvoiceNo.toLowerCase());
+    // Also try without prefix
+    variations.push(cleanInvoiceNo.substring(4));
+    variations.push(cleanInvoiceNo.substring(4).toUpperCase());
+    variations.push(cleanInvoiceNo.substring(4).toLowerCase());
+  } else {
+    // If no prefix, try with and without
+    variations.push(cleanInvoiceNo);
+    variations.push(cleanInvoiceNo.toUpperCase());
+    variations.push(cleanInvoiceNo.toLowerCase());
+    variations.push(`INV-${cleanInvoiceNo}`);
+    variations.push(`INV-${cleanInvoiceNo.toUpperCase()}`);
+    variations.push(`INV-${cleanInvoiceNo.toLowerCase()}`);
   }
 
-  // Try to find the invoice
-  const { data, error } = await supabase
-    .from('invoice_docs')
-    .select('invoice_no, created_at, payload')
-    .eq('invoice_no', cleanInvoiceNo)
-    .single();
+  // Try to find the invoice with each variation
+  for (const variation of variations) {
+    const { data, error } = await supabase
+      .from('invoice_docs')
+      .select('invoice_no, created_at, payload')
+      .eq('invoice_no', variation)
+      .single();
 
-  if (error || !data) {
-    // Try with different formats
-    const variations = [
-      cleanInvoiceNo,
-      cleanInvoiceNo.toUpperCase(),
-      cleanInvoiceNo.toLowerCase(),
-    ];
-
-    for (const variation of variations) {
-      const { data: altData } = await supabase
-        .from('invoice_docs')
-        .select('invoice_no, created_at, payload')
-        .eq('invoice_no', variation)
-        .single();
-
-      if (altData) {
-        const customer = extractCustomerFromPayload(altData.payload);
-        const value = parseGrandTotal(altData.payload);
-        const shareableDetails = extractShareableInvoiceDetails(altData.payload);
-        return {
-          invoiceNo: altData.invoice_no,
-          customer,
-          pdfUrl: formatPdfUrl(altData.invoice_no),
-          createdAt: altData.created_at,
-          value,
-          shareableDetails,
-        };
-      }
+    if (!error && data) {
+      const customer = extractCustomerFromPayload(data.payload);
+      const value = parseGrandTotal(data.payload);
+      const shareableDetails = extractShareableInvoiceDetails(data.payload);
+      return {
+        invoiceNo: data.invoice_no, // Use the actual invoice_no from database (with INV- prefix)
+        customer,
+        pdfUrl: formatPdfUrl(data.invoice_no), // Use the actual invoice_no for PDF URL
+        createdAt: data.created_at,
+        value,
+        shareableDetails,
+      };
     }
-
-    return null;
   }
 
-  const customer = extractCustomerFromPayload(data.payload);
-  const value = parseGrandTotal(data.payload);
-  const shareableDetails = extractShareableInvoiceDetails(data.payload);
-
-  return {
-    invoiceNo: data.invoice_no,
-    customer,
-    pdfUrl: formatPdfUrl(data.invoice_no),
-    createdAt: data.created_at,
-    value,
-    shareableDetails,
-  };
+  return null;
 }
 
 /**
