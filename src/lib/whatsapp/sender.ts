@@ -4,7 +4,7 @@
 export async function sendWhatsAppMessage(
   phoneNumber: string,
   message: string,
-  customerName?: string
+  _customerName?: string // Reserved for future use (e.g., personalization)
 ): Promise<void> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   // Use phone number ID if provided, otherwise fall back to business account ID
