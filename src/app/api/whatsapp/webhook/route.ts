@@ -14,17 +14,24 @@ export const runtime = 'nodejs';
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const rawBody = await request.json();
     
     // Log the entire incoming request for debugging
     console.log('=== WhatsApp Webhook Received ===');
-    console.log('Full body:', JSON.stringify(body, null, 2));
-    console.log('Body keys:', Object.keys(body));
+    console.log('Full body:', JSON.stringify(rawBody, null, 2));
+    console.log('Body type:', Array.isArray(rawBody) ? 'array' : typeof rawBody);
+    
+    // Handle array format (direct WhatsApp Business API)
+    let body: unknown = rawBody;
+    if (Array.isArray(rawBody) && rawBody.length > 0) {
+      console.log('Detected array format, using first element');
+      body = rawBody[0];
+    }
     
     // Verify webhook verification (for initial setup)
-    const mode = body.hub?.mode;
-    const token = body.hub?.verify_token;
-    const challenge = body.hub?.challenge;
+    const mode = (body as { hub?: { mode?: string; verify_token?: string; challenge?: string } }).hub?.mode;
+    const token = (body as { hub?: { mode?: string; verify_token?: string; challenge?: string } }).hub?.verify_token;
+    const challenge = (body as { hub?: { mode?: string; verify_token?: string; challenge?: string } }).hub?.challenge;
     
     if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
       console.log('Webhook verification successful');
@@ -33,16 +40,39 @@ export async function POST(request: NextRequest) {
     }
     
     // Handle incoming messages
-    // Support both standard WhatsApp Business API format and n8n webhook format
+    // Support multiple formats: direct WhatsApp Business API (array), standard format, BotPenguin/n8n format
     let waId: string | null = null;
     let customerName: string | null = null;
     let messageText: string | null = null;
     
     console.log('Checking message format...');
     
-    // Try standard WhatsApp Business API format
-    if (body.object === 'whatsapp_business_account') {
-      const entries = body.entry || [];
+    // Format 1: Direct WhatsApp Business API array format
+    // [ { "contacts": [...], "messages": [...], "field": "messages" } ]
+    if (Array.isArray(rawBody) && rawBody.length > 0) {
+      const firstItem = rawBody[0] as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> } };
+      console.log('Found direct WhatsApp Business API array format');
+      const contacts = firstItem.contacts || [];
+      const messages = firstItem.messages || [];
+      
+      if (contacts.length > 0 && messages.length > 0) {
+        waId = contacts[0].wa_id || messages[0].from || null;
+        customerName = contacts[0].profile?.name || waId || 'Unknown';
+        const message = messages[0];
+        
+        if (message.type === 'text' && message.text?.body) {
+          messageText = message.text.body;
+          console.log('Extracted from direct array format:', { waId, customerName, messageText });
+        } else {
+          console.log('Skipping non-text message in direct array format. Type:', message.type);
+        }
+      }
+    }
+    // Format 2: Standard WhatsApp Business API format
+    // { "object": "whatsapp_business_account", "entry": [...] }
+    else if ((body as { object?: string }).object === 'whatsapp_business_account') {
+      console.log('Found standard WhatsApp Business API format');
+      const entries = ((body as { entry?: unknown[] }).entry || []) as Array<{ changes?: Array<{ field?: string; value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> }>;
       
       for (const entry of entries) {
         const changes = entry.changes || [];
@@ -52,8 +82,8 @@ export async function POST(request: NextRequest) {
             const value = change.value;
             
             // Extract message data
-            const contacts = value.contacts || [];
-            const messages = value.messages || [];
+            const contacts = value?.contacts || [];
+            const messages = value?.messages || [];
             
             if (contacts.length === 0 || messages.length === 0) {
               continue;
@@ -63,12 +93,13 @@ export async function POST(request: NextRequest) {
             const message = messages[0];
             
             // Extract phone number and name
-            waId = contact.wa_id || message.from;
+            waId = contact.wa_id || message.from || null;
             customerName = contact.profile?.name || waId || 'Unknown';
             
             // Only process text messages
             if (message.type === 'text' && message.text?.body) {
               messageText = message.text.body;
+              console.log('Extracted from standard format:', { waId, customerName, messageText });
             } else {
               // Skip non-text messages (images, videos, etc.)
               console.log(`Skipping non-text message of type: ${message.type}`);
@@ -78,25 +109,25 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    // Try BotPenguin/n8n webhook format
-    // Format: { event: { value: { contacts: [...], messages: [...] }, field: "messages" } }
-    if (body.event?.value) {
+    // Format 3: BotPenguin/n8n webhook format (body.event.value)
+    // { "event": { "value": { "contacts": [...], "messages": [...] }, "field": "messages" } }
+    else if ((body as { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event?.value) {
       console.log('Found BotPenguin format: body.event.value');
-      const eventValue = body.event.value;
+      const eventValue = (body as { event: { value: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> } }).event.value;
       const contacts = eventValue.contacts || [];
       const messages = eventValue.messages || [];
       
       console.log('Contacts:', contacts.length, 'Messages:', messages.length);
       
       if (contacts.length > 0 && messages.length > 0) {
-        waId = contacts[0].wa_id;
+        waId = contacts[0].wa_id || messages[0].from || null;
         customerName = contacts[0].profile?.name || waId || 'Unknown';
         const message = messages[0];
         console.log('Message type:', message.type, 'Has text:', !!message.text);
         // Only process text messages
         if (message.type === 'text' && message.text?.body) {
           messageText = message.text.body;
-          console.log('Extracted message text:', messageText);
+          console.log('Extracted from BotPenguin format:', { waId, customerName, messageText });
         } else {
           console.log('Skipping non-text message in BotPenguin format. Type:', message.type);
         }
@@ -104,31 +135,37 @@ export async function POST(request: NextRequest) {
         console.log('Missing contacts or messages in BotPenguin format');
       }
     }
-    // Try nested body format (fallback for n8n)
-    else if (body.body?.event?.value) {
+    // Format 4: Nested body format (body.body.event.value)
+    // { "body": { "event": { "value": { "contacts": [...], "messages": [...] } } } }
+    else if ((body as { body?: { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body?.event?.value) {
       console.log('Found nested format: body.body.event.value');
-      const eventValue = body.body.event.value;
+      const eventValue = (body as { body: { event: { value: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body.event.value;
       const contacts = eventValue.contacts || [];
       const messages = eventValue.messages || [];
       
       if (contacts.length > 0 && messages.length > 0) {
-        waId = contacts[0].wa_id;
+        waId = contacts[0].wa_id || messages[0].from || null;
         customerName = contacts[0].profile?.name || waId || 'Unknown';
         const message = messages[0];
         // Only process text messages
         if (message.type === 'text' && message.text?.body) {
           messageText = message.text.body;
-          console.log('Extracted message text from nested format:', messageText);
+          console.log('Extracted from nested format:', { waId, customerName, messageText });
         } else {
           console.log('Skipping non-text message in nested format. Type:', message.type);
         }
       }
     }
-    // Try direct format (fallback)
-    else if (body.contacts && body.messages) {
-      waId = body.contacts[0]?.wa_id || body.contacts[0]?.number;
-      customerName = body.contacts[0]?.profile?.name || body.contacts[0]?.name || waId || 'Unknown';
-      messageText = body.messages[0]?.text?.body || body.messages[0]?.body || '';
+    // Format 5: Direct format (fallback)
+    // { "contacts": [...], "messages": [...] }
+    else if ((body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts && (body as { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages) {
+      console.log('Found direct format: body.contacts and body.messages');
+      const contacts = (body as { contacts: Array<{ wa_id?: string; profile?: { name?: string } }>; messages: Array<{ from?: string; type?: string; text?: { body?: string } }> }).contacts;
+      const messages = (body as { contacts: Array<{ wa_id?: string; profile?: { name?: string } }>; messages: Array<{ from?: string; type?: string; text?: { body?: string } }> }).messages;
+      waId = contacts[0]?.wa_id || messages[0]?.from || null;
+      customerName = contacts[0]?.profile?.name || contacts[0]?.name || waId || 'Unknown';
+      messageText = messages[0]?.text?.body || messages[0]?.body || '';
+      console.log('Extracted from direct format:', { waId, customerName, messageText });
     }
     
     // Process the message if we found one
