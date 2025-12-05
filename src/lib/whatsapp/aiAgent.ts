@@ -119,7 +119,16 @@ When handling delivery information requests:
 - The tool requires an invoice number - if the customer hasn't provided one, ask them for their invoice number first
 - The tool will return: whether the order is delivery or collection, delivery address (if applicable), and customer information
 - Always acknowledge the customer by name when providing delivery information
-- Format the response in a friendly, clear manner`;
+- Format the response in a friendly, clear manner
+
+When handling escalations:
+- If a customer explicitly asks to "speak to a human", "talk to a person", "speak to someone", "I want to talk to a real person", or requests escalation, you MUST use the escalate_to_human tool immediately
+- If a customer's request is too complex or outside your capabilities (e.g., custom product requests, complex technical issues, complaints about service quality), use the escalate_to_human tool
+- If a customer is frustrated, angry, dissatisfied, or expresses strong negative emotions, use the escalate_to_human tool to ensure they get proper human support
+- When escalating, provide a clear reason (e.g., "Customer requested to speak with human", "Complex issue requiring human assistance", "Customer is frustrated and needs human support") and include relevant conversation context
+- After escalating, inform the customer politely that a team member will be in touch shortly to assist them
+- Always be polite and professional, even when escalating - never show frustration or dismissiveness
+- The escalation tool will automatically send an email to staff with all conversation context, customer information, and a link to view the conversation in the dashboard`;
 
 /**
  * Process a message with the AI agent
