@@ -4,6 +4,7 @@ import { getOrderStatus } from './orderStatus';
 import { getQuoteInfo, getMostRecentQuoteByPhone } from './quoteInfo';
 import { getInvoiceInfo, getMostRecentInvoiceByPhone } from './invoiceInfo';
 import { getCustomerAccountInfo } from './customerAccount';
+import { getOrderDetails, getDeliveryInfo } from './orderDetails';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
