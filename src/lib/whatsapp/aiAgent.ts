@@ -5,6 +5,7 @@ import { getQuoteInfo, getMostRecentQuoteByPhone } from './quoteInfo';
 import { getInvoiceInfo, getMostRecentInvoiceByPhone } from './invoiceInfo';
 import { getCustomerAccountInfo } from './customerAccount';
 import { getOrderDetails, getDeliveryInfo } from './orderDetails';
+import { sendEscalationEmail, type EscalationContext } from '../gmail/sender';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
