@@ -148,9 +148,10 @@ export async function POST(request: NextRequest) {
     }
     // Format 4: Nested body format (body.body.event.value)
     // { "body": { "event": { "value": { "contacts": [...], "messages": [...] } } } }
-    if (!waId && (body as { body?: { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body?.event?.value) {
+    const bodyWithNestedEvent = body as { body?: { event?: { value?: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } };
+    if (!waId && bodyWithNestedEvent.body?.event?.value) {
       console.log('Found nested format: body.body.event.value');
-      const eventValue = (body as { body: { event: { value: { contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>; messages?: Array<{ from?: string; type?: string; text?: { body?: string } }> }> }> } }).body.event.value;
+      const eventValue = bodyWithNestedEvent.body.event.value;
       const contacts = eventValue.contacts || [];
       const messages = eventValue.messages || [];
       
