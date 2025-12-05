@@ -215,7 +215,7 @@ export async function processMessage(
           type: 'function',
           function: {
             name: 'get_customer_account_info',
-            description: 'Get customer account information including orders, quotes, order history, total order value, and last order date. Use this tool when a customer asks about: 1) Their orders ("What orders do I have?", "What\'s my order history?"), 2) Their quotes ("What quotes do I have?"), 3) Their total order value ("What\'s my total order value?"), 4) Their last order ("When was my last order?"). The tool can identify customers by phone number, email, name, quote number, or invoice number. If the customer asks about their account without providing an identifier, use their phone number from the conversation context.',
+            description: 'Get customer account information including orders, quotes, order history, total order value, and last order date. Use this tool when a customer asks about: 1) Their orders ("What orders do I have?", "What\'s my order history?"), 2) Their quotes ("What quotes do I have?"), 3) Their total order value ("What\'s my total order value?"), 4) Their last order ("When was my last order?"). CRITICAL: You MUST call this tool whenever a customer asks about their account information. Do NOT rely on memory or previous tool responses - always make a fresh database query. The tool can identify customers by phone number, email, name, quote number, or invoice number. If the customer asks about their account without providing an identifier, you do NOT need to provide any parameters - the customer\'s phone number will be automatically used from the conversation context.',
             parameters: {
               type: 'object',
               properties: {
@@ -829,10 +829,17 @@ export async function processMessage(
         const args = JSON.parse(toolCall.function.arguments) as { identifier?: string };
         let identifier = args.identifier;
 
-        // If no identifier provided, use customer phone number
-        if (!identifier && customerPhoneNumber) {
-          console.log(`No identifier provided, using customer phone number: ${customerPhoneNumber}`);
+        // CRITICAL: Always use customer phone number from WhatsApp context if available
+        // This ensures we search the database, not rely on chat history
+        if (customerPhoneNumber) {
+          console.log(`Using customer phone number from WhatsApp context: ${customerPhoneNumber}`);
           identifier = customerPhoneNumber;
+          // Update the tool call arguments to reflect the actual identifier used
+          toolCall.function.arguments = JSON.stringify({ identifier: customerPhoneNumber });
+        } else if (!identifier) {
+          console.log(`WARNING: No identifier provided and no customer phone number available`);
+        } else {
+          console.log(`Using provided identifier: ${identifier}`);
         }
 
         console.log(`get_customer_account_info tool called with identifier: ${identifier}`);
