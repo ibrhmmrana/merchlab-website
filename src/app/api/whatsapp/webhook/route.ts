@@ -9,6 +9,7 @@ type WaMessage = { from?: string; type?: string; text?: { body?: string } };
 type EventValue = { contacts?: WaContact[]; messages?: WaMessage[] };
 type EventBodyFormat = { event?: { value?: EventValue } };
 type NestedEventBodyFormat = { body?: { event?: { value?: EventValue } } };
+type DirectFormat = { contacts?: WaContact[]; messages?: WaMessage[] };
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
