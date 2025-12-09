@@ -10,28 +10,50 @@ export async function getGmailAuth() {
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
   if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Gmail API credentials are missing. Please check your environment variables: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN');
+    throw new Error(
+      'Gmail API credentials are missing. Please check your environment variables: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN'
+    );
   }
 
   const oauth2Client = new google.auth.OAuth2(
     clientId,
     clientSecret,
-    'urn:ietf:wg:oauth:2.0:oob' // Redirect URI (not used for refresh token flow)
+    'urn:ietf:wg:oauth:2.0:oob'
   );
 
-  // Set the refresh token
   oauth2Client.setCredentials({
     refresh_token: refreshToken,
   });
 
-  // Refresh the access token
   try {
-    const { credentials } = await oauth2Client.refreshAccessToken();
-    oauth2Client.setCredentials(credentials);
+    // Get a fresh access token from the refresh token
+    const accessTokenResponse = await oauth2Client.getAccessToken();
+    const accessToken = accessTokenResponse?.token;
+
+    if (!accessToken) {
+      console.error('GMAIL_TOKENINFO: no access token returned');
+      throw new Error('Failed to get Gmail access token from refresh token');
+    }
+
+    // Ask Google what scopes and user this token actually has
+    const infoRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`
+    );
+    const info = await infoRes.json();
+    console.log('GMAIL_TOKENINFO', info);
+
+    // Attach token to client and return
+    oauth2Client.setCredentials({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
     return oauth2Client;
   } catch (error) {
     console.error('Error refreshing Gmail access token:', error);
-    throw new Error('Failed to refresh Gmail access token. Please verify your refresh token is valid.');
+    throw new Error(
+      'Failed to refresh Gmail access token. Please verify your refresh token is valid.'
+    );
   }
 }
 
