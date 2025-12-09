@@ -19,6 +19,16 @@ IMPORTANT EMAIL-SPECIFIC GUIDELINES:
 /**
  * Process an email with the AI agent
  * Reuses the WhatsApp processMessage function but adapted for email context
+ * 
+ * This gives the email agent access to all the same tools as the WhatsApp agent:
+ * - get_order_status: Check order status by invoice number
+ * - get_quote_info: Get quote information by quote number or email
+ * - get_invoice_info: Get invoice information by invoice number or email
+ * - get_customer_account_info: Get customer account information
+ * - get_order_details: Get order details (items, quantities, etc.)
+ * - get_delivery_info: Get delivery information
+ * - escalate_to_human: Escalate to human staff member
+ * - search_merchlab_knowledge_base: Query the knowledge base database for policies, terms, refunds, etc.
  */
 export async function processEmail(
   email: ParsedEmail
@@ -34,7 +44,11 @@ export async function processEmail(
       : email.body;
 
     // Process with existing WhatsApp AI agent
-    // The processMessage function will handle all the tools and logic
+    // The processMessage function will handle all the tools and logic, including:
+    // - Order status, quotes, invoices, customer account info
+    // - Order details and delivery information
+    // - Knowledge base queries (search_merchlab_knowledge_base)
+    // - Escalation to human staff
     const aiResponse = await processMessage(
       sessionId,
       emailContent,
