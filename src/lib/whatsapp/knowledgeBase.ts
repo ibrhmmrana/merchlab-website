@@ -16,18 +16,24 @@ export interface KnowledgeBaseFilter {
 }
 
 /**
+ * Metadata structure for knowledge base chunks
+ * This matches the metadata JSONB column in the Supabase table
+ */
+export interface KnowledgeBaseMetadata {
+  file_id?: string;
+  doc_type?: string;
+  title?: string;
+  section?: string;
+  brand?: string;
+  [key: string]: unknown;
+}
+
+/**
  * Result from a knowledge base search
  */
 export interface KnowledgeBaseResult {
   content: string;
-  metadata: {
-    file_id?: string;
-    doc_type?: string;
-    title?: string;
-    section?: string;
-    brand?: string;
-    [key: string]: unknown;
-  };
+  metadata: KnowledgeBaseMetadata;
   similarityScore: number; // Normalized to 0-1 range
   sourceLabel: string; // Human-readable source identifier (e.g., "Terms & Conditions - Section 3")
 }
@@ -62,7 +68,7 @@ function normalizeSimilarityScore(score: number | undefined | null): number {
  * Generate a human-readable source label from metadata
  * Combines title and section for easy reference (e.g., "Terms & Conditions - Section 3")
  */
-function generateSourceLabel(metadata: Record<string, unknown>): string {
+function generateSourceLabel(metadata: KnowledgeBaseMetadata): string {
   const parts: string[] = [];
   
   if (metadata.title && typeof metadata.title === 'string') {
@@ -246,37 +252,43 @@ export async function searchKnowledgeBase(
       };
     }
 
-    const results: KnowledgeBaseResult[] = rpcResult.map((row: {
+    // Type for raw RPC result row from Supabase
+    interface RpcResultRow {
       id?: string;
       content: string;
-      metadata?: Record<string, unknown>;
+      metadata?: unknown; // Raw metadata from Supabase (will be validated and cast)
       similarity?: number;
       similarity_score?: number;
-    }) => {
+    }
+
+    const results: KnowledgeBaseResult[] = rpcResult.map((row: RpcResultRow) => {
       // Extract similarity score (different RPC functions may return it with different field names)
       const rawSimilarity = row.similarity ?? row.similarity_score ?? 0;
       
       // Normalize similarity score to 0-1 range
       const similarityScore = normalizeSimilarityScore(rawSimilarity);
       
-      // Extract metadata (ensure it's an object)
-      const metadata = (row.metadata && typeof row.metadata === 'object') 
-        ? row.metadata as Record<string, unknown>
-        : {};
+      // Extract metadata (ensure it's an object and properly typed)
+      const rawMetadata = row.metadata && typeof row.metadata === 'object' 
+        ? row.metadata as KnowledgeBaseMetadata
+        : ({} as KnowledgeBaseMetadata);
 
       // Generate source label for easy reference
-      const sourceLabel = generateSourceLabel(metadata);
+      const sourceLabel = generateSourceLabel(rawMetadata);
+
+      // Build normalized metadata object
+      const metadata: KnowledgeBaseMetadata = {
+        file_id: rawMetadata.file_id,
+        doc_type: rawMetadata.doc_type,
+        title: rawMetadata.title,
+        section: rawMetadata.section,
+        brand: rawMetadata.brand,
+        ...rawMetadata, // Include any other metadata fields
+      };
 
       return {
         content: row.content || '',
-        metadata: {
-          file_id: metadata.file_id as string | undefined,
-          doc_type: metadata.doc_type as string | undefined,
-          title: metadata.title as string | undefined,
-          section: metadata.section as string | undefined,
-          brand: metadata.brand as string | undefined,
-          ...metadata, // Include any other metadata fields
-        },
+        metadata,
         similarityScore, // Normalized to 0-1 range
         sourceLabel, // Human-readable source identifier
       };
