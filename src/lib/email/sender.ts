@@ -108,7 +108,15 @@ export async function sendEmailReply(
       .replace(/=+$/, '');
 
     // Send email
-    const sendRequest: any = {
+    interface SendRequest {
+      userId: string;
+      requestBody: {
+        raw: string;
+      };
+      threadId?: string;
+    }
+
+    const sendRequest: SendRequest = {
       userId: 'me',
       requestBody: {
         raw: encodedMessage,

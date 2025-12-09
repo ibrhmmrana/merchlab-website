@@ -46,7 +46,7 @@ export function formatEmailResponse(
 
   // If there are list items, wrap them properly
   if (htmlContent.includes('<li>')) {
-    htmlContent = htmlContent.replace(/(<ol>)?(<li>.*<\/li>)(<\/ol>)?/g, (match, open, item, close) => {
+    htmlContent = htmlContent.replace(/(<ol>)?(<li>.*<\/li>)(<\/ol>)?/g, (match, open, item) => {
       if (!open) return `<ol>${item}</ol>`;
       return match;
     });

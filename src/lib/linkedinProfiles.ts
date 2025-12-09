@@ -231,6 +231,7 @@ export async function saveLinkedInProfile(
         });
         // If headline column doesn't exist, try without it
         if (error.code === '42703' || error.message?.includes('headline')) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { headline: _, ...profileDataWithoutHeadline } = profileData;
           const { data: retryData, error: retryError } = await supabase
             .from('customer_linkedin_profiles')
@@ -271,6 +272,7 @@ export async function saveLinkedInProfile(
         });
         // If headline column doesn't exist, try without it
         if (error.code === '42703' || error.message?.includes('headline')) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { headline: _, ...profileDataWithoutHeadline } = profileData;
           const { data: retryData, error: retryError } = await supabase
             .from('customer_linkedin_profiles')

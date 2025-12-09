@@ -78,7 +78,16 @@ export async function parseGmailMessage(messageId: string): Promise<ParsedEmail 
     let body = '';
     let bodyHtml = '';
 
-    const extractBody = (part: any): void => {
+    // Type for Gmail message part
+    interface GmailMessagePart {
+      body?: {
+        data?: string;
+      };
+      mimeType?: string;
+      parts?: GmailMessagePart[];
+    }
+
+    const extractBody = (part: GmailMessagePart): void => {
       if (part.body?.data) {
         const text = Buffer.from(part.body.data, 'base64').toString('utf-8');
         if (part.mimeType === 'text/plain') {
@@ -95,10 +104,7 @@ export async function parseGmailMessage(messageId: string): Promise<ParsedEmail 
       }
     };
 
-    extractBody(payload);
-
-    // Use HTML body if available, otherwise use plain text
-    const finalBody = bodyHtml || body;
+    extractBody(payload as GmailMessagePart);
 
     // Strip HTML tags for plain text version (for AI processing)
     const plainTextBody = bodyHtml
