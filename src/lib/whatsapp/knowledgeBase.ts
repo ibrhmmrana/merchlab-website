@@ -199,9 +199,10 @@ export async function searchKnowledgeBase(
 
     // Prepare filter for RPC call
     // The filter should be a JSONB object that can be used in the SQL function
-    const filterJson = filter && Object.keys(filter).length > 0 
+    // Use empty object {} instead of null to match the function's default parameter
+    const filterJson: KnowledgeBaseFilter = filter && Object.keys(filter).length > 0 
       ? filter 
-      : null;
+      : {};
 
     // Call the Supabase RPC function (vector store search)
     // Try match_documents_merchlab first, fallback to match_documents if needed
@@ -210,6 +211,7 @@ export async function searchKnowledgeBase(
     let rpcResult;
     try {
       // Try match_documents_merchlab first
+      // Function signature: match_documents_merchlab(query_embedding, match_count, filter)
       const { data, error } = await supabase.rpc('match_documents_merchlab', {
         query_embedding: queryEmbedding,
         match_count: topK,
