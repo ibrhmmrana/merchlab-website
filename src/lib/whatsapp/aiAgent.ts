@@ -6,6 +6,7 @@ import { getInvoiceInfo, getMostRecentInvoiceByPhone, getMostRecentInvoiceByEmai
 import { getCustomerAccountInfo } from './customerAccount';
 import { getOrderDetails, getDeliveryInfo } from './orderDetails';
 import { sendEscalationEmail, type EscalationContext } from '../gmail/sender';
+import { searchKnowledgeBase } from './knowledgeBase';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -128,7 +129,16 @@ When handling escalations:
 - When escalating, provide a clear reason (e.g., "Customer requested to speak with human", "Complex issue requiring human assistance", "Customer is frustrated and needs human support") and include relevant conversation context
 - After escalating, inform the customer politely that a team member will be in touch shortly to assist them
 - Always be polite and professional, even when escalating - never show frustration or dismissiveness
-- The escalation tool will automatically send an email to staff with all conversation context, customer information, and a link to view the conversation in the dashboard`;
+- The escalation tool will automatically send an email to staff with all conversation context, customer information, and a link to view the conversation in the dashboard
+
+When handling general knowledge questions:
+- If a customer asks questions about MerchLab's policies, legal terms, refunds, WhatsApp usage rules, privacy, or "how MerchLab works" in general, you MUST use the search_merchlab_knowledge_base tool
+- Use this tool when customers ask questions like: "What is your refund policy?", "What are your terms and conditions?", "How does shipping work?", "What is your privacy policy?", "What are your WhatsApp rules?", or any general questions about MerchLab policies or procedures
+- The tool will return relevant chunks from the knowledge base with their content, metadata, and similarity scores
+- CRITICAL: After receiving tool results, you MUST answer using ONLY those chunks as ground truth. Do NOT make up information or use information from outside the search results
+- If the information is not present in the search results or is unclear, you MUST say you are uncertain or that you need to check with the team - NEVER hallucinate or make up information
+- Use the doc_type parameter if you need to search a specific document type (e.g., "refund_policy" for refund questions, "terms_conditions" for terms questions)
+- Present the information from the knowledge base in a clear, friendly, and professional manner`;
 
 /**
  * Process a message with the AI agent
@@ -275,6 +285,31 @@ export async function processMessage(
                 },
               },
               required: ['reason'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'search_merchlab_knowledge_base',
+            description: 'Use this tool to answer questions about MerchLab policies, terms and conditions, refunds, privacy, and other static company information stored in Supabase. Search the knowledge base using semantic search to find relevant information chunks.',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'The user\'s question or search query about MerchLab policies, terms, refunds, privacy, or general company information (e.g., "What is your refund policy?", "What are your terms and conditions?", "How does shipping work?", "What is your privacy policy?")',
+                },
+                topK: {
+                  type: 'number',
+                  description: 'Optional. Number of knowledge base chunks to return (default: 5, max: 50). Use 5 for most queries.',
+                },
+                doc_type: {
+                  type: 'string',
+                  description: 'Optional. Filter to narrow search to a specific document type. Use values like: "terms_conditions", "privacy_policy", "refund_policy", "general_info", etc. Only use if you need to search a specific document type.',
+                },
+              },
+              required: ['query'],
             },
           },
         },
@@ -1402,6 +1437,112 @@ export async function processMessage(
         });
 
         const aiResponseContent = finalCompletion.choices[0].message.content || 'I have escalated your request to our team. A team member will be in touch with you shortly. Thank you for your patience!';
+
+        // Extract metadata from the completion
+        const toolCalls: ToolCall[] = [];
+        if (finalCompletion.choices[0].message.tool_calls) {
+          for (const tc of finalCompletion.choices[0].message.tool_calls) {
+            if (tc.type === 'function' && 'function' in tc) {
+              toolCalls.push({
+                id: tc.id,
+                type: tc.type,
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments,
+                },
+              });
+            }
+          }
+        }
+
+        const aiResponse: AIResponse = {
+          content: aiResponseContent,
+          tool_calls: toolCalls,
+          invalid_tool_calls: [],
+          additional_kwargs: {},
+          response_metadata: {
+            model: finalCompletion.model,
+            finish_reason: finalCompletion.choices[0].finish_reason,
+          },
+        };
+
+        // Save messages to memory
+        console.log('Saving messages to Postgres memory...');
+        await saveChatMessage(sessionId, 'human', userMessage);
+        await saveChatMessage(sessionId, 'ai', aiResponseContent);
+        console.log('Messages saved to Postgres memory');
+
+        return aiResponse;
+      }
+
+      // Handle search_merchlab_knowledge_base tool call
+      if (toolCall.type === 'function' && 'function' in toolCall && toolCall.function.name === 'search_merchlab_knowledge_base') {
+        const args = JSON.parse(toolCall.function.arguments) as { 
+          query: string; 
+          topK?: number; 
+          doc_type?: string;
+        };
+        const query = args.query;
+        const topK = args.topK || 5;
+        // Build filter object if doc_type is provided
+        const filter = args.doc_type ? { doc_type: args.doc_type } : undefined;
+
+        console.log(`search_merchlab_knowledge_base tool called with query: "${query}", topK: ${topK}, doc_type: ${args.doc_type || 'none'}`);
+
+        // Search knowledge base
+        const searchResult = await searchKnowledgeBase(query, topK, filter);
+
+        // Add tool response to messages
+        if (toolCall.type === 'function' && 'function' in toolCall) {
+          messages.push({
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: 'search_merchlab_knowledge_base',
+                  arguments: toolCall.function.arguments,
+                },
+              },
+            ],
+          });
+        }
+
+        // Build tool response
+        let toolResponse = '';
+        if (searchResult.error) {
+          toolResponse = `Error searching knowledge base: ${searchResult.error}`;
+          console.error('Knowledge base search error:', searchResult.error);
+        } else if (searchResult.results.length === 0) {
+          toolResponse = 'No relevant information found in the knowledge base for this query.';
+        } else {
+          toolResponse = `Found ${searchResult.results.length} relevant result(s) from the knowledge base:\n\n`;
+          searchResult.results.forEach((result, index) => {
+            toolResponse += `[Result ${index + 1}]`;
+            toolResponse += `\nSource: ${result.sourceLabel}`;
+            toolResponse += `\nContent: ${result.content}`;
+            if (result.similarityScore > 0) {
+              toolResponse += `\nRelevance Score: ${(result.similarityScore * 100).toFixed(1)}%`;
+            }
+            toolResponse += '\n\n';
+          });
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResponse,
+        });
+
+        // Get final response from AI
+        const finalCompletion = await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+        });
+
+        const aiResponseContent = finalCompletion.choices[0].message.content || 'I apologize, but I encountered an error processing your request.';
 
         // Extract metadata from the completion
         const toolCalls: ToolCall[] = [];
