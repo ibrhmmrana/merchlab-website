@@ -253,37 +253,44 @@ export async function searchKnowledgeBase(
     }
 
     // Type for raw RPC result row from Supabase
+    // The metadata field comes as unknown from Supabase and must be validated and cast
     interface RpcResultRow {
       id?: string;
       content: string;
-      metadata?: unknown; // Raw metadata from Supabase (will be validated and cast)
+      metadata?: unknown; // Raw metadata from Supabase JSONB column (will be validated and cast to KnowledgeBaseMetadata)
       similarity?: number;
       similarity_score?: number;
     }
 
-    const results: KnowledgeBaseResult[] = rpcResult.map((row: RpcResultRow) => {
+    const results: KnowledgeBaseResult[] = rpcResult.map((row: RpcResultRow): KnowledgeBaseResult => {
       // Extract similarity score (different RPC functions may return it with different field names)
-      const rawSimilarity = row.similarity ?? row.similarity_score ?? 0;
+      const rawSimilarity: number | undefined = row.similarity ?? row.similarity_score ?? 0;
       
       // Normalize similarity score to 0-1 range
-      const similarityScore = normalizeSimilarityScore(rawSimilarity);
+      const similarityScore: number = normalizeSimilarityScore(rawSimilarity);
       
-      // Extract metadata (ensure it's an object and properly typed)
-      const rawMetadata = row.metadata && typeof row.metadata === 'object' 
-        ? row.metadata as KnowledgeBaseMetadata
-        : ({} as KnowledgeBaseMetadata);
+      // Extract and validate metadata (ensure it's an object and properly typed)
+      // Cast from unknown to KnowledgeBaseMetadata after type guard check
+      let rawMetadata: KnowledgeBaseMetadata;
+      if (row.metadata && typeof row.metadata === 'object' && row.metadata !== null) {
+        // Type assertion: we've verified it's an object, now cast to our metadata type
+        rawMetadata = row.metadata as KnowledgeBaseMetadata;
+      } else {
+        // Default to empty metadata object if missing or invalid
+        rawMetadata = {} as KnowledgeBaseMetadata;
+      }
 
       // Generate source label for easy reference
-      const sourceLabel = generateSourceLabel(rawMetadata);
+      const sourceLabel: string = generateSourceLabel(rawMetadata);
 
-      // Build normalized metadata object
+      // Build normalized metadata object with explicit type
       const metadata: KnowledgeBaseMetadata = {
         file_id: rawMetadata.file_id,
         doc_type: rawMetadata.doc_type,
         title: rawMetadata.title,
         section: rawMetadata.section,
         brand: rawMetadata.brand,
-        ...rawMetadata, // Include any other metadata fields
+        ...rawMetadata, // Include any other metadata fields from the spread
       };
 
       return {
