@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const filter = {};
     console.log(`Calling RPC with: { query_embedding: [${queryEmbedding.length} dims], match_count: ${topK}, filter: {} }`);
     
-    const { data, error } = await supabase.rpc('match_documents_merchlab', {
+    const { data, error } = await supabase.rpc('search_merchlab_kb', {
       query_embedding: queryEmbedding,
       match_count: topK,
       filter: filter,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       supabaseUrl,
       usingServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
       rpcCall: {
-        functionName: 'match_documents_merchlab',
+        functionName: 'search_merchlab_kb',
         parameters: {
           query_embedding: `[vector of ${queryEmbedding.length} dimensions]`,
           match_count: topK,
