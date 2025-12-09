@@ -124,17 +124,19 @@ export async function GET(request: NextRequest) {
         // Also store in Supabase for tracking (optional)
         try {
           const supabase = getSupabaseAdmin();
-          await supabase.from('email_processing_log').insert({
+          const { error } = await supabase.from('email_processing_log').insert({
             message_id: messageId,
             thread_id: parsedEmail.threadId,
             sender_email: parsedEmail.senderEmail,
             subject: parsedEmail.subject,
             category: category.category,
             processed_at: new Date().toISOString(),
-          }).catch(() => {
-            // Table might not exist, that's okay
-            console.log('email_processing_log table not found, skipping');
           });
+          
+          if (error) {
+            // Table might not exist, that's okay
+            console.log('email_processing_log table not found or error:', error.message);
+          }
         } catch (dbError) {
           // Ignore database errors for logging
           console.log('Could not log to database:', dbError);
