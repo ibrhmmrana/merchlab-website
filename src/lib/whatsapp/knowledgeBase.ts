@@ -229,7 +229,6 @@ export async function searchKnowledgeBase(
           code: error.code,
           details: error.details,
           hint: error.hint,
-          status: error.status,
         });
         
         // If match_documents_merchlab doesn't exist, try match_documents
@@ -246,7 +245,6 @@ export async function searchKnowledgeBase(
             code: fallbackError.code,
             details: fallbackError.details,
             hint: fallbackError.hint,
-            status: fallbackError.status,
           });
           throw fallbackError;
         }
@@ -257,7 +255,7 @@ export async function searchKnowledgeBase(
     } catch (rpcError) {
       // Enhanced error logging with full Supabase error details
       let errorMessage = 'Unknown error calling RPC function';
-      let errorDetails: Record<string, unknown> = {};
+      const errorDetails: Record<string, unknown> = {};
       
       if (rpcError && typeof rpcError === 'object') {
         // Check if it's a Supabase error object
@@ -272,9 +270,6 @@ export async function searchKnowledgeBase(
         }
         if ('hint' in rpcError) {
           errorDetails.hint = rpcError.hint;
-        }
-        if ('status' in rpcError) {
-          errorDetails.status = rpcError.status;
         }
       } else if (rpcError instanceof Error) {
         errorMessage = rpcError.message;

@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
         code: error.code,
         details: error.details,
         hint: error.hint,
-        status: error.status,
       });
     } else {
       console.log(`RPC Success: Received ${Array.isArray(data) ? data.length : 'non-array'} result(s)`);
@@ -107,7 +106,6 @@ export async function GET(request: NextRequest) {
           code: error.code,
           details: error.details,
           hint: error.hint,
-          status: error.status,
         } : null,
       },
       timestamp: new Date().toISOString(),
