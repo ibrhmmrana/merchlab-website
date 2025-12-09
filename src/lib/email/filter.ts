@@ -6,10 +6,28 @@ import { ParsedEmail } from './parser';
 const SKIP_ALIASES = ['hello@merchlab.io', 'info@merchlab.io'];
 
 /**
+ * Whitelist of sender emails to process (for testing)
+ * Only emails from these addresses will be processed
+ */
+const ALLOWED_SENDERS = ['ibrahim@sagentics.ai'];
+
+/**
  * Check if email should be processed or skipped
  * Skips emails sent to hello@merchlab.io or info@merchlab.io
+ * Only processes emails from allowed senders (for testing)
  */
 export function shouldProcessEmail(email: ParsedEmail): boolean {
+  // Check if sender is in the allowed list (for testing)
+  const senderEmail = email.senderEmail.toLowerCase().trim();
+  const isAllowedSender = ALLOWED_SENDERS.some(allowed => 
+    senderEmail === allowed.toLowerCase()
+  );
+
+  if (!isAllowedSender) {
+    console.log(`Skipping email ${email.messageId} - sender ${senderEmail} not in allowed list`);
+    return false;
+  }
+
   // Get all recipients (To, CC, BCC)
   const allRecipients = [
     ...email.recipients.to,
