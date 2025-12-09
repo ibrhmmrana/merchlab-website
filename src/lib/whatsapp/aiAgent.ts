@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
 import { getChatHistory, saveChatMessage } from './memory';
 import { getOrderStatus } from './orderStatus';
-import { getQuoteInfo, getMostRecentQuoteByPhone } from './quoteInfo';
-import { getInvoiceInfo, getMostRecentInvoiceByPhone } from './invoiceInfo';
+import { getQuoteInfo, getMostRecentQuoteByPhone, getMostRecentQuoteByEmail } from './quoteInfo';
+import { getInvoiceInfo, getMostRecentInvoiceByPhone, getMostRecentInvoiceByEmail } from './invoiceInfo';
 import { getCustomerAccountInfo } from './customerAccount';
 import { getOrderDetails, getDeliveryInfo } from './orderDetails';
 import { sendEscalationEmail, type EscalationContext } from '../gmail/sender';
@@ -137,7 +137,8 @@ export async function processMessage(
   sessionId: string,
   userMessage: string,
   customerPhoneNumber?: string,
-  customerWhatsAppName?: string
+  customerWhatsAppName?: string,
+  customerEmail?: string
 ): Promise<AIResponse> {
   try {
     // Get chat history from Postgres
@@ -431,6 +432,15 @@ export async function processMessage(
           } else {
             console.log(`No quotes found for phone: ${phoneNumber}`);
           }
+        } else if (customerEmail) {
+          // No quote number and no phone, but email available - find most recent quote by email
+          console.log(`No quote number provided, searching for most recent quote by email: ${customerEmail}`);
+          quoteInfo = await getMostRecentQuoteByEmail(customerEmail);
+          if (quoteInfo) {
+            console.log(`Found most recent quote: ${quoteInfo.quoteNo} for email: ${customerEmail}`);
+          } else {
+            console.log(`No quotes found for email: ${customerEmail}`);
+          }
         } else {
           // Neither provided
           quoteInfo = null;
@@ -667,6 +677,15 @@ export async function processMessage(
           } else {
             console.log(`No invoices found for phone: ${phoneNumber}`);
           }
+        } else if (customerEmail) {
+          // No invoice number and no phone, but email available - find most recent invoice by email
+          console.log(`No invoice number provided, searching for most recent invoice by email: ${customerEmail}`);
+          invoiceInfo = await getMostRecentInvoiceByEmail(customerEmail);
+          if (invoiceInfo) {
+            console.log(`Found most recent invoice: ${invoiceInfo.invoiceNo} for email: ${customerEmail}`);
+          } else {
+            console.log(`No invoices found for email: ${customerEmail}`);
+          }
         } else {
           // Neither provided
           invoiceInfo = null;
@@ -878,15 +897,20 @@ export async function processMessage(
         const args = JSON.parse(toolCall.function.arguments) as { identifier?: string };
         let identifier = args.identifier;
 
-        // CRITICAL: Always use customer phone number from WhatsApp context if available
+        // CRITICAL: Always use customer phone number or email from context if available
         // This ensures we search the database, not rely on chat history
         if (customerPhoneNumber) {
-          console.log(`Using customer phone number from WhatsApp context: ${customerPhoneNumber}`);
+          console.log(`Using customer phone number from context: ${customerPhoneNumber}`);
           identifier = customerPhoneNumber;
           // Update the tool call arguments to reflect the actual identifier used
           toolCall.function.arguments = JSON.stringify({ identifier: customerPhoneNumber });
+        } else if (customerEmail) {
+          console.log(`Using customer email from context: ${customerEmail}`);
+          identifier = customerEmail;
+          // Update the tool call arguments to reflect the actual identifier used
+          toolCall.function.arguments = JSON.stringify({ identifier: customerEmail });
         } else if (!identifier) {
-          console.log(`WARNING: No identifier provided and no customer phone number available`);
+          console.log(`WARNING: No identifier provided and no customer phone number or email available`);
         } else {
           console.log(`Using provided identifier: ${identifier}`);
         }

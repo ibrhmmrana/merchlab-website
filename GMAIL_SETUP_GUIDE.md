@@ -28,7 +28,9 @@ This guide will help you set up Gmail API integration so the AI agent can send e
    - **Developer contact information**: Your email address
 4. Click **"Save and Continue"**
 5. On **"Scopes"** page, click **"Add or Remove Scopes"**
-   - Add: `https://www.googleapis.com/auth/gmail.send`
+   - Add: `https://www.googleapis.com/auth/gmail.send` (for sending emails)
+   - Add: `https://www.googleapis.com/auth/gmail.readonly` (for reading emails - required for email AI agent)
+   - Add: `https://www.googleapis.com/auth/gmail.modify` (for marking emails as read - required for email AI agent)
    - Click **"Update"** then **"Save and Continue"**
 6. On **"Test users"** page (if External):
    - Add your email address as a test user

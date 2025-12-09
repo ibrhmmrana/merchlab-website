@@ -373,3 +373,86 @@ export async function getMostRecentInvoiceByPhone(phoneNumber: string): Promise<
   }
 }
 
+// Helper to check if email in payload matches target email
+function emailMatches(payload: unknown, targetEmail: string): boolean {
+  if (!targetEmail) {
+    console.log('emailMatches: No target email provided');
+    return false;
+  }
+  
+  const p = parsePayload(payload);
+  if (!p || typeof p !== 'object') {
+    console.log('emailMatches: Could not parse payload');
+    return false;
+  }
+  
+  // Check both customer and enquiryCustomer
+  const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
+  if (!customerUnknown || typeof customerUnknown !== 'object') {
+    console.log('emailMatches: No customer or enquiryCustomer found in payload');
+    return false;
+  }
+  
+  const customer = customerUnknown as Record<string, unknown>;
+  const email = pickStr(customer, ['email']);
+  if (!email) {
+    console.log('emailMatches: No email found in customer data');
+    return false;
+  }
+  
+  const matches = email.toLowerCase().trim() === targetEmail.toLowerCase().trim();
+  console.log(`emailMatches: Comparing "${email}" (from payload) with "${targetEmail}" -> ${matches}`);
+  return matches;
+}
+
+export async function getMostRecentInvoiceByEmail(emailAddress: string): Promise<InvoiceInfo | null> {
+  const normalizedEmail = emailAddress.toLowerCase().trim();
+
+  const supabase = getSupabaseAdmin();
+
+  try {
+    // Fetch all invoices ordered by creation date (most recent first)
+    const { data: invoices, error } = await supabase
+      .from('invoice_docs')
+      .select('invoice_no, created_at, payload')
+      .order('created_at', { ascending: false }); // Most recent first
+
+    if (error) {
+      console.error('Error fetching invoices for email lookup:', error);
+      return null;
+    }
+
+    if (!invoices || invoices.length === 0) {
+      console.log('No invoices found in database for email lookup.');
+      return null;
+    }
+
+    console.log(`getMostRecentInvoiceByEmail: Fetched ${invoices.length} invoices from database`);
+
+    // Find the first invoice that matches the email
+    for (const invoice of invoices) {
+      if (emailMatches(invoice.payload, normalizedEmail)) {
+        console.log(`Found most recent invoice by email: ${invoice.invoice_no}`);
+        const customer = extractCustomerFromPayload(invoice.payload);
+        const value = parseGrandTotal(invoice.payload);
+        const shareableDetails = extractShareableInvoiceDetails(invoice.payload);
+
+        return {
+          invoiceNo: invoice.invoice_no,
+          customer,
+          pdfUrl: formatPdfUrl(invoice.invoice_no),
+          createdAt: invoice.created_at,
+          value,
+          shareableDetails,
+        };
+      }
+    }
+
+    console.log(`No invoices found matching email: ${emailAddress}`);
+    return null;
+  } catch (error) {
+    console.error('Error in getMostRecentInvoiceByEmail:', error);
+    return null;
+  }
+}
+

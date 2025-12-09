@@ -209,6 +209,90 @@ function phoneMatches(payload: unknown, targetPhoneCore: string): boolean {
   return matches;
 }
 
+// Helper to check if email in payload matches target email
+function emailMatches(payload: unknown, targetEmail: string): boolean {
+  if (!targetEmail) {
+    console.log('emailMatches: No target email provided');
+    return false;
+  }
+  
+  const p = parsePayload(payload);
+  if (!p || typeof p !== 'object') {
+    console.log('emailMatches: Could not parse payload');
+    return false;
+  }
+  
+  // Check both customer and enquiryCustomer
+  const customerUnknown = (p?.customer ?? p?.enquiryCustomer) as unknown;
+  if (!customerUnknown || typeof customerUnknown !== 'object') {
+    console.log('emailMatches: No customer or enquiryCustomer found in payload');
+    return false;
+  }
+  
+  const customer = customerUnknown as Record<string, unknown>;
+  const email = pickStr(customer, ['email']);
+  if (!email) {
+    console.log('emailMatches: No email found in customer data');
+    return false;
+  }
+  
+  const matches = email.toLowerCase().trim() === targetEmail.toLowerCase().trim();
+  console.log(`emailMatches: Comparing "${email}" (from payload) with "${targetEmail}" -> ${matches}`);
+  return matches;
+}
+
+export async function getMostRecentQuoteByEmail(emailAddress: string): Promise<QuoteInfo | null> {
+  const supabase = getSupabaseAdmin();
+  
+  console.log(`getMostRecentQuoteByEmail: Looking up quote for email: ${emailAddress}`);
+  
+  const normalizedEmail = emailAddress.toLowerCase().trim();
+  
+  try {
+    // Fetch all quotes ordered by creation date (most recent first)
+    const { data: quotes, error } = await supabase
+      .from('quote_docs')
+      .select('quote_no, created_at, payload')
+      .order('created_at', { ascending: false });
+    
+    if (error || !quotes) {
+      console.error('Error fetching quotes:', error);
+      return null;
+    }
+    
+    console.log(`getMostRecentQuoteByEmail: Fetched ${quotes.length} quotes from database`);
+    
+    // Find quotes matching the email
+    const matchingQuotes = quotes.filter((q) => emailMatches(q.payload, normalizedEmail));
+    
+    console.log(`getMostRecentQuoteByEmail: Found ${matchingQuotes.length} matching quotes for email: ${normalizedEmail}`);
+    
+    if (matchingQuotes.length === 0) {
+      console.log(`getMostRecentQuoteByEmail: No quotes found matching email: ${normalizedEmail}`);
+      return null;
+    }
+    
+    // Get the most recent quote (first in the array since we ordered by created_at desc)
+    const mostRecentQuote = matchingQuotes[0];
+    
+    const customer = extractCustomerFromPayload(mostRecentQuote.payload);
+    const value = parseGrandTotal(mostRecentQuote.payload);
+    const shareableDetails = extractShareableQuoteDetails(mostRecentQuote.payload);
+    
+    return {
+      quoteNo: mostRecentQuote.quote_no,
+      customer,
+      pdfUrl: formatPdfUrl(mostRecentQuote.quote_no),
+      createdAt: mostRecentQuote.created_at,
+      value,
+      shareableDetails,
+    };
+  } catch (error) {
+    console.error('Error finding quote by email:', error);
+    return null;
+  }
+}
+
 export async function getQuoteInfo(quoteNumber: string): Promise<QuoteInfo | null> {
   const supabase = getSupabaseAdmin();
   
