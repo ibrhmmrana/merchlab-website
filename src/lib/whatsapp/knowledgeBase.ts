@@ -186,6 +186,10 @@ export async function searchKnowledgeBase(
     let supabase;
     try {
       supabase = getSupabaseAdmin();
+      // Log Supabase URL for debugging (without exposing full key)
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'unknown';
+      console.log(`Using Supabase URL: ${supabaseUrl}`);
+      console.log(`Using service role key: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? 'yes' : 'no (falling back to anon key)'}`);
     } catch (supabaseError) {
       const errorMessage = supabaseError instanceof Error 
         ? supabaseError.message 
@@ -219,6 +223,15 @@ export async function searchKnowledgeBase(
       });
 
       if (error) {
+        // Log full error details for debugging
+        console.error('match_documents_merchlab RPC error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          status: error.status,
+        });
+        
         // If match_documents_merchlab doesn't exist, try match_documents
         console.warn(`match_documents_merchlab failed: ${error.message}, trying match_documents`);
         const { data: fallbackData, error: fallbackError } = await supabase.rpc('match_documents', {
@@ -228,6 +241,13 @@ export async function searchKnowledgeBase(
         });
 
         if (fallbackError) {
+          console.error('match_documents fallback RPC error details:', {
+            message: fallbackError.message,
+            code: fallbackError.code,
+            details: fallbackError.details,
+            hint: fallbackError.hint,
+            status: fallbackError.status,
+          });
           throw fallbackError;
         }
         rpcResult = fallbackData;
@@ -235,10 +255,37 @@ export async function searchKnowledgeBase(
         rpcResult = data;
       }
     } catch (rpcError) {
-      const errorMessage = rpcError instanceof Error 
-        ? rpcError.message 
-        : 'Unknown error calling RPC function';
-      console.error('Error calling RPC function:', errorMessage);
+      // Enhanced error logging with full Supabase error details
+      let errorMessage = 'Unknown error calling RPC function';
+      let errorDetails: Record<string, unknown> = {};
+      
+      if (rpcError && typeof rpcError === 'object') {
+        // Check if it's a Supabase error object
+        if ('message' in rpcError) {
+          errorMessage = String(rpcError.message);
+        }
+        if ('code' in rpcError) {
+          errorDetails.code = rpcError.code;
+        }
+        if ('details' in rpcError) {
+          errorDetails.details = rpcError.details;
+        }
+        if ('hint' in rpcError) {
+          errorDetails.hint = rpcError.hint;
+        }
+        if ('status' in rpcError) {
+          errorDetails.status = rpcError.status;
+        }
+      } else if (rpcError instanceof Error) {
+        errorMessage = rpcError.message;
+      }
+      
+      console.error('Error calling RPC function - full details:', {
+        errorMessage,
+        ...errorDetails,
+        rpcError: rpcError,
+      });
+      
       return {
         results: [],
         error: `Failed to search knowledge base: ${errorMessage}. Please ensure the RPC function match_documents_merchlab exists in your Supabase database.`,
