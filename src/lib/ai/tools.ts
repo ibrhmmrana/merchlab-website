@@ -155,13 +155,13 @@ export function getMerchlabAgentTools(): Array<{
       type: 'function',
       function: {
         name: 'search_merchlab_knowledge_base',
-        description: 'Use this tool to answer questions about MerchLab policies, terms and conditions, refunds, privacy, and other static company information stored in Supabase. Search the knowledge base using semantic search to find relevant information chunks.',
+        description: 'MANDATORY: Use this tool to answer ANY question about MerchLab, including company information (website, contact details, about us), policies (refund policy, terms and conditions, privacy policy), shipping/delivery, payment methods, product information, or any factual information about MerchLab. You MUST call this tool FIRST before answering any question about MerchLab, even if you think you know the answer. The knowledge base is the authoritative source of truth. Examples: "What is your website?" → call this tool, "What is MerchLab?" → call this tool, "How do I contact you?" → call this tool, "What is your refund policy?" → call this tool. Search the knowledge base using semantic search to find relevant information chunks.',
         parameters: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'The user\'s question or search query about MerchLab policies, terms, refunds, privacy, or general company information (e.g., "What is your refund policy?", "What are your terms and conditions?", "How does shipping work?", "What is your privacy policy?")',
+              description: 'The user\'s question or search query about MerchLab. Examples: "What is your website?", "What is MerchLab?", "How do I contact MerchLab?", "What is your refund policy?", "What are your terms and conditions?", "How does shipping work?", "What is your privacy policy?", "MerchLab company information", "MerchLab contact details". Always use the exact question or a close paraphrase.',
             },
             topK: {
               type: 'number',
