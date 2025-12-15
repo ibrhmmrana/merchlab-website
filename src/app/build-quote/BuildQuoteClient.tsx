@@ -58,6 +58,9 @@ export default function BuildQuoteClient() {
   // Editable items with custom prices and margins
   const [editableItems, setEditableItems] = useState<Map<string, EditableItem>>(new Map());
   
+  // Local state for markup input values (allows empty strings for better UX)
+  const [markupInputValues, setMarkupInputValues] = useState<Map<string, string>>(new Map());
+  
   // Branding pricing cache: stockHeaderId -> pricing data
   const [brandingPricing, setBrandingPricing] = useState<Map<number, Array<{
     stockHeaderId: number;
@@ -258,6 +261,15 @@ export default function BuildQuoteClient() {
           _quoteQuantity: quoteItem?.quantity ?? existing?._quoteQuantity,
           _quoteMargin: quoteMarginCalculated ? calculatedMargin : existing?._quoteMargin,
         });
+        
+        // Initialize markup input value if not already set
+        if (!markupInputValues.has(key)) {
+          setMarkupInputValues(prev => {
+            const newMap = new Map(prev);
+            newMap.set(key, calculatedMargin.toFixed(2));
+            return newMap;
+          });
+        }
       });
       return newMap;
     });
@@ -1134,8 +1146,48 @@ export default function BuildQuoteClient() {
                               type="number"
                               step="0.01"
                               min="0"
-                              value={margin.toFixed(2)}
-                              onChange={(e) => updateItemMargin(itemKey, parseFloat(e.target.value) || 0)}
+                              value={markupInputValues.get(itemKey) ?? margin.toFixed(2)}
+                              onChange={(e) => {
+                                const inputValue = e.target.value;
+                                // Allow empty string for better UX
+                                setMarkupInputValues(prev => {
+                                  const newMap = new Map(prev);
+                                  if (inputValue === '') {
+                                    newMap.set(itemKey, '');
+                                  } else {
+                                    newMap.set(itemKey, inputValue);
+                                    // Update the actual margin value
+                                    const numValue = parseFloat(inputValue);
+                                    if (!isNaN(numValue) && numValue >= 0) {
+                                      updateItemMargin(itemKey, numValue);
+                                    }
+                                  }
+                                  return newMap;
+                                });
+                              }}
+                              onBlur={(e) => {
+                                // Format the value on blur
+                                const inputValue = e.target.value;
+                                const numValue = parseFloat(inputValue);
+                                if (inputValue === '' || isNaN(numValue)) {
+                                  // If empty or invalid, set to 0
+                                  setMarkupInputValues(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(itemKey, '0.00');
+                                    return newMap;
+                                  });
+                                  updateItemMargin(itemKey, 0);
+                                } else {
+                                  // Format to 2 decimal places
+                                  const formatted = Math.max(0, numValue).toFixed(2);
+                                  setMarkupInputValues(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(itemKey, formatted);
+                                    return newMap;
+                                  });
+                                  updateItemMargin(itemKey, Math.max(0, numValue));
+                                }
+                              }}
                               className="mt-1 h-8"
                             />
                           </div>
