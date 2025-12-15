@@ -118,10 +118,9 @@ export function Header() {
             {isBuildAQuotePage && (
               <button
                 onClick={() => setShowAddQuoteDialog(true)}
-                className="luxury-hover-glow p-2 rounded-lg transition-all duration-300 hover:bg-luxury-gold-light/10"
-                title="Add existing quote"
+                className="luxury-hover-glow px-4 py-2 rounded-lg border border-gray-300 transition-all duration-300 hover:bg-luxury-gold-light/10 text-sm font-medium text-gray-700 hover:text-luxury-gold hover:border-luxury-gold"
               >
-                <FileText className="h-5 w-5 text-gray-700 hover:text-luxury-gold transition-colors" />
+                Add Existing Quote
               </button>
             )}
 
