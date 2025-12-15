@@ -133,16 +133,16 @@ export async function getWhatsappConversations(): Promise<WhatsappConversationSu
       if (errorWithIdOrder) {
         // If id ordering also fails, try without any ordering
         console.warn('id ordering also failed, fetching without order');
-        const { data: dataWithoutOrder, error: errorWithoutOrder } = await supabase
-          .from('chatbot_history')
-          .select('*');
-        
-        if (errorWithoutOrder) {
-          throw new Error(`Failed to fetch chat histories: ${errorWithoutOrder.message} (Original error: ${error.message})`);
-        }
-        
-        // Continue with dataWithoutOrder and sort in JS
-        return processConversationData(dataWithoutOrder || []);
+      const { data: dataWithoutOrder, error: errorWithoutOrder } = await supabase
+        .from('chatbot_history')
+        .select('*');
+      
+      if (errorWithoutOrder) {
+        throw new Error(`Failed to fetch chat histories: ${errorWithoutOrder.message} (Original error: ${error.message})`);
+      }
+      
+      // Continue with dataWithoutOrder and sort in JS
+      return processConversationData(dataWithoutOrder || []);
       }
       
       // Use dataWithIdOrder
@@ -294,26 +294,26 @@ export async function getWhatsappConversationBySessionId(
         // If id ordering also fails, try without any ordering
         console.warn('id ordering also failed, fetching without order');
         const { data: dataWithoutOrder, error: errorWithoutOrder } = await supabase
-          .from('chatbot_history')
-          .select('*')
-          .eq('session_id', sessionId);
-        
-        if (errorWithoutOrder) {
-          throw new Error(`Failed to fetch conversation: ${errorWithoutOrder.message} (Original error: ${error.message})`);
-        }
-        
-        // Sort in JS if we got data
-        const orderedData = dataWithoutOrder ? [...(dataWithoutOrder as N8nChatHistoryRow[])].sort((a: N8nChatHistoryRow, b: N8nChatHistoryRow) => {
+        .from('chatbot_history')
+        .select('*')
+        .eq('session_id', sessionId);
+      
+      if (errorWithoutOrder) {
+        throw new Error(`Failed to fetch conversation: ${errorWithoutOrder.message} (Original error: ${error.message})`);
+      }
+      
+      // Sort in JS if we got data
+      const orderedData = dataWithoutOrder ? [...(dataWithoutOrder as N8nChatHistoryRow[])].sort((a: N8nChatHistoryRow, b: N8nChatHistoryRow) => {
           const aVal = a.date_time ? new Date(a.date_time).getTime() : (a.id ?? 0);
           const bVal = b.date_time ? new Date(b.date_time).getTime() : (b.id ?? 0);
-          return aVal - bVal; // Ascending for chronological order
-        }) : null;
-        
-        if (!orderedData || orderedData.length === 0) {
-          return [];
-        }
-        
-        return processMessages(orderedData, sessionId);
+        return aVal - bVal; // Ascending for chronological order
+      }) : null;
+      
+      if (!orderedData || orderedData.length === 0) {
+        return [];
+      }
+      
+      return processMessages(orderedData, sessionId);
       }
       
       // Use dataWithIdOrder

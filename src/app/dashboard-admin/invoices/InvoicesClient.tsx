@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { type PeriodKey } from '@/server/admin/metrics';
 import { Button } from '@/components/ui/button';
 
@@ -64,6 +64,8 @@ export default function InvoicesClient() {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [clickedPage, setClickedPage] = useState<number | null>(null);
+  const [resendingInvoice, setResendingInvoice] = useState<string | null>(null);
+  const [resentInvoices, setResentInvoices] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     async function fetchInvoices() {
@@ -114,6 +116,78 @@ export default function InvoicesClient() {
   useEffect(() => {
     setPage(1);
   }, [period, customStart, customEnd, search, minValue, maxValue]);
+
+  // Load resent invoices from localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const stored = localStorage.getItem('resentInvoices');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          setResentInvoices(new Map(Object.entries(parsed)));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading resent invoices from localStorage:', error);
+      // Clear invalid data
+      try {
+        localStorage.removeItem('resentInvoices');
+      } catch {
+        // Ignore
+      }
+    }
+  }, []);
+
+  // Save resent invoices to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      if (resentInvoices.size > 0) {
+        const obj = Object.fromEntries(resentInvoices);
+        localStorage.setItem('resentInvoices', JSON.stringify(obj));
+      } else {
+        // Clear localStorage if no resent invoices
+        localStorage.removeItem('resentInvoices');
+      }
+    } catch (error) {
+      console.error('Error saving resent invoices to localStorage:', error);
+    }
+  }, [resentInvoices]);
+
+  const handleResendInvoice = async (invoiceNo: string) => {
+    try {
+      setResendingInvoice(invoiceNo);
+      const response = await fetch('/api/admin/invoices/resend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ invoiceNo }),
+      });
+
+      if (!response.ok) {
+        // Silently fail - button will remain enabled
+        console.error('Failed to resend invoice:', await response.json().catch(() => ({})));
+        return;
+      }
+
+      // Increment resend count for this invoice
+      setResentInvoices(prev => {
+        const newMap = new Map(prev);
+        const currentCount = newMap.get(invoiceNo) || 0;
+        newMap.set(invoiceNo, currentCount + 1);
+        return newMap;
+      });
+    } catch (error) {
+      console.error('Error resending invoice:', error);
+      // Silently fail - button will remain enabled
+    } finally {
+      setResendingInvoice(null);
+    }
+  };
 
   if (loading && !data) {
     return (
@@ -239,6 +313,7 @@ export default function InvoicesClient() {
                     <TableHead>Company</TableHead>
                     <TableHead>Value</TableHead>
                     <TableHead>PDF</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -258,6 +333,25 @@ export default function InvoicesClient() {
                         >
                           <FileText className="w-4 h-4 inline" />
                         </a>
+                      </TableCell>
+                      <TableCell>
+                        <div className="relative inline-block">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResendInvoice(invoice.invoice_no)}
+                            disabled={resendingInvoice === invoice.invoice_no}
+                            className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
+                          >
+                            <Send className="w-4 h-4 mr-1" />
+                            {resendingInvoice === invoice.invoice_no ? 'Sending...' : 'Resend'}
+                          </Button>
+                          {resentInvoices.has(invoice.invoice_no) && (
+                            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-md">
+                              x{resentInvoices.get(invoice.invoice_no)}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

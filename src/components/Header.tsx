@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, ShoppingCart } from 'lucide-react';
+import { Search, ShoppingCart, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useCartStore } from '@/store/cart';
@@ -10,12 +10,14 @@ import { useUiStore } from '@/store/ui';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { LoadingLink } from '@/components/LoadingNavigation';
+import AddQuoteDialog from '@/components/AddQuoteDialog';
 
 export function Header() {
   const items = useCartStore((state) => state.items);
   const totalItems = items.reduce((total, item) => total + item.quantity, 0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [showAddQuoteDialog, setShowAddQuoteDialog] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -112,6 +114,17 @@ export function Header() {
 
           {/* Right side actions */}
           <div className="flex items-center space-x-4">
+            {/* Add Existing Quote Button - Only on build-a-quote page */}
+            {isBuildAQuotePage && (
+              <button
+                onClick={() => setShowAddQuoteDialog(true)}
+                className="luxury-hover-glow p-2 rounded-lg transition-all duration-300 hover:bg-luxury-gold-light/10"
+                title="Add existing quote"
+              >
+                <FileText className="h-5 w-5 text-gray-700 hover:text-luxury-gold transition-colors" />
+              </button>
+            )}
+
             {/* Search */}
             <div className="relative" ref={searchRef}>
               <button 
@@ -221,6 +234,8 @@ export function Header() {
             </nav>
           </div>
 
+      {/* Add Quote Dialog */}
+      <AddQuoteDialog open={showAddQuoteDialog} onOpenChange={setShowAddQuoteDialog} />
     </header>
   );
 }

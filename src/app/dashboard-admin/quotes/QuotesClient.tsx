@@ -12,9 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileText, ChevronLeft, ChevronRight, Send } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight, Send, Trash2 } from 'lucide-react';
 import { type PeriodKey } from '@/server/admin/metrics';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 type Quote = {
   created_at: string;
@@ -66,6 +67,13 @@ export default function QuotesClient() {
   const [clickedPage, setClickedPage] = useState<number | null>(null);
   const [resendingQuote, setResendingQuote] = useState<string | null>(null);
   const [resentQuotes, setResentQuotes] = useState<Map<string, number>>(new Map());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [quoteToDelete, setQuoteToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedQuotes, setSelectedQuotes] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     async function fetchQuotes() {
@@ -110,12 +118,18 @@ export default function QuotesClient() {
     }, 300); // Debounce search
 
     return () => clearTimeout(timeoutId);
-  }, [period, customStart, customEnd, search, minValue, maxValue, page, limit, router]);
+  }, [period, customStart, customEnd, search, minValue, maxValue, page, limit, router, refreshTrigger]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 and clear selections when filters change
   useEffect(() => {
     setPage(1);
+    setSelectedQuotes(new Set());
   }, [period, customStart, customEnd, search, minValue, maxValue]);
+
+  // Clear selections when page changes
+  useEffect(() => {
+    setSelectedQuotes(new Set());
+  }, [page]);
 
   // Load resent quotes from localStorage on mount
   useEffect(() => {
@@ -187,6 +201,146 @@ export default function QuotesClient() {
     } finally {
       setResendingQuote(null);
     }
+  };
+
+  const handleDeleteClick = (quoteNo: string) => {
+    setQuoteToDelete(quoteNo);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!quoteToDelete) return;
+
+    try {
+      setDeleting(true);
+      setError(null); // Clear any previous errors
+      const response = await fetch(`/api/admin/quotes/${encodeURIComponent(quoteToDelete)}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.refresh();
+          return;
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete quote');
+      }
+
+      // Close dialog
+      setDeleteDialogOpen(false);
+      setQuoteToDelete(null);
+      
+      // Refresh the quotes list by triggering a refetch
+      // If we're on a page with only one quote and we delete it, go to previous page
+      if (data && data.quotes.length === 1 && data.page > 1) {
+        setPage(data.page - 1);
+      } else {
+        // Trigger a refetch by updating refreshTrigger
+        setRefreshTrigger(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete quote');
+      // Keep dialog open on error so user can try again
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setQuoteToDelete(null);
+  };
+
+  const handleSelectQuote = (quoteNo: string) => {
+    setSelectedQuotes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(quoteNo)) {
+        newSet.delete(quoteNo);
+      } else {
+        newSet.add(quoteNo);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (!data) return;
+    if (selectedQuotes.size === data.quotes.length) {
+      // Deselect all
+      setSelectedQuotes(new Set());
+    } else {
+      // Select all on current page
+      setSelectedQuotes(new Set(data.quotes.map(q => q.quote_no)));
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    if (selectedQuotes.size === 0) return;
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedQuotes.size === 0) return;
+
+    // Save the count and selected quotes before clearing
+    const selectedCount = selectedQuotes.size;
+    const selectedQuotesArray = Array.from(selectedQuotes);
+
+    try {
+      setBulkDeleting(true);
+      setError(null);
+
+      // Delete all selected quotes
+      const deletePromises = selectedQuotesArray.map(quoteNo =>
+        fetch(`/api/admin/quotes/${encodeURIComponent(quoteNo)}`, {
+          method: 'DELETE',
+        })
+      );
+
+      const results = await Promise.allSettled(deletePromises);
+      
+      // Check for failures
+      const failures = results.filter(
+        (result) => result.status === 'rejected' || 
+        (result.status === 'fulfilled' && !result.value.ok)
+      );
+
+      if (failures.length > 0) {
+        console.error('Some quotes failed to delete:', failures);
+        // Still show success if at least some were deleted
+        if (failures.length < selectedCount) {
+          setError(`Failed to delete ${failures.length} of ${selectedCount} quotes`);
+        } else {
+          setError('Failed to delete quotes');
+          setBulkDeleteDialogOpen(false);
+          return;
+        }
+      }
+
+      // Clear selection and refresh
+      setSelectedQuotes(new Set());
+      setBulkDeleteDialogOpen(false);
+      
+      // Refresh the quotes list
+      if (data && selectedCount >= data.quotes.length && data.page > 1) {
+        // If we deleted all quotes on the page, go to previous page
+        setPage(data.page - 1);
+      } else {
+        // Otherwise, just refetch current page
+        setRefreshTrigger(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Error in bulk delete:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete quotes');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleBulkDeleteCancel = () => {
+    setBulkDeleteDialogOpen(false);
   };
 
   if (loading && !data) {
@@ -291,14 +445,34 @@ export default function QuotesClient() {
       {/* Results */}
       <Card>
         <CardHeader>
-          <CardTitle>
-            All Quotes {data && `(${data.total} ${data.total === 1 ? 'result' : 'results'})`}
-          </CardTitle>
-          {data && data.total > 0 && (
-            <div className="text-sm text-gray-600 mt-1">
-              Showing {((data.page - 1) * data.limit) + 1} to {Math.min(data.page * data.limit, data.total)} of {data.total}
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>
+                All Quotes {data && `(${data.total} ${data.total === 1 ? 'result' : 'results'})`}
+              </CardTitle>
+              {data && data.total > 0 && (
+                <div className="text-sm text-gray-600 mt-1">
+                  Showing {((data.page - 1) * data.limit) + 1} to {Math.min(data.page * data.limit, data.total)} of {data.total}
+                </div>
+              )}
             </div>
-          )}
+            {selectedQuotes.size > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600">
+                  {selectedQuotes.size} {selectedQuotes.size === 1 ? 'quote' : 'quotes'} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDeleteClick}
+                  disabled={bulkDeleting}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Delete Selected
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {data && data.quotes.length > 0 ? (
@@ -307,6 +481,15 @@ export default function QuotesClient() {
                 <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <input
+                        type="checkbox"
+                        checked={data && data.quotes.length > 0 && selectedQuotes.size === data.quotes.length}
+                        onChange={handleSelectAll}
+                        className="cursor-pointer"
+                        aria-label="Select all quotes"
+                      />
+                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Quote #</TableHead>
                     <TableHead>Customer</TableHead>
@@ -319,6 +502,15 @@ export default function QuotesClient() {
                 <TableBody>
                   {data.quotes.map((quote) => (
                     <TableRow key={quote.quote_no}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedQuotes.has(quote.quote_no)}
+                          onChange={() => handleSelectQuote(quote.quote_no)}
+                          className="cursor-pointer"
+                          aria-label={`Select quote ${quote.quote_no}`}
+                        />
+                      </TableCell>
                       <TableCell>{formatDate(quote.created_at)}</TableCell>
                       <TableCell>{quote.quote_no}</TableCell>
                       <TableCell>
@@ -341,22 +533,32 @@ export default function QuotesClient() {
                         </a>
                       </TableCell>
                       <TableCell>
-                        <div className="relative inline-block">
+                        <div className="flex items-center gap-2">
+                          <div className="relative inline-block">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleResendQuote(quote.quote_no)}
+                              disabled={resendingQuote === quote.quote_no}
+                              className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              {resendingQuote === quote.quote_no ? 'Sending...' : 'Resend'}
+                            </Button>
+                            {resentQuotes.has(quote.quote_no) && (
+                              <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-md">
+                                x{resentQuotes.get(quote.quote_no)}
+                              </span>
+                            )}
+                          </div>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleResendQuote(quote.quote_no)}
-                            disabled={resendingQuote === quote.quote_no}
-                            className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
+                            onClick={() => handleDeleteClick(quote.quote_no)}
+                            className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                           >
-                            <Send className="w-4 h-4 mr-1" />
-                            {resendingQuote === quote.quote_no ? 'Sending...' : 'Resend'}
+                            <Trash2 className="w-4 h-4" />
                           </Button>
-                          {resentQuotes.has(quote.quote_no) && (
-                            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-md">
-                              x{resentQuotes.get(quote.quote_no)}
-                            </span>
-                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -441,6 +643,62 @@ export default function QuotesClient() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Quote</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete quote <strong>{quoteToDelete}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleDeleteCancel}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Multiple Quotes</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{selectedQuotes.size}</strong> {selectedQuotes.size === 1 ? 'quote' : 'quotes'}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleBulkDeleteCancel}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDeleteConfirm}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? 'Deleting...' : `Delete ${selectedQuotes.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

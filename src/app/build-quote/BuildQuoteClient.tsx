@@ -19,6 +19,11 @@ import { fetchQuoteBrandingSelections, type QuoteBrandingSelection } from "@/lib
 type EditableItem = CartItem & {
   customPrice?: number;
   customMargin?: number;
+  _quoteMarginCalculated?: boolean; // Flag to track if margin was calculated from quote
+  _quoteLineTotal?: number; // Store quote's line_total for initial display
+  _isFromQuote?: boolean; // Flag to track if item came from a quote
+  _quoteQuantity?: number; // Store quote's original quantity
+  _quoteMargin?: number; // Store quote's original calculated margin
 };
 
 const VAT_RATE = 0.15; // 15% VAT
@@ -64,6 +69,85 @@ export default function BuildQuoteClient() {
     setupFee: number;
   }>>>(new Map());
 
+  // Quote metadata state
+  const [quoteMetadata, setQuoteMetadata] = useState<{
+    markup_rate: number | null;
+    totals: { subtotal?: number; grand_total?: number; base_subtotal?: number } | null;
+    delivery_fee: number;
+    quoteNo: string | null;
+    items?: Array<{
+      stock_id: number;
+      stock_header_id: number;
+      colour: string | null;
+      size: string | null;
+      line_total: number;
+      base_price: number;
+      quantity: number;
+      branding_costs: number;
+    }>;
+    customer?: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+      company: string;
+    } | null;
+    shippingAddress?: {
+      street: string;
+      suburb: string;
+      city: string;
+      province: string;
+      postalCode: string;
+      country: string;
+    } | null;
+  } | null>(null);
+
+  // Load quote metadata from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('merchlab-quote-metadata');
+      if (stored) {
+        try {
+          const metadata = JSON.parse(stored);
+          setQuoteMetadata(metadata);
+          
+          // Autofill customer details and shipping address if available
+          if (metadata.customer) {
+            setForm(prev => ({
+              ...prev,
+              firstName: metadata.customer.firstName || prev.firstName,
+              lastName: metadata.customer.lastName || prev.lastName,
+              email: metadata.customer.email || prev.email,
+              phone: metadata.customer.phone || prev.phone,
+              company: metadata.customer.company || prev.company,
+            }));
+          }
+          
+          if (metadata.shippingAddress) {
+            setForm(prev => ({
+              ...prev,
+              street: metadata.shippingAddress.street || prev.street,
+              suburb: metadata.shippingAddress.suburb || prev.suburb,
+              city: metadata.shippingAddress.city || prev.city,
+              province: metadata.shippingAddress.province || prev.province,
+              postalCode: metadata.shippingAddress.postalCode || prev.postalCode,
+              country: metadata.shippingAddress.country || prev.country,
+            }));
+            // Mark address as selected if we have shipping address data
+            if (metadata.shippingAddress.street || metadata.shippingAddress.suburb) {
+              setAddressSelected(true);
+            }
+          }
+          
+          // Clear it after reading so it doesn't persist across sessions
+          // localStorage.removeItem('merchlab-quote-metadata');
+        } catch (e) {
+          console.error('Failed to parse quote metadata:', e);
+        }
+      }
+    }
+  }, []);
+
   // Create a dependency string that changes when quantities change
   const itemsHash = activeItems.map(item => `${getCartItemKey(item)}:${item.quantity}`).join('|');
 
@@ -71,21 +155,113 @@ export default function BuildQuoteClient() {
   useEffect(() => {
     setEditableItems(prev => {
       const newMap = new Map<string, EditableItem>();
+      
       activeItems.forEach(item => {
         const key = getCartItemKey(item);
         const existing = prev.get(key);
+        
+        // Calculate markup from quote line_total if available
+        let calculatedMargin = existing?.customMargin ?? 0;
+        let quoteMarginCalculated = existing?._quoteMarginCalculated ?? false;
+        
+        // Only recalculate from quote if:
+        // 1. We have quote metadata with items
+        // 2. Either item doesn't exist yet, OR it exists but margin wasn't calculated from quote before
+        if (quoteMetadata?.items && (!existing || !quoteMarginCalculated)) {
+          // Find matching item in quote metadata
+          const quoteItem = quoteMetadata.items.find(qi => 
+            qi.stock_id === item.stock_id &&
+            qi.stock_header_id === item.stock_header_id &&
+            (!qi.colour || !item.colour || qi.colour.toLowerCase().trim() === item.colour.toLowerCase().trim()) &&
+            (!qi.size || !item.size || qi.size.toLowerCase().trim() === item.size.toLowerCase().trim())
+          );
+          
+          if (quoteItem) {
+            const basePrice = quoteItem.base_price || (item.discounted_price || item.base_price || 0);
+            const quantity = quoteItem.quantity || item.quantity;
+            const lineTotal = quoteItem.line_total; // This includes VAT
+            const brandingCosts = quoteItem.branding_costs || 0;
+            
+            // Calculate markup backwards from line_total (which includes VAT)
+            // Step 1: Remove VAT from line_total to get ex-VAT selling price
+            // line_total (incl VAT) = ex_VAT_selling * 1.15
+            // ex_VAT_selling = line_total / 1.15
+            const exVatSellingPrice = lineTotal / (1 + VAT_RATE);
+            
+            // Step 2: Calculate ex-VAT cost
+            // ex_VAT_cost = (base_price * quantity) + branding_costs
+            // Note: branding_costs already includes (unitPrice * quantity) + setupFee
+            const exVatCost = (basePrice * quantity) + brandingCosts;
+            
+            // Step 3: Calculate markup factor
+            // markup_factor = ex_VAT_selling / ex_VAT_cost
+            // markup_percentage = (markup_factor - 1) * 100
+            if (basePrice > 0 && quantity > 0 && lineTotal > 0 && exVatCost > 0) {
+              const markupFactor = exVatSellingPrice / exVatCost;
+              calculatedMargin = (markupFactor - 1) * 100;
+              
+              // Ensure markup is non-negative and reasonable (0-1000%)
+              if (calculatedMargin < 0) calculatedMargin = 0;
+              if (calculatedMargin > 1000) calculatedMargin = 1000;
+              
+              quoteMarginCalculated = true;
+              
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Calculated markup from quote:', {
+                  stock_id: item.stock_id,
+                  basePrice,
+                  quantity,
+                  lineTotal,
+                  brandingCosts,
+                  exVatSellingPrice,
+                  exVatCost,
+                  markupFactor,
+                  calculatedMargin,
+                });
+              }
+            }
+          }
+        }
+        
+        // If no quote item found but we have overall markup_rate, use that
+        if (calculatedMargin === 0 && !existing && quoteMetadata?.markup_rate != null) {
+          calculatedMargin = quoteMetadata.markup_rate * 100;
+          quoteMarginCalculated = true;
+        }
+        
+        // Find quote item to get line_total and base_price
+        const quoteItem = quoteMetadata?.items?.find(qi => 
+          qi.stock_id === item.stock_id &&
+          qi.stock_header_id === item.stock_header_id &&
+          (!qi.colour || !item.colour || qi.colour.toLowerCase().trim() === item.colour.toLowerCase().trim()) &&
+          (!qi.size || !item.size || qi.size.toLowerCase().trim() === item.size.toLowerCase().trim())
+        );
+        
+        // Use quote's quantity if item is new and we have quote data
+        const initialQuantity = existing ? item.quantity : (quoteItem?.quantity ?? item.quantity);
+        
         newMap.set(key, {
           ...item,
-          // Preserve custom price/margin if item still exists, otherwise use defaults
-          customPrice: existing?.customPrice ?? (item.discounted_price || item.base_price || 0),
-          customMargin: existing?.customMargin ?? 0,
-          // Always sync quantity from cart
-          quantity: item.quantity,
+          // Use quote's base_price if available, otherwise use item's price
+          customPrice: existing?.customPrice ?? (quoteItem?.base_price ?? (item.discounted_price || item.base_price || 0)),
+          // Use calculated margin (from quote) if available, otherwise preserve existing or use 0
+          customMargin: calculatedMargin,
+          // Use quote's quantity if available and item is new, otherwise use cart quantity
+          quantity: initialQuantity,
+          // Track if margin was calculated from quote
+          _quoteMarginCalculated: quoteMarginCalculated,
+          // Store quote's line_total for initial display
+          _quoteLineTotal: quoteItem?.line_total ?? existing?._quoteLineTotal,
+          // Mark if item came from quote
+          _isFromQuote: !!quoteItem || existing?._isFromQuote,
+          // Store original quote values for comparison
+          _quoteQuantity: quoteItem?.quantity ?? existing?._quoteQuantity,
+          _quoteMargin: quoteMarginCalculated ? calculatedMargin : existing?._quoteMargin,
         });
       });
       return newMap;
     });
-  }, [itemsHash, activeCartGroup]); // Sync whenever quantities or items change
+  }, [itemsHash, activeCartGroup, quoteMetadata]); // Sync whenever quantities, items, or quote metadata change
 
   // Track which stockHeaderIds we've already fetched pricing for
   const fetchedPricingRef = useRef<Set<number>>(new Set());
@@ -226,22 +402,24 @@ export default function BuildQuoteClient() {
 
   // Calculate totals
   const calculateTotals = () => {
-    let subtotal = 0;
+    // Sum up all line totals (each item's displayed line total)
+    // This ensures we use the same calculation logic as what's shown in the UI
+    let grandTotalInclVat = 0;
+    let allItemsFromQuote = true;
+    let anyItemEdited = false;
+    
     editableItems.forEach((item) => {
+      // Calculate this item's line total (same logic as in the display)
       const basePrice = item.customPrice ?? (item.discounted_price || item.base_price || 0);
       const margin = item.customMargin ?? 0;
-      // Margin applies ONLY to item cost, NOT to branding costs
       const finalPrice = basePrice * (1 + margin / 100);
-      let itemSubtotal = finalPrice * item.quantity;
+      const itemCostWithMargin = finalPrice * item.quantity;
       
-      // Add branding costs for branded items
-      // NOTE: Branding costs are added separately WITHOUT margin applied
+      // Calculate branding costs
+      let brandingCost = 0;
       if (isBranded(item) && item.branding?.length) {
         const itemPricing = brandingPricing.get(item.stock_header_id) || [];
         const norm = (v: string | null | undefined) => String(v ?? '').trim().toLowerCase();
-        
-        // Calculate unitPrice costs (per branding per item)
-        // These are added at face value, no margin applied
         item.branding.forEach((b) => {
           const matchedPricing = itemPricing.find(p =>
             norm(p.brandingType) === norm(b.branding_type) &&
@@ -249,27 +427,72 @@ export default function BuildQuoteClient() {
             (!b.branding_position || norm(p.brandingPosition) === norm(b.branding_position))
           );
           if (matchedPricing) {
-            itemSubtotal += matchedPricing.unitPrice * item.quantity;
+            brandingCost += matchedPricing.unitPrice * item.quantity;
           }
         });
-        
-        // Add setupFee once per item (not per branding)
-        // Setup fee is also added at face value, no margin applied
         if (itemPricing.length > 0) {
-          itemSubtotal += itemPricing[0].setupFee;
+          brandingCost += itemPricing[0].setupFee;
         }
       }
       
-      subtotal += itemSubtotal;
+      // Get line total (use quote's if available and not edited, otherwise calculated)
+      const qtyChanged = item._quoteQuantity != null && item.quantity !== item._quoteQuantity;
+      const marginChanged = item._quoteMargin != null && 
+        Math.abs((item.customMargin ?? 0) - item._quoteMargin) > 0.01;
+      const itemEdited = qtyChanged || marginChanged;
+      
+      if (itemEdited) {
+        anyItemEdited = true;
+      }
+      
+      if (!item._isFromQuote || itemEdited || item._quoteLineTotal == null) {
+        allItemsFromQuote = false;
+        // Use calculated line total (ex-VAT)
+        const calculatedLineTotal = itemCostWithMargin + brandingCost;
+        grandTotalInclVat += calculatedLineTotal;
+      } else {
+        // Use quote's line total (includes VAT)
+        grandTotalInclVat += item._quoteLineTotal;
+      }
     });
-    const vat = subtotal * VAT_RATE;
-    const subtotalWithVat = subtotal + vat;
     
-    // Delivery fee: R150 if total (subtotal + vat) is below R1000, otherwise free
-    const deliveryFee = subtotalWithVat < 1000 ? 150 : 0;
-    const total = subtotalWithVat + deliveryFee;
+    // Check if we have a quote loaded
+    const hasQuote = quoteMetadata?.quoteNo != null;
     
-    return { subtotal, vat, deliveryFee, total };
+    // If all items are from quote and none edited, grandTotalInclVat already includes VAT
+    // Otherwise, grandTotalInclVat is ex-VAT and we need to add VAT
+    if (hasQuote && allItemsFromQuote && !anyItemEdited) {
+      // All items from quote, none edited - grandTotalInclVat already includes VAT
+      // Extract ex-VAT subtotal and VAT
+      const exVatSubtotal = grandTotalInclVat / (1 + VAT_RATE);
+      const vat = grandTotalInclVat - exVatSubtotal;
+      const deliveryFee = quoteMetadata?.delivery_fee ?? 0;
+      const total = grandTotalInclVat + deliveryFee;
+      
+      return { 
+        subtotal: exVatSubtotal, 
+        vat, 
+        deliveryFee, 
+        total,
+        hasQuote: true, // Flag to hide VAT in UI
+      };
+    } else {
+      // Items edited or not from quote - grandTotalInclVat is ex-VAT, add VAT
+      const vat = grandTotalInclVat * VAT_RATE;
+      const subtotalWithVat = grandTotalInclVat + vat;
+      
+      // Delivery fee: R150 if total (subtotal + vat) is below R1000, otherwise free
+      const deliveryFee = subtotalWithVat < 1000 ? 150 : 0;
+      const total = subtotalWithVat + deliveryFee;
+      
+      return { 
+        subtotal: grandTotalInclVat, 
+        vat, 
+        deliveryFee, 
+        total,
+        hasQuote: false, // Show VAT in UI
+      };
+    }
   };
 
   const { subtotal, vat, deliveryFee, total } = calculateTotals();
@@ -296,7 +519,16 @@ export default function BuildQuoteClient() {
       const newMap = new Map(prev);
       const item = newMap.get(key);
       if (item) {
-        newMap.set(key, { ...item, customMargin: Math.max(0, margin) });
+        // Preserve quote metadata when updating margin
+        newMap.set(key, { 
+          ...item, 
+          customMargin: Math.max(0, margin),
+          // Preserve quote metadata so we can detect if it's been edited
+          _quoteLineTotal: item._quoteLineTotal,
+          _quoteQuantity: item._quoteQuantity,
+          _quoteMargin: item._quoteMargin,
+          _isFromQuote: item._isFromQuote,
+        });
       }
       return newMap;
     });
@@ -737,12 +969,23 @@ export default function BuildQuoteClient() {
                     const itemKey = getCartItemKey(item);
                     const basePrice = item.customPrice ?? (item.discounted_price || item.base_price || 0);
                     const margin = item.customMargin ?? 0;
+                    
+                    // Check if we have quote line_total for this item
+                    const quoteItem = quoteMetadata?.items?.find(qi => 
+                      qi.stock_id === item.stock_id &&
+                      qi.stock_header_id === item.stock_header_id &&
+                      (!qi.colour || !item.colour || qi.colour.toLowerCase().trim() === item.colour.toLowerCase().trim()) &&
+                      (!qi.size || !item.size || qi.size.toLowerCase().trim() === item.size.toLowerCase().trim())
+                    );
+                    
                     // Margin applies ONLY to item cost, NOT to branding costs
                     const finalPrice = basePrice * (1 + margin / 100);
                     const itemCostWithMargin = finalPrice * item.quantity;
                     
                     // Calculate branding costs for branded items
                     // NOTE: Branding costs are added separately WITHOUT margin applied
+                    // Always calculate from current pricing and quantity (not locked to quote)
+                    // This allows line total to update when quantity changes
                     let brandingCost = 0;
                     if (isBranded(item) && item.branding?.length) {
                       const itemPricing = brandingPricing.get(item.stock_header_id) || [];
@@ -768,8 +1011,23 @@ export default function BuildQuoteClient() {
                       }
                     }
                     
-                    // Line total = (item cost with margin) + (branding costs without margin)
-                    const lineTotal = itemCostWithMargin + brandingCost;
+                    // Line total calculation:
+                    // - If item is from quote and hasn't been edited yet, use quote's line_total
+                    // - Otherwise, calculate dynamically: (item cost with margin) + (branding costs)
+                    // Check if user has edited quantity or markup (if current values differ from quote)
+                    const isFromQuote = item._isFromQuote && item._quoteLineTotal != null;
+                    
+                    // Check if quantity or markup has been changed from quote values
+                    const qtyChanged = item._quoteQuantity != null && item.quantity !== item._quoteQuantity;
+                    const marginChanged = item._quoteMargin != null && 
+                      Math.abs((item.customMargin ?? 0) - item._quoteMargin) > 0.01;
+                    const hasBeenEdited = qtyChanged || marginChanged;
+                    
+                    // Use quote's line_total only if item is from quote and hasn't been edited
+                    const calculatedLineTotal = itemCostWithMargin + brandingCost;
+                    const lineTotal = (isFromQuote && !hasBeenEdited && item._quoteLineTotal != null) 
+                      ? item._quoteLineTotal 
+                      : calculatedLineTotal;
 
                     return (
                       <div key={itemKey} className="border rounded-lg p-4 space-y-4">
@@ -871,12 +1129,12 @@ export default function BuildQuoteClient() {
                           </div>
 
                           <div>
-                            <label className="text-xs font-medium text-gray-700">Margin (%)</label>
+                            <label className="text-xs font-medium text-gray-700">Markup (%)</label>
                             <Input
                               type="number"
-                              step="0.1"
+                              step="0.01"
                               min="0"
-                              value={margin}
+                              value={margin.toFixed(2)}
                               onChange={(e) => updateItemMargin(itemKey, parseFloat(e.target.value) || 0)}
                               className="mt-1 h-8"
                             />
