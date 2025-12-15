@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { quoteNo: string } }
+  { params }: { params: Promise<{ quoteNo: string }> }
 ) {
   if (!isAuthed(request)) {
     return NextResponse.json(
@@ -17,7 +17,7 @@ export async function DELETE(
   }
 
   try {
-    const quoteNo = params.quoteNo;
+    const { quoteNo } = await params;
 
     if (!quoteNo) {
       return NextResponse.json(

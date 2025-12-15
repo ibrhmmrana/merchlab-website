@@ -17,10 +17,10 @@ function isValidQuoteNumber(quoteNo: string): boolean {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { quoteNo: string } }
+  { params }: { params: Promise<{ quoteNo: string }> }
 ) {
   try {
-    const quoteNo = params.quoteNo;
+    const { quoteNo } = await params;
 
     if (!quoteNo) {
       return NextResponse.json(
