@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { saveWhatsAppMessage } from '@/lib/whatsapp/messageStorage';
 import { processMessage } from '@/lib/whatsapp/aiAgent';
 import { sendWhatsAppMessage, sendWhatsAppDocument } from '@/lib/whatsapp/sender';
+import { isHumanInControl } from '@/lib/whatsapp/humanControl';
 
 // Type aliases for WhatsApp webhook formats
 type WaContact = { wa_id?: string; profile?: { name?: string } };
@@ -191,9 +192,56 @@ export async function POST(request: NextRequest) {
     
     if (waId && messageText && messageText.trim().length > 0) {
       const customerNumber = waId;
+      // Construct sessionId: ML-[whatsapp ID]
+      // waId should be the phone number like "27693475825"
       const sessionId = `ML-${waId}`;
       
-      console.log('Processing message:', { sessionId, customerNumber, messageText, waId });
+      console.log('=== WhatsApp Message Received ===');
+      console.log('Raw waId from webhook:', waId);
+      console.log('waId type:', typeof waId);
+      console.log('waId length:', waId.length);
+      console.log('Constructed sessionId:', sessionId);
+      console.log('Customer number:', customerNumber);
+      console.log('Message text:', messageText);
+      
+      // ============================================
+      // CHECK HUMAN CONTROL STATE FIRST
+      // ============================================
+      // If human is in control, save message but DO NOT generate AI response
+      console.log(`[Webhook] Checking human control for sessionId: "${sessionId}"`);
+      const humanControlled = await isHumanInControl(sessionId);
+      console.log(`[Webhook] Human control result: ${humanControlled}`);
+      
+      if (humanControlled === true) {
+        console.log(`[Webhook] ✅ Human is in control for session ${sessionId} - saving message but SKIPPING AI response`);
+        
+        // Save incoming message to Supabase (so it appears in chat)
+        try {
+          await saveWhatsAppMessage(
+            sessionId,
+            'human',
+            messageText,
+            {
+              number: customerNumber,
+              name: customerName || customerNumber,
+            }
+          );
+          console.log('Message saved to Supabase successfully');
+        } catch (error) {
+          console.error('Error saving incoming message to Supabase:', error);
+        }
+        
+        // Return immediately - NO AI response will be generated
+        return NextResponse.json({ 
+          status: 'ok',
+          message: 'Message received, human is in control - AI response skipped'
+        }, { status: 200 });
+      }
+      
+      // ============================================
+      // HUMAN IS NOT IN CONTROL - PROCEED WITH AI
+      // ============================================
+      console.log(`[Webhook] AI is in control for session ${sessionId} - proceeding with AI response generation`);
       console.log(`Passing customerNumber (${customerNumber}) to AI agent for quote lookup`);
       
       // Save incoming message to Supabase immediately

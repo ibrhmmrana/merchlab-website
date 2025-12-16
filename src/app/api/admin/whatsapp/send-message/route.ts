@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
+import { saveWhatsAppMessage } from '@/lib/whatsapp/messageStorage';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -52,32 +53,94 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format phone number and extract first name
+    // Format phone number (ensure it's in international format without +)
     const phoneNumber = formatPhoneNumber(customerNumber);
-    const firstName = getFirstName(customerName);
+    const formattedNumber = phoneNumber.replace(/^\+/, '').replace(/\D/g, '');
 
-    // Send to webhook
-    const webhookResponse = await fetch('https://ai.intakt.co.za/webhook/human-whatsapp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([
-        {
-          number: phoneNumber,
-          message: message.trim(),
-          name: firstName,
-        },
-      ]),
-    });
+    // Get WhatsApp Business API credentials
+    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    // Use Phone Number ID if available, otherwise fall back to Business Account ID
+    // Note: Phone Number ID is required for sending messages, Business Account ID may not work
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text();
-      console.error('Webhook error:', errorText);
+    if (!accessToken) {
       return NextResponse.json(
-        { error: `Failed to send message: ${errorText || 'Unknown error'}` },
+        { error: 'WHATSAPP_ACCESS_TOKEN environment variable is not set' },
         { status: 500, headers: noIndexHeaders() }
       );
+    }
+
+    if (!phoneNumberId) {
+      return NextResponse.json(
+        { error: 'WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_BUSINESS_ACCOUNT_ID environment variable is not set' },
+        { status: 500, headers: noIndexHeaders() }
+      );
+    }
+
+    // Send message directly via WhatsApp Business API
+    const url = `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`;
+    
+    const whatsappResponse = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: formattedNumber,
+        type: 'text',
+        text: {
+          preview_url: false,
+          body: message.trim(),
+        },
+      }),
+    });
+
+    if (!whatsappResponse.ok) {
+      let errorMessage = 'Unknown error';
+      try {
+        const errorData = await whatsappResponse.json();
+        // Extract error message from Facebook Graph API error response
+        if (errorData.error?.message) {
+          errorMessage = errorData.error.message;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        } else {
+          errorMessage = JSON.stringify(errorData);
+        }
+      } catch {
+        // If JSON parsing fails, try to get text
+        const errorText = await whatsappResponse.text().catch(() => 'Unknown error');
+        errorMessage = errorText || 'Unknown error';
+      }
+      
+      console.error('WhatsApp API error:', errorMessage);
+      return NextResponse.json(
+        { error: `Failed to send message: ${errorMessage}` },
+        { status: whatsappResponse.status || 500, headers: noIndexHeaders() }
+      );
+    }
+
+    const responseData = await whatsappResponse.json();
+    console.log('WhatsApp message sent successfully:', responseData);
+
+    // Save the sent message to Supabase so it appears in the chat
+    try {
+      const sessionId = `ML-${formattedNumber}`;
+      await saveWhatsAppMessage(
+        sessionId,
+        'ai', // Messages sent by human admin are marked as 'ai' type in the chat
+        message.trim(),
+        {
+          number: formattedNumber,
+          name: customerName,
+        }
+      );
+      console.log('Message saved to Supabase successfully');
+    } catch (saveError) {
+      console.error('Error saving message to Supabase:', saveError);
+      // Don't fail the request if saving to Supabase fails - message was already sent
     }
 
     return NextResponse.json(

@@ -492,11 +492,11 @@ export default function BuildQuoteClient() {
       // Items edited or not from quote - grandTotalInclVat is ex-VAT, add VAT
       const vat = grandTotalInclVat * VAT_RATE;
       const subtotalWithVat = grandTotalInclVat + vat;
-      
-      // Delivery fee: R150 if total (subtotal + vat) is below R1000, otherwise free
-      const deliveryFee = subtotalWithVat < 1000 ? 150 : 0;
-      const total = subtotalWithVat + deliveryFee;
-      
+    
+    // Delivery fee: R150 if total (subtotal + vat) is below R1000, otherwise free
+    const deliveryFee = subtotalWithVat < 1000 ? 150 : 0;
+    const total = subtotalWithVat + deliveryFee;
+    
       return { 
         subtotal: grandTotalInclVat, 
         vat, 

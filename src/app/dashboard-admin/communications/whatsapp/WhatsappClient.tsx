@@ -575,25 +575,59 @@ export default function WhatsappClient() {
     };
   }, [selectedSessionId]);
 
-  // Load and manage human control state from localStorage
+  // Load human control state from API and localStorage
   useEffect(() => {
     if (selectedSessionId) {
-      // Check localStorage for this session
+      // Check localStorage first for immediate UI update
       const storedState = localStorage.getItem(`human-control-${selectedSessionId}`);
       setIsHumanInControl(storedState === 'true');
+      
+      // Then sync with API to get the authoritative state
+      fetch(`/api/admin/whatsapp/human-control?sessionId=${encodeURIComponent(selectedSessionId)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.isHumanInControl !== undefined) {
+            setIsHumanInControl(data.isHumanInControl);
+            // Update localStorage to match
+            if (data.isHumanInControl) {
+              localStorage.setItem(`human-control-${selectedSessionId}`, 'true');
+            } else {
+              localStorage.removeItem(`human-control-${selectedSessionId}`);
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Error loading human control state from API:', error);
+          // Keep localStorage state if API fails
+        });
     } else {
       setIsHumanInControl(false);
     }
   }, [selectedSessionId]);
 
-  // Save human control state to localStorage whenever it changes
+  // Save human control state to API and localStorage whenever it changes
   useEffect(() => {
     if (selectedSessionId) {
+      // Update localStorage immediately
       if (isHumanInControl) {
         localStorage.setItem(`human-control-${selectedSessionId}`, 'true');
       } else {
         localStorage.removeItem(`human-control-${selectedSessionId}`);
       }
+      
+      // Sync with API
+      fetch('/api/admin/whatsapp/human-control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: selectedSessionId,
+          isHumanInControl: isHumanInControl,
+        }),
+      }).catch(error => {
+        console.error('Error saving human control state to API:', error);
+      });
     }
   }, [isHumanInControl, selectedSessionId]);
 
@@ -731,7 +765,7 @@ export default function WhatsappClient() {
   };
 
   // Handle taking over from AI
-  const handleTakeOver = async () => {
+  const handleTakeOver = () => {
     if (!selectedConversation || takingOver) {
       return;
     }
@@ -739,29 +773,8 @@ export default function WhatsappClient() {
     setTakingOver(true);
 
     try {
-      const phoneNumber = formatPhoneNumber(selectedConversation.customerNumber);
-      
-      const response = await fetch('https://ai.intakt.co.za/webhook/human-in-loop', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([
-          {
-            number: phoneNumber,
-            status: 'Human',
-          },
-        ]),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error taking over:', errorText);
-        alert(`Failed to take over: ${errorText || 'Unknown error'}`);
-        return;
-      }
-
-      // Successfully took over
+      // Enable human control - user can now type messages directly
+      // AI will not respond when human is in control
       setIsHumanInControl(true);
     } catch (error) {
       console.error('Error taking over:', error);
@@ -772,7 +785,7 @@ export default function WhatsappClient() {
   };
 
   // Handle handing over back to AI
-  const handleHandoverToAI = async () => {
+  const handleHandoverToAI = () => {
     if (!selectedConversation || handingOver) {
       return;
     }
@@ -780,29 +793,8 @@ export default function WhatsappClient() {
     setHandingOver(true);
 
     try {
-      const phoneNumber = formatPhoneNumber(selectedConversation.customerNumber);
-      
-      const response = await fetch('https://ai.intakt.co.za/webhook/human-in-loop', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([
-          {
-            number: phoneNumber,
-            status: 'AI',
-          },
-        ]),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error handing over to AI:', errorText);
-        alert(`Failed to handover to AI: ${errorText || 'Unknown error'}`);
-        return;
-      }
-
-      // Successfully handed over to AI
+      // Hand over control to AI - user can no longer type messages
+      // AI will now respond to incoming messages
       setIsHumanInControl(false);
       setMessageInput(''); // Clear any message in the input
     } catch (error) {
@@ -823,29 +815,31 @@ export default function WhatsappClient() {
     setSendingMessage(true);
 
     try {
-      // Format phone number and extract first name
-      const phoneNumber = formatPhoneNumber(selectedConversation.customerNumber);
-      const firstName = getFirstName(selectedConversation.customerName);
-
-      // Send directly to webhook
-      const response = await fetch('https://ai.intakt.co.za/webhook/human-whatsapp', {
+      // Send message via our API route (which uses WhatsApp Business API directly)
+      const response = await fetch('/api/admin/whatsapp/send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify([
-          {
-            number: phoneNumber,
-            message: messageText,
-            name: firstName,
-          },
-        ]),
+        body: JSON.stringify({
+          message: messageText,
+          customerName: selectedConversation.customerName,
+          customerNumber: selectedConversation.customerNumber,
+        }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error sending message:', errorText);
-        alert(`Failed to send message: ${errorText || 'Unknown error'}`);
+        let errorMessage = 'Unknown error';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Unknown error';
+        } catch {
+          // If JSON parsing fails, try to get text
+          const errorText = await response.text().catch(() => 'Unknown error');
+          errorMessage = errorText || 'Unknown error';
+        }
+        console.error('Error sending message:', errorMessage);
+        alert(`Failed to send message: ${errorMessage}`);
         return;
       }
 

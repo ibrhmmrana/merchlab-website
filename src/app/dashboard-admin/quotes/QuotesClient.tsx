@@ -447,14 +447,14 @@ export default function QuotesClient() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>
-                All Quotes {data && `(${data.total} ${data.total === 1 ? 'result' : 'results'})`}
-              </CardTitle>
-              {data && data.total > 0 && (
-                <div className="text-sm text-gray-600 mt-1">
-                  Showing {((data.page - 1) * data.limit) + 1} to {Math.min(data.page * data.limit, data.total)} of {data.total}
-                </div>
-              )}
+          <CardTitle>
+            All Quotes {data && `(${data.total} ${data.total === 1 ? 'result' : 'results'})`}
+          </CardTitle>
+          {data && data.total > 0 && (
+            <div className="text-sm text-gray-600 mt-1">
+              Showing {((data.page - 1) * data.limit) + 1} to {Math.min(data.page * data.limit, data.total)} of {data.total}
+            </div>
+          )}
             </div>
             {selectedQuotes.size > 0 && (
               <div className="flex items-center gap-3">
@@ -534,22 +534,22 @@ export default function QuotesClient() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <div className="relative inline-block">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleResendQuote(quote.quote_no)}
-                              disabled={resendingQuote === quote.quote_no}
-                              className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
-                            >
-                              <Send className="w-4 h-4 mr-1" />
-                              {resendingQuote === quote.quote_no ? 'Sending...' : 'Resend'}
-                            </Button>
-                            {resentQuotes.has(quote.quote_no) && (
-                              <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-md">
-                                x{resentQuotes.get(quote.quote_no)}
-                              </span>
-                            )}
+                        <div className="relative inline-block">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResendQuote(quote.quote_no)}
+                            disabled={resendingQuote === quote.quote_no}
+                            className="transition-all duration-150 hover:scale-105 hover:shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
+                          >
+                            <Send className="w-4 h-4 mr-1" />
+                            {resendingQuote === quote.quote_no ? 'Sending...' : 'Resend'}
+                          </Button>
+                          {resentQuotes.has(quote.quote_no) && (
+                            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-md">
+                              x{resentQuotes.get(quote.quote_no)}
+                            </span>
+                          )}
                           </div>
                           <Button
                             variant="outline"
