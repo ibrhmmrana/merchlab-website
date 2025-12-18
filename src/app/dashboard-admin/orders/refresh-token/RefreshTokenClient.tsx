@@ -121,7 +121,7 @@ export default function RefreshTokenClient() {
           <div className="space-y-2">
             <h3 className="font-semibold text-sm text-gray-700">Step 2: Enter Authorization Code</h3>
             <p className="text-xs text-gray-500 mb-2">
-              After authorization, you'll be redirected to a callback URL. Copy the <code className="bg-gray-100 px-1 rounded">code</code> parameter from that URL.
+              After authorization, you&apos;ll be redirected to a callback URL. Copy the <code className="bg-gray-100 px-1 rounded">code</code> parameter from that URL.
             </p>
             <Input
               type="text"
@@ -216,11 +216,11 @@ export default function RefreshTokenClient() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="font-semibold text-blue-900 mb-2 text-sm">How it works:</h4>
             <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
-              <li>Click "Open Authorization URL" to start the OAuth flow</li>
+              <li>Click &quot;Open Authorization URL&quot; to start the OAuth flow</li>
               <li>Sign in with the credentials shown above</li>
-              <li>You'll be redirected to a callback URL with a <code className="bg-blue-100 px-1 rounded">code</code> parameter</li>
+              <li>You&apos;ll be redirected to a callback URL with a <code className="bg-blue-100 px-1 rounded">code</code> parameter</li>
               <li>Copy the entire code value from the URL</li>
-              <li>Paste it here and click "Exchange Code for Token"</li>
+              <li>Paste it here and click &quot;Exchange Code for Token&quot;</li>
               <li>The refresh token will be automatically saved to the database</li>
             </ol>
           </div>
