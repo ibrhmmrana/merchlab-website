@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { parseGrandTotal } from '@/server/admin/metrics';
+import { getRefreshToken, saveRefreshToken } from '@/lib/barron/tokenStorage';
 
 export const runtime = 'nodejs';
 
@@ -33,14 +34,13 @@ async function getAccessToken(): Promise<string> {
     return accessTokenCache.token;
   }
 
-  // Get refresh token from environment variable
-  const refreshToken = process.env.BARRON_REFRESH_TOKEN || accessTokenCache?.refreshToken;
+  // Get refresh token from Supabase (persistent storage) or environment variable (fallback)
+  const refreshToken = await getRefreshToken() || accessTokenCache?.refreshToken;
 
   if (!refreshToken) {
     throw new Error(
-      'BARRON_REFRESH_TOKEN environment variable is not set. ' +
-      'Please obtain a refresh token by completing the OAuth2 authorization flow once, ' +
-      'then set it as an environment variable.'
+      'BARRON_REFRESH_TOKEN is not set. Please obtain a refresh token by completing the OAuth2 authorization flow. ' +
+      'Use /api/admin/orders/get-refresh-token to get the authorization URL.'
     );
   }
 
@@ -67,10 +67,17 @@ async function getAccessToken(): Promise<string> {
       // If refresh token is invalid/expired, clear cache
       if (response.status === 400 || response.status === 401) {
         accessTokenCache = null;
-        throw new Error(
-          `Refresh token is invalid or expired. Please obtain a new refresh token. ` +
-          `Original error: ${response.status} ${errorText}`
-        );
+        // Parse error to check if it's an expired token
+        let errorMessage = 'Refresh token is invalid or expired.';
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error === 'invalid_grant' && errorData.error_description?.includes('expired')) {
+            errorMessage = 'The authentication token has expired. Please contact an administrator to update the refresh token.';
+          }
+        } catch {
+          // If parsing fails, use default message
+        }
+        throw new Error(errorMessage);
       }
       throw new Error(`Failed to get access token: ${response.status} ${errorText}`);
     }
@@ -80,16 +87,26 @@ async function getAccessToken(): Promise<string> {
     const newRefreshToken = data.refresh_token || refreshToken; // Use new refresh token if provided
     const expiresIn = data.expires_in || 3600; // Default to 1 hour if not provided
     
-    // Cache the token (expire 5 minutes before actual expiry)
+    // Cache the access token (expire 5 minutes before actual expiry)
     accessTokenCache = {
       token: accessToken,
       expiresAt: Date.now() + (expiresIn - 300) * 1000,
       refreshToken: newRefreshToken,
     };
 
-    // If we got a new refresh token, log it (in production, you might want to update the env var)
+    // If we got a new refresh token, save it to Supabase for persistence
+    // This ensures automatic token rotation - no manual updates needed!
     if (data.refresh_token && data.refresh_token !== refreshToken) {
-      console.log('New refresh token received. Update BARRON_REFRESH_TOKEN environment variable if needed.');
+      console.log('[Barron Token] New refresh token received - saving to database for automatic rotation');
+      // Save to Supabase (this will persist across deployments)
+      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
+      // Also update cache
+      accessTokenCache.refreshToken = newRefreshToken;
+    } else if (data.refresh_token) {
+      // Even if it's the same token, update the expiration if provided
+      if (data.refresh_token_expires_in) {
+        await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
+      }
     }
 
     return accessToken;

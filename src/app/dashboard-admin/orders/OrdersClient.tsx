@@ -228,12 +228,35 @@ export default function OrdersClient() {
   }
 
   if (error) {
+    const isTokenError = error.includes('expired') || error.includes('invalid') || error.includes('token');
+    
     return (
       <div className="p-6">
         <Card>
           <CardContent className="p-6">
-            <div className="text-center">
-              <p className="text-red-600 mb-4">{error}</p>
+            <div className="text-center max-w-2xl mx-auto">
+              <div className="mb-4">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {isTokenError ? 'Authentication Error' : 'Error Loading Orders'}
+                </h3>
+                <p className="text-red-600 mb-4">{error}</p>
+                {isTokenError && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-left">
+                    <p className="text-sm text-yellow-800 mb-2">
+                      <strong>To fix this:</strong>
+                    </p>
+                    <ol className="text-sm text-yellow-800 list-decimal list-inside space-y-1">
+                      <li>Contact an administrator to update the BARRON_REFRESH_TOKEN environment variable</li>
+                      <li>Or use the API endpoint <code className="bg-yellow-100 px-1 rounded">/api/admin/orders/get-refresh-token</code> to obtain a new refresh token</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
               <Button onClick={handleRefresh} disabled={refreshing}>
                 <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                 Try Again

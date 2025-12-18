@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
+import { saveRefreshToken } from '@/lib/barron/tokenStorage';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +73,17 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
 
+    // Automatically save refresh token to Supabase for persistence and automatic rotation
+    if (data.refresh_token) {
+      try {
+        await saveRefreshToken(data.refresh_token, data.refresh_token_expires_in || data.expires_in);
+        console.log('[Barron Token] Refresh token automatically saved to database');
+      } catch (error) {
+        console.error('[Barron Token] Error saving refresh token to database:', error);
+        // Continue anyway - token is still returned to user
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -79,9 +91,11 @@ export async function POST(request: NextRequest) {
         refresh_token: data.refresh_token,
         expires_in: data.expires_in,
         token_type: data.token_type,
+        message: 'Refresh token has been automatically saved to the database. It will be automatically rotated when new tokens are received.',
         instructions: [
-          'Save the refresh_token value as BARRON_REFRESH_TOKEN environment variable',
-          'The access_token will be automatically refreshed using the refresh_token',
+          'The refresh_token has been automatically saved to the database',
+          'No manual environment variable update is needed',
+          'The token will be automatically rotated when new tokens are received',
         ],
       },
       { headers: noIndexHeaders() }

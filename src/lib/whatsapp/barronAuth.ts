@@ -1,3 +1,5 @@
+import { getRefreshToken, saveRefreshToken } from '../barron/tokenStorage';
+
 // OAuth2 configuration for Barron API
 export function getBarronOAuthConfig() {
   const clientId = process.env.BARRON_CLIENT_ID;
@@ -28,14 +30,12 @@ export async function getAccessToken(): Promise<string> {
     return accessTokenCache.token;
   }
 
-  // Get refresh token from environment variable
-  const refreshToken = process.env.BARRON_REFRESH_TOKEN || accessTokenCache?.refreshToken;
+  // Get refresh token from Supabase (persistent storage) or environment variable (fallback)
+  const refreshToken = await getRefreshToken() || accessTokenCache?.refreshToken;
 
   if (!refreshToken) {
     throw new Error(
-      'BARRON_REFRESH_TOKEN environment variable is not set. ' +
-      'Please obtain a refresh token by completing the OAuth2 authorization flow once, ' +
-      'then set it as an environment variable.'
+      'BARRON_REFRESH_TOKEN is not set. Please obtain a refresh token by completing the OAuth2 authorization flow.'
     );
   }
 
@@ -82,9 +82,13 @@ export async function getAccessToken(): Promise<string> {
       refreshToken: newRefreshToken,
     };
 
-    // If we got a new refresh token, log it (in production, you might want to update the env var)
+    // If we got a new refresh token, save it to Supabase for automatic rotation
     if (data.refresh_token && data.refresh_token !== refreshToken) {
-      console.log('New refresh token received. Update BARRON_REFRESH_TOKEN environment variable if needed.');
+      console.log('[Barron Token] New refresh token received - saving to database for automatic rotation');
+      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
+      accessTokenCache.refreshToken = newRefreshToken;
+    } else if (data.refresh_token && data.refresh_token_expires_in) {
+      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
     }
 
     return accessToken;

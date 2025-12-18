@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { parseGrandTotal } from '@/server/admin/metrics';
+import { getRefreshToken, saveRefreshToken } from '@/lib/barron/tokenStorage';
 
 export const runtime = 'nodejs';
 
@@ -32,9 +33,10 @@ async function getAccessToken(): Promise<string> {
     return accessTokenCache.token;
   }
 
-  const refreshToken = process.env.BARRON_REFRESH_TOKEN || accessTokenCache?.refreshToken;
+  // Get refresh token from Supabase (persistent storage) or environment variable (fallback)
+  const refreshToken = await getRefreshToken() || accessTokenCache?.refreshToken;
   if (!refreshToken) {
-    throw new Error('BARRON_REFRESH_TOKEN environment variable is not set');
+    throw new Error('BARRON_REFRESH_TOKEN is not set. Please obtain a refresh token by completing the OAuth2 authorization flow.');
   }
 
   const config = getBarronOAuthConfig();
@@ -56,17 +58,38 @@ async function getAccessToken(): Promise<string> {
     const errorText = await response.text();
     if (response.status === 400 || response.status === 401) {
       accessTokenCache = null;
-      throw new Error(`Refresh token is invalid or expired: ${errorText}`);
+      // Parse error to check if it's an expired token
+      let errorMessage = 'Refresh token is invalid or expired.';
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.error === 'invalid_grant' && errorData.error_description?.includes('expired')) {
+          errorMessage = 'The authentication token has expired. Please contact an administrator to update the refresh token.';
+        }
+      } catch {
+        // If parsing fails, use default message
+      }
+      throw new Error(errorMessage);
     }
     throw new Error(`Failed to get access token: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
+  const newRefreshToken = data.refresh_token || refreshToken;
+  
   accessTokenCache = {
     token: data.access_token,
     expiresAt: Date.now() + ((data.expires_in || 3600) - 300) * 1000,
-    refreshToken: data.refresh_token || refreshToken,
+    refreshToken: newRefreshToken,
   };
+
+  // If we got a new refresh token, save it to Supabase for automatic rotation
+  if (data.refresh_token && data.refresh_token !== refreshToken) {
+    console.log('[Barron Token] New refresh token received - saving to database for automatic rotation');
+    await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
+    accessTokenCache.refreshToken = newRefreshToken;
+  } else if (data.refresh_token && data.refresh_token_expires_in) {
+    await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
+  }
 
   return data.access_token;
 }
