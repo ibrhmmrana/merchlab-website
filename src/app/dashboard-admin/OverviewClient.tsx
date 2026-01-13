@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { LogOut, Users, TrendingUp, DollarSign, FileText, Download, Loader2, AlertTriangle, Package, CheckCircle, Truck, Box, Wrench, ClipboardCheck } from 'lucide-react';
+import { LogOut, Users, TrendingUp, DollarSign, FileText, Download, Loader2, AlertTriangle, Package, CheckCircle, Truck, Box } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type PeriodKey } from '@/server/admin/metrics';
 import {
@@ -893,7 +893,7 @@ export default function OverviewClient() {
                     <p className="text-sm font-medium text-gray-500">Days in Status</p>
                     <p className="text-base break-words">
                       {(() => {
-                        const statusDate = (selectedOrder as any).statusDate || selectedOrder.orderDate;
+                        const statusDate = ('statusDate' in selectedOrder ? (selectedOrder as Order & { statusDate?: string }).statusDate : null) || selectedOrder.orderDate;
                         let statusDateTime: Date;
                         
                         // Check if date is in format "DD/MM/YYYY HH:mm:ss" (from delivery events)
