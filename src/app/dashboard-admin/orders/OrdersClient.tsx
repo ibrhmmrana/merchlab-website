@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -11,6 +11,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ShoppingCart, RefreshCw, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -44,6 +51,35 @@ type OrdersData = {
   total: number;
   warning?: string;
 };
+
+type DeliveryStatus = {
+  deliveryStatus: string | null;
+  podDetails: Array<{
+    podDate: string;
+    podTime: string;
+    name: string;
+    podComments: string;
+    podFileAttached: boolean;
+  }>;
+  waybills: Array<{
+    waybillNumber: string;
+    events: Array<{
+      description: string;
+      branch: string;
+      datetime: string;
+    }>;
+    podDetails: Array<{
+      podDate: string;
+      podTime: string;
+      name: string;
+      podComments: string;
+      podFileAttached: boolean;
+    }>;
+  }>;
+  error?: string;
+};
+
+type DeliveryStatuses = Record<string, DeliveryStatus>;
 
 const formatCurrency = (value: number | null) => {
   if (value === null) return 'N/A';
@@ -112,6 +148,18 @@ const getStatusColor = (status: string) => {
   return 'text-gray-600 bg-gray-50';
 };
 
+const getDeliveryStatusColor = (status: string | null) => {
+  if (!status) return 'text-gray-600 bg-gray-50';
+  const statusLower = status.toLowerCase();
+  if (statusLower.includes('delivered')) {
+    return 'text-green-600 bg-green-50';
+  }
+  if (statusLower.includes('transit')) {
+    return 'text-blue-600 bg-blue-50';
+  }
+  return 'text-gray-600 bg-gray-50';
+};
+
 export default function OrdersClient() {
   const router = useRouter();
   const [data, setData] = useState<OrdersData | null>(null);
@@ -119,6 +167,8 @@ export default function OrdersClient() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [deliveryStatuses, setDeliveryStatuses] = useState<DeliveryStatuses>({});
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     try {
@@ -155,12 +205,64 @@ export default function OrdersClient() {
           })));
         }
       }
+
+      // Fetch delivery statuses for all orders
+      if (ordersData.orders && ordersData.orders.length > 0) {
+        fetchDeliveryStatuses(ordersData.orders);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load orders');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const fetchDeliveryStatuses = async (orders: Order[]) => {
+    const statusPromises = orders.map(async (order) => {
+      try {
+        const response = await fetch(`/api/admin/orders/delivery-status/${order.orderId}`);
+        if (!response.ok) {
+          return {
+            orderId: order.orderId,
+            status: { 
+              deliveryStatus: null, 
+              podDetails: [], 
+              waybills: [],
+              error: 'Failed to fetch' 
+            },
+          };
+        }
+        const statusData = await response.json();
+        return {
+          orderId: order.orderId,
+          status: {
+            deliveryStatus: statusData.deliveryStatus,
+            podDetails: statusData.podDetails || [],
+            waybills: statusData.waybills || [],
+            error: statusData.error,
+          },
+        };
+      } catch (err) {
+        console.error(`Error fetching delivery status for order ${order.orderId}:`, err);
+        return {
+          orderId: order.orderId,
+          status: { 
+            deliveryStatus: null, 
+            podDetails: [], 
+            waybills: [],
+            error: 'Error fetching status' 
+          },
+        };
+      }
+    });
+
+    const results = await Promise.all(statusPromises);
+    const statusesMap: DeliveryStatuses = {};
+    results.forEach(({ orderId, status }) => {
+      statusesMap[orderId] = status;
+    });
+    setDeliveryStatuses(statusesMap);
   };
 
   useEffect(() => {
@@ -323,7 +425,7 @@ export default function OrdersClient() {
                     <TableHead>Date</TableHead>
                     <TableHead>Customer Reference</TableHead>
                     <TableHead>Customer</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Delivery Status</TableHead>
                     <TableHead className="text-right">Cost Price</TableHead>
                     <TableHead className="text-right">Selling Price</TableHead>
                     <TableHead className="text-right">Profit</TableHead>
@@ -377,11 +479,26 @@ export default function OrdersClient() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}
-                        >
-                          {order.status}
-                        </span>
+                        {(() => {
+                          const deliveryStatus = deliveryStatuses[order.orderId];
+                          const status = deliveryStatus?.deliveryStatus || 'N/A';
+                          const waybills = deliveryStatus?.waybills || [];
+                          const hasDeliveryData = waybills.length > 0;
+
+                          return (
+                            <button
+                              onClick={() => {
+                                if (hasDeliveryData) {
+                                  setSelectedOrderId(order.orderId);
+                                }
+                              }}
+                              disabled={!hasDeliveryData}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getDeliveryStatusColor(status)} ${hasDeliveryData ? 'cursor-pointer hover:opacity-80 transition-opacity' : 'cursor-default opacity-60'}`}
+                            >
+                              {status}
+                            </button>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(order.totalIncVat)}
@@ -424,6 +541,139 @@ export default function OrdersClient() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delivery Status Dialog */}
+      <Dialog open={selectedOrderId !== null} onOpenChange={(open) => !open && setSelectedOrderId(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          {selectedOrderId && (() => {
+            const deliveryStatus = deliveryStatuses[selectedOrderId];
+            const order = data?.orders.find(o => o.orderId === selectedOrderId);
+            const waybills = deliveryStatus?.waybills || [];
+            
+            if (!deliveryStatus || waybills.length === 0) {
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Delivery Status - {order?.orderId}</DialogTitle>
+                    <DialogDescription>
+                      No delivery tracking information available for this order.
+                    </DialogDescription>
+                  </DialogHeader>
+                </>
+              );
+            }
+
+            // Collect all events from all waybills, sorted by datetime (oldest first)
+            const allEvents = waybills.flatMap(waybill => 
+              (waybill.events || []).map(event => ({
+                ...event,
+                waybillNumber: waybill.waybillNumber,
+              }))
+            ).sort((a, b) => {
+              // Parse datetime strings in format "DD/MM/YYYY HH:mm:ss"
+              const parseDate = (dateStr: string) => {
+                const [datePart, timePart] = dateStr.split(' ');
+                const [day, month, year] = datePart.split('/');
+                return new Date(`${year}-${month}-${day} ${timePart}`);
+              };
+              const dateA = parseDate(a.datetime);
+              const dateB = parseDate(b.datetime);
+              return dateA.getTime() - dateB.getTime(); // Ascending order (oldest first)
+            });
+
+            // Get all POD details
+            const allPodDetails = waybills.flatMap(waybill => waybill.podDetails || []);
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Delivery Status - {order?.orderId}</DialogTitle>
+                  <DialogDescription>
+                    Track the delivery progress and view proof of delivery details.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-6 mt-4">
+                  {/* Delivery Stages/Events */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Delivery Stages</h3>
+                    <div className="space-y-3">
+                      {allEvents.length > 0 ? (
+                        allEvents.map((event, index) => (
+                          <div
+                            key={index}
+                            className="flex items-start gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-gray-900">{event.description}</span>
+                                {event.waybillNumber && (
+                                  <span className="text-xs text-gray-500 font-mono">
+                                    (Waybill: {event.waybillNumber})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4 text-xs text-gray-600">
+                                <span>
+                                  <span className="font-medium">Branch:</span> {event.branch}
+                                </span>
+                                <span>
+                                  <span className="font-medium">Date & Time:</span> {event.datetime}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No delivery events available.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* POD Details */}
+                  {allPodDetails.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Proof of Delivery (POD)</h3>
+                      <div className="space-y-3">
+                        {allPodDetails.map((pod, index) => (
+                          <div
+                            key={index}
+                            className="p-3 bg-green-50 rounded-lg border border-green-200"
+                          >
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center gap-4">
+                                <span className="text-gray-600">
+                                  <span className="font-medium">Date:</span> {pod.podDate}
+                                </span>
+                                <span className="text-gray-600">
+                                  <span className="font-medium">Time:</span> {pod.podTime}
+                                </span>
+                              </div>
+                              <div className="text-gray-600">
+                                <span className="font-medium">Signed by:</span> {pod.name}
+                              </div>
+                              {pod.podComments && (
+                                <div className="text-gray-600">
+                                  <span className="font-medium">Comments:</span> {pod.podComments}
+                                </div>
+                              )}
+                              {pod.podFileAttached && (
+                                <div className="text-blue-600 text-xs font-medium">
+                                  ✓ POD file attached
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
