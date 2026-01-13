@@ -117,20 +117,47 @@ export async function GET(
       );
     }
 
-    // Extract delivery status and podDetails
-    // If podDetails array has items, order is delivered
-    const isDelivered = waybills.some((item: any) => 
-      item.podDetails && Array.isArray(item.podDetails) && item.podDetails.length > 0
-    );
-
     // Get all podDetails from all waybills
     const allPodDetails = waybills.flatMap((item: any) => 
       (item.podDetails && Array.isArray(item.podDetails)) ? item.podDetails : []
     );
 
+    // Check if POD exists - if so, status is "Delivered"
+    const isDelivered = allPodDetails.length > 0;
+
+    // Get the latest event description from all waybills
+    // Collect all events and find the most recent one
+    const allEvents = waybills.flatMap((waybill: any) => 
+      (waybill.events && Array.isArray(waybill.events)) ? waybill.events : []
+    );
+
+    let latestEventDescription = null;
+    if (allEvents.length > 0) {
+      // Parse datetime strings in format "DD/MM/YYYY HH:mm:ss" and sort by newest first
+      const parseDate = (dateStr: string) => {
+        const [datePart, timePart] = dateStr.split(' ');
+        const [day, month, year] = datePart.split('/');
+        return new Date(`${year}-${month}-${day} ${timePart}`);
+      };
+
+      // Sort events by datetime (newest first) and get the latest one
+      const sortedEvents = [...allEvents].sort((a: any, b: any) => {
+        const dateA = parseDate(a.datetime);
+        const dateB = parseDate(b.datetime);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      latestEventDescription = sortedEvents[0].description;
+    }
+
+    // Determine delivery status: "Delivered" if POD exists, otherwise latest event description
+    const deliveryStatus = isDelivered 
+      ? 'Delivered' 
+      : (latestEventDescription || 'N/A');
+
     return NextResponse.json(
       {
-        deliveryStatus: isDelivered ? 'Delivered' : 'In Transit',
+        deliveryStatus: deliveryStatus,
         podDetails: allPodDetails,
         waybills: waybills,
       },

@@ -149,15 +149,13 @@ const getStatusColor = (status: string) => {
 };
 
 const getDeliveryStatusColor = (status: string | null) => {
-  if (!status) return 'text-gray-600 bg-gray-50';
+  if (!status || status === 'N/A') return 'text-gray-600 bg-gray-50';
   const statusLower = status.toLowerCase();
-  if (statusLower.includes('delivered')) {
+  if (statusLower === 'delivered') {
     return 'text-green-600 bg-green-50';
   }
-  if (statusLower.includes('transit')) {
-    return 'text-blue-600 bg-blue-50';
-  }
-  return 'text-gray-600 bg-gray-50';
+  // For other statuses (like "Scan into branch", "Out on Delivery", etc.), use blue
+  return 'text-blue-600 bg-blue-50';
 };
 
 export default function OrdersClient() {
