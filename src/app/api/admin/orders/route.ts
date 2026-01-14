@@ -116,7 +116,7 @@ async function getAccessToken(): Promise<string> {
   }
 }
 
-// Fetch orders from Barron API
+// Fetch all orders from Barron API (handles pagination)
 async function fetchOrdersFromBarron(): Promise<Array<{
   orderId: string;
   contactPersonId: string;
@@ -136,8 +136,10 @@ async function fetchOrdersFromBarron(): Promise<Array<{
   console.log('Access token obtained, length:', accessToken.length);
 
   const config = getBarronOAuthConfig();
-  console.log('Fetching orders from:', config.ordersApiUrl);
-  const response = await fetch(config.ordersApiUrl, {
+  
+  // Step 1: Fetch page 1 to get total_pages
+  console.log('Fetching page 1 from:', config.ordersApiUrl);
+  const firstPageResponse = await fetch(`${config.ordersApiUrl}?page=1`, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -145,37 +147,105 @@ async function fetchOrdersFromBarron(): Promise<Array<{
     },
   });
 
-  console.log('Orders API response status:', response.status, response.statusText);
+  console.log('Orders API response status:', firstPageResponse.status, firstPageResponse.statusText);
 
-  if (!response.ok) {
-    const errorText = await response.text();
+  if (!firstPageResponse.ok) {
+    const errorText = await firstPageResponse.text();
     console.error('Orders API error:', errorText);
-    throw new Error(`Failed to fetch orders: ${response.status} ${errorText}`);
+    throw new Error(`Failed to fetch orders: ${firstPageResponse.status} ${errorText}`);
   }
 
-  const data = await response.json();
+  const firstPageData = await firstPageResponse.json();
   
-  console.log('Barron API response structure:', {
-    isArray: Array.isArray(data),
-    length: Array.isArray(data) ? data.length : 'N/A',
-    firstItemKeys: Array.isArray(data) && data.length > 0 ? Object.keys(data[0]) : 'N/A',
-    hasResults: Array.isArray(data) && data.length > 0 && data[0].results ? 'yes' : 'no',
-    resultsLength: Array.isArray(data) && data.length > 0 && data[0].results ? data[0].results.length : 'N/A',
-  });
+  // Extract total_pages from response
+  let totalPages = 1;
+  let allOrders: any[] = [];
   
-  // The API returns an array with one object containing results
-  if (Array.isArray(data) && data.length > 0 && data[0].results) {
-    return data[0].results;
+  // Handle different response structures
+  if (Array.isArray(firstPageData) && firstPageData.length > 0) {
+    const firstItem = firstPageData[0] as any;
+    console.log('Barron API response structure:', {
+      isArray: true,
+      length: firstPageData.length,
+      firstItemKeys: Object.keys(firstItem),
+      hasResults: !!firstItem.results,
+      resultsLength: firstItem.results ? firstItem.results.length : 'N/A',
+      totalPages: firstItem.total_pages,
+    });
+    
+    if (firstItem.total_pages !== undefined) {
+      totalPages = Number(firstItem.total_pages) || 1;
+    }
+    if (firstItem.results && Array.isArray(firstItem.results)) {
+      allOrders = [...firstItem.results];
+    }
+  } else if (firstPageData && typeof firstPageData === 'object' && !Array.isArray(firstPageData)) {
+    const dataObj = firstPageData as any;
+    console.log('Barron API response structure:', {
+      isArray: false,
+      keys: Object.keys(dataObj),
+      hasResults: !!dataObj.results,
+      resultsLength: dataObj.results ? dataObj.results.length : 'N/A',
+      totalPages: dataObj.total_pages,
+    });
+    
+    if (dataObj.total_pages !== undefined) {
+      totalPages = Number(dataObj.total_pages) || 1;
+    }
+    if (dataObj.results && Array.isArray(dataObj.results)) {
+      allOrders = [...dataObj.results];
+    }
   }
   
-  // Try alternative structure - maybe it's a direct object with results
-  if (data && typeof data === 'object' && !Array.isArray(data) && data.results) {
-    console.log('Found results in direct object structure');
-    return data.results;
+  console.log(`Found ${totalPages} total pages. Fetched page 1 with ${allOrders.length} orders.`);
+  
+  // Step 2: Fetch remaining pages (if any)
+  if (totalPages > 1) {
+    const pagePromises = [];
+    for (let page = 2; page <= totalPages; page++) {
+      pagePromises.push(
+        fetch(`${config.ordersApiUrl}?page=${page}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }).then(async (response) => {
+          if (!response.ok) {
+            console.error(`Failed to fetch page ${page}: ${response.status}`);
+            return [];
+          }
+          const pageData = await response.json();
+          
+          // Extract results from page
+          let pageOrders: any[] = [];
+          if (Array.isArray(pageData) && pageData.length > 0) {
+            const firstItem = pageData[0] as any;
+            if (firstItem.results && Array.isArray(firstItem.results)) {
+              pageOrders = firstItem.results;
+            }
+          } else if (pageData && typeof pageData === 'object' && !Array.isArray(pageData)) {
+            const dataObj = pageData as any;
+            if (dataObj.results && Array.isArray(dataObj.results)) {
+              pageOrders = dataObj.results;
+            }
+          }
+          
+          console.log(`Fetched page ${page} with ${pageOrders.length} orders.`);
+          return pageOrders;
+        })
+      );
+    }
+    
+    // Fetch all pages in parallel
+    const remainingPagesResults = await Promise.all(pagePromises);
+    remainingPagesResults.forEach((pageOrders) => {
+      allOrders = [...allOrders, ...pageOrders];
+    });
   }
   
-  console.warn('No orders found in API response. Response structure:', JSON.stringify(data).substring(0, 500));
-  return [];
+  console.log(`Total orders fetched across all pages: ${allOrders.length}`);
+  return allOrders;
 }
 
 // Helper to safely extract string from unknown object
@@ -378,10 +448,25 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch orders from Barron API
-    console.log('Fetching orders from Barron API...');
+    // Step 1: Fetch all orders from Barron API (salesorders endpoint)
+    // This gets all order IDs and their details in a single call
+    console.log('Step 1: Fetching all orders from salesorders endpoint...');
     const orders = await fetchOrdersFromBarron();
-    console.log(`Fetched ${orders.length} orders from Barron API`);
+    console.log(`Step 1 complete: Fetched ${orders.length} orders from Barron API`);
+    
+    // Extract and log all order IDs for verification
+    const orderIds = orders.map(o => {
+      const id = o.orderId || '';
+      let formattedId = String(id).trim();
+      if (formattedId.startsWith('BAR-SO')) {
+        return formattedId;
+      } else if (formattedId.startsWith('SO')) {
+        return `BAR-${formattedId}`;
+      } else {
+        return `BAR-SO${formattedId}`;
+      }
+    });
+    console.log(`Extracted ${orderIds.length} order IDs (BAR-SO format). Sample IDs:`, orderIds.slice(0, 5));
 
     if (orders.length === 0) {
       return NextResponse.json(

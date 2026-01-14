@@ -4,8 +4,8 @@ import { getAccessToken, getBarronOAuthConfig } from '@/lib/whatsapp/barronAuth'
 
 export const runtime = 'nodejs';
 
-// Fetch orders from Barron API
-async function fetchOrdersFromBarron(): Promise<Array<{
+// Fetch all orders from Barron API (handles pagination)
+async function fetchAllOrders(): Promise<Array<{
   orderId: string;
   contactPersonId: string;
   customerReference: string;
@@ -22,7 +22,8 @@ async function fetchOrdersFromBarron(): Promise<Array<{
   const accessToken = await getAccessToken();
   const config = getBarronOAuthConfig();
   
-  const response = await fetch(config.ordersApiUrl, {
+  // Step 1: Fetch page 1 to get total_pages
+  const firstPageResponse = await fetch(`${config.ordersApiUrl}?page=1`, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -30,24 +31,177 @@ async function fetchOrdersFromBarron(): Promise<Array<{
     },
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to fetch orders: ${response.status} ${errorText}`);
+  if (!firstPageResponse.ok) {
+    const errorText = await firstPageResponse.text();
+    throw new Error(`Failed to fetch orders: ${firstPageResponse.status} ${errorText}`);
   }
 
-  const data = await response.json();
+  const firstPageData = await firstPageResponse.json();
   
-  // The API returns an array with one object containing results
-  if (Array.isArray(data) && data.length > 0 && data[0].results) {
-    return data[0].results;
+  // Extract total_pages from response
+  let totalPages = 1;
+  let allOrders: any[] = [];
+  
+  // Handle different response structures
+  if (Array.isArray(firstPageData) && firstPageData.length > 0) {
+    const firstItem = firstPageData[0] as any;
+    if (firstItem.total_pages !== undefined) {
+      totalPages = Number(firstItem.total_pages) || 1;
+    }
+    if (firstItem.results && Array.isArray(firstItem.results)) {
+      allOrders = [...firstItem.results];
+    }
+  } else if (firstPageData && typeof firstPageData === 'object' && !Array.isArray(firstPageData)) {
+    const dataObj = firstPageData as any;
+    if (dataObj.total_pages !== undefined) {
+      totalPages = Number(dataObj.total_pages) || 1;
+    }
+    if (dataObj.results && Array.isArray(dataObj.results)) {
+      allOrders = [...dataObj.results];
+    }
   }
   
-  // Try alternative structure - maybe it's a direct object with results
-  if (data && typeof data === 'object' && !Array.isArray(data) && data.results) {
-    return data.results;
+  console.log(`Found ${totalPages} total pages. Fetched page 1 with ${allOrders.length} orders.`);
+  
+  // Step 2: Fetch remaining pages (if any)
+  if (totalPages > 1) {
+    const pagePromises = [];
+    for (let page = 2; page <= totalPages; page++) {
+      pagePromises.push(
+        fetch(`${config.ordersApiUrl}?page=${page}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }).then(async (response) => {
+          if (!response.ok) {
+            console.error(`Failed to fetch page ${page}: ${response.status}`);
+            return [];
+          }
+          const pageData = await response.json();
+          
+          // Extract results from page
+          let pageOrders: any[] = [];
+          if (Array.isArray(pageData) && pageData.length > 0) {
+            const firstItem = pageData[0] as any;
+            if (firstItem.results && Array.isArray(firstItem.results)) {
+              pageOrders = firstItem.results;
+            }
+          } else if (pageData && typeof pageData === 'object' && !Array.isArray(pageData)) {
+            const dataObj = pageData as any;
+            if (dataObj.results && Array.isArray(dataObj.results)) {
+              pageOrders = dataObj.results;
+            }
+          }
+          
+          console.log(`Fetched page ${page} with ${pageOrders.length} orders.`);
+          return pageOrders;
+        })
+      );
+    }
+    
+    // Fetch all pages in parallel
+    const remainingPagesResults = await Promise.all(pagePromises);
+    remainingPagesResults.forEach((pageOrders, index) => {
+      allOrders = [...allOrders, ...pageOrders];
+    });
   }
   
-  return [];
+  console.log(`Total orders fetched across all pages: ${allOrders.length}`);
+  return allOrders;
+}
+
+// Get delivery status for a specific order ID
+async function getDeliveryStageForOrder(orderId: string, accessToken: string): Promise<{ stage: string | null; isDelivered: boolean; statusDate: string }> {
+  try {
+    // Format orderId: if it doesn't start with BAR-SO, prepend it
+    let formattedOrderId = orderId.trim();
+    if (formattedOrderId.startsWith('BAR-SO')) {
+      // Already formatted
+    } else if (formattedOrderId.startsWith('SO')) {
+      formattedOrderId = `BAR-${formattedOrderId}`;
+    } else {
+      formattedOrderId = `BAR-SO${formattedOrderId}`;
+    }
+
+    const deliveryStatusUrl = `https://integration.barron.com/orders/delivery-statuses/${formattedOrderId}`;
+    
+    const response = await fetch(deliveryStatusUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      // If 404, order doesn't have delivery tracking yet
+      if (response.status === 404) {
+        return { stage: null, isDelivered: false, statusDate: '' };
+      }
+      // For other errors, return null (we'll use order status as fallback)
+      return { stage: null, isDelivered: false, statusDate: '' };
+    }
+
+    const data = await response.json();
+    
+    // Normalize data to always be an array
+    let waybills: any[] = [];
+    if (Array.isArray(data)) {
+      waybills = data;
+    } else if (data && typeof data === 'object') {
+      waybills = [data];
+    }
+
+    if (waybills.length === 0) {
+      return { stage: null, isDelivered: false, statusDate: '' };
+    }
+
+    // Check if delivered (has "Delivered" event or podDetails)
+    const hasDeliveredEvent = waybills.some(waybill => 
+      waybill.events && Array.isArray(waybill.events) && 
+      waybill.events.some((event: any) => 
+        event.description && event.description.toLowerCase().includes('delivered')
+      )
+    );
+    const hasPodDetails = waybills.some(waybill => 
+      waybill.podDetails && Array.isArray(waybill.podDetails) && waybill.podDetails.length > 0
+    );
+    const isDelivered = hasDeliveredEvent || hasPodDetails;
+
+    if (isDelivered) {
+      return { stage: 'Delivered', isDelivered: true, statusDate: '' };
+    }
+
+    // Get all events and find the latest one
+    const allEvents = waybills.flatMap((waybill: any) => waybill.events || []);
+    
+    if (allEvents.length === 0) {
+      return { stage: null, isDelivered: false, statusDate: '' };
+    }
+
+    // Sort events by datetime (newest first)
+    const parseDate = (dateStr: string) => {
+      const [datePart, timePart] = dateStr.split(' ');
+      const [day, month, year] = datePart.split('/');
+      return new Date(`${year}-${month}-${day} ${timePart}`);
+    };
+
+    const sortedEvents = [...allEvents].sort((a: any, b: any) => {
+      const dateA = parseDate(a.datetime);
+      const dateB = parseDate(b.datetime);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    const latestEvent = sortedEvents[0];
+    const stage = mapEventToStage(latestEvent.description);
+    
+    return { stage: stage || null, isDelivered: false, statusDate: latestEvent.datetime };
+  } catch (error) {
+    console.error(`Error fetching delivery stage for order ${orderId}:`, error);
+    return { stage: null, isDelivered: false, statusDate: '' };
+  }
 }
 
 // Map delivery event description to our display stage names
@@ -222,8 +376,41 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const orders = await fetchOrdersFromBarron();
+    // Step 1: Get all orders from salesorders endpoint (single call)
+    console.log('Step 1: Fetching all orders from salesorders endpoint...');
+    const orders = await fetchAllOrders();
+    console.log(`Found ${orders.length} orders`);
+    
+    if (orders.length === 0) {
+      return NextResponse.json(
+        {
+          statusCounts: [],
+          ordersByStatus: {},
+        },
+        { headers: noIndexHeaders() }
+      );
+    }
+
+    // Step 2: Extract all order IDs (BAR-SO format) and get access token
     const accessToken = await getAccessToken();
+    
+    // Format order IDs to BAR-SO format
+    const orderIdMap = new Map<string, typeof orders[0]>();
+    orders.forEach(order => {
+      const id = order.orderId || '';
+      let formattedId = String(id).trim();
+      if (formattedId.startsWith('BAR-SO')) {
+        formattedId = formattedId;
+      } else if (formattedId.startsWith('SO')) {
+        formattedId = `BAR-${formattedId}`;
+      } else {
+        formattedId = `BAR-SO${formattedId}`;
+      }
+      orderIdMap.set(formattedId, order);
+    });
+    
+    const orderIds = Array.from(orderIdMap.keys());
+    console.log(`Step 2: Extracted ${orderIds.length} order IDs (BAR-SO format)`);
     
     // Initialize status counts with new stage names
     const statusCounts: Record<string, { count: number; orders: any[]; hasStuckOrders: boolean }> = {
@@ -237,24 +424,29 @@ export async function GET(request: NextRequest) {
       'Delivered': { count: 0, orders: [], hasStuckOrders: false },
     };
 
-    // Fetch delivery stages for all orders (in batches to avoid overwhelming the API)
+    // Step 3: Fetch delivery statuses for all order IDs (in batches)
+    console.log('Step 3: Fetching delivery statuses for all orders...');
     const batchSize = 10;
-    for (let i = 0; i < orders.length; i += batchSize) {
-      const batch = orders.slice(i, i + batchSize);
-      const stagePromises = batch.map(async (order) => {
-        const deliveryStage = await getDeliveryStage(order.orderId, accessToken);
+    for (let i = 0; i < orderIds.length; i += batchSize) {
+      const batch = orderIds.slice(i, i + batchSize);
+      const stagePromises = batch.map(async (orderId) => {
+        const order = orderIdMap.get(orderId);
+        if (!order) return null;
+        
+        const deliveryStage = await getDeliveryStageForOrder(orderId, accessToken);
         return {
           order,
           deliveryStage: deliveryStage.stage,
           isDelivered: deliveryStage.isDelivered,
-          statusDate: deliveryStage.orderDate,
+          statusDate: deliveryStage.statusDate,
         };
       });
       
       const results = await Promise.all(stagePromises);
+      const validResults = results.filter((r): r is NonNullable<typeof r> => r !== null);
       
       // Group orders by delivery stage
-      results.forEach(({ order, deliveryStage, isDelivered, statusDate }) => {
+      validResults.forEach(({ order, deliveryStage, isDelivered, statusDate }) => {
         // Use delivery stage if available, otherwise fall back to order status
         let displayStage = deliveryStage;
         let finalStatusDate = statusDate;
@@ -328,6 +520,8 @@ export async function GET(request: NextRequest) {
         }
       });
     }
+    
+    console.log(`Processed ${orders.length} orders, grouped into ${Object.keys(statusCounts).length} status categories`);
 
     return NextResponse.json(
       {

@@ -166,6 +166,7 @@ export default function OrdersClient() {
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [deliveryStatuses, setDeliveryStatuses] = useState<DeliveryStatuses>({});
+  const [loadingDeliveryStatuses, setLoadingDeliveryStatuses] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const fetchOrders = async () => {
@@ -217,50 +218,55 @@ export default function OrdersClient() {
   };
 
   const fetchDeliveryStatuses = async (orders: Order[]) => {
-    const statusPromises = orders.map(async (order) => {
-      try {
-        const response = await fetch(`/api/admin/orders/delivery-status/${order.orderId}`);
-        if (!response.ok) {
+    setLoadingDeliveryStatuses(true);
+    try {
+      const statusPromises = orders.map(async (order) => {
+        try {
+          const response = await fetch(`/api/admin/orders/delivery-status/${order.orderId}`);
+          if (!response.ok) {
+            return {
+              orderId: order.orderId,
+              status: { 
+                deliveryStatus: null, 
+                podDetails: [], 
+                waybills: [],
+                error: 'Failed to fetch' 
+              },
+            };
+          }
+          const statusData = await response.json();
+          return {
+            orderId: order.orderId,
+            status: {
+              deliveryStatus: statusData.deliveryStatus,
+              podDetails: statusData.podDetails || [],
+              waybills: statusData.waybills || [],
+              error: statusData.error,
+            },
+          };
+        } catch (err) {
+          console.error(`Error fetching delivery status for order ${order.orderId}:`, err);
           return {
             orderId: order.orderId,
             status: { 
               deliveryStatus: null, 
               podDetails: [], 
               waybills: [],
-              error: 'Failed to fetch' 
+              error: 'Error fetching status' 
             },
           };
         }
-        const statusData = await response.json();
-        return {
-          orderId: order.orderId,
-          status: {
-            deliveryStatus: statusData.deliveryStatus,
-            podDetails: statusData.podDetails || [],
-            waybills: statusData.waybills || [],
-            error: statusData.error,
-          },
-        };
-      } catch (err) {
-        console.error(`Error fetching delivery status for order ${order.orderId}:`, err);
-        return {
-          orderId: order.orderId,
-          status: { 
-            deliveryStatus: null, 
-            podDetails: [], 
-            waybills: [],
-            error: 'Error fetching status' 
-          },
-        };
-      }
-    });
+      });
 
-    const results = await Promise.all(statusPromises);
-    const statusesMap: DeliveryStatuses = {};
-    results.forEach(({ orderId, status }) => {
-      statusesMap[orderId] = status;
-    });
-    setDeliveryStatuses(statusesMap);
+      const results = await Promise.all(statusPromises);
+      const statusesMap: DeliveryStatuses = {};
+      results.forEach(({ orderId, status }) => {
+        statusesMap[orderId] = status;
+      });
+      setDeliveryStatuses(statusesMap);
+    } finally {
+      setLoadingDeliveryStatuses(false);
+    }
   };
 
   useEffect(() => {
@@ -478,6 +484,15 @@ export default function OrdersClient() {
                       </TableCell>
                       <TableCell>
                         {(() => {
+                          // Show skeleton while loading delivery statuses
+                          if (loadingDeliveryStatuses && !deliveryStatuses[order.orderId]) {
+                            return (
+                              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full">
+                                <div className="h-5 w-20 bg-gray-200 rounded-full animate-pulse"></div>
+                              </div>
+                            );
+                          }
+                          
                           const deliveryStatus = deliveryStatuses[order.orderId];
                           const status = deliveryStatus?.deliveryStatus || 'N/A';
                           const waybills = deliveryStatus?.waybills || [];
