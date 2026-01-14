@@ -4,22 +4,6 @@ import { getAccessToken } from '@/lib/whatsapp/barronAuth';
 
 export const runtime = 'nodejs';
 
-type DeliveryStatusResponse = Array<{
-  waybillNumber: string;
-  events: Array<{
-    description: string;
-    branch: string;
-    datetime: string;
-  }>;
-  podDetails: Array<{
-    podDate: string;
-    podTime: string;
-    name: string;
-    podComments: string;
-    podFileAttached: boolean;
-  }>;
-}>;
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }

@@ -457,7 +457,7 @@ export async function GET(request: NextRequest) {
     // Extract and log all order IDs for verification
     const orderIds = orders.map(o => {
       const id = o.orderId || '';
-      let formattedId = String(id).trim();
+      const formattedId = String(id).trim();
       if (formattedId.startsWith('BAR-SO')) {
         return formattedId;
       } else if (formattedId.startsWith('SO')) {
