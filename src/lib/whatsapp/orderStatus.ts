@@ -83,6 +83,7 @@ async function getCustomerFromQuote(quoteNo: string): Promise<CustomerInfo | nul
   
   // Clean the quote number
   const cleanQuoteNo = quoteNo.trim();
+  console.log(`[getCustomerFromQuote] Looking up quote: ${cleanQuoteNo}`);
   
   const { data, error } = await supabase
     .from('quote_docs')
@@ -91,6 +92,7 @@ async function getCustomerFromQuote(quoteNo: string): Promise<CustomerInfo | nul
     .single();
 
   if (error || !data) {
+    console.log(`[getCustomerFromQuote] Quote not found with exact match, trying variations. Error: ${error?.message || 'No data'}`);
     // Try with different formats
     const variations = [
       cleanQuoteNo,
@@ -99,21 +101,29 @@ async function getCustomerFromQuote(quoteNo: string): Promise<CustomerInfo | nul
     ];
     
     for (const variation of variations) {
-      const { data: altData } = await supabase
+      console.log(`[getCustomerFromQuote] Trying variation: ${variation}`);
+      const { data: altData, error: altError } = await supabase
         .from('quote_docs')
         .select('payload')
         .eq('quote_no', variation)
         .single();
       
       if (altData) {
-        return extractCustomerFromPayload(altData.payload);
+        console.log(`[getCustomerFromQuote] Found quote with variation: ${variation}`);
+        const customer = extractCustomerFromPayload(altData.payload);
+        console.log(`[getCustomerFromQuote] Extracted customer: ${customer ? JSON.stringify(customer) : 'null'}`);
+        return customer;
       }
     }
     
+    console.log(`[getCustomerFromQuote] Quote not found in any variation: ${cleanQuoteNo}`);
     return null;
   }
 
-  return extractCustomerFromPayload(data.payload);
+  console.log(`[getCustomerFromQuote] Found quote, extracting customer from payload`);
+  const customer = extractCustomerFromPayload(data.payload);
+  console.log(`[getCustomerFromQuote] Extracted customer: ${customer ? JSON.stringify(customer) : 'null'}`);
+  return customer;
 }
 
 // Extract customer details from quote payload
@@ -237,7 +247,10 @@ export interface OrderStatusWithCustomer {
 export async function getOrderStatus(invoiceNumber: string): Promise<OrderStatusWithCustomer | null> {
   try {
     const customerReference = extractCustomerReference(invoiceNumber);
+    console.log(`[getOrderStatus] Invoice: ${invoiceNumber}, Customer Reference: ${customerReference}`);
+    
     const orders = await fetchOrdersFromBarron();
+    console.log(`[getOrderStatus] Fetched ${orders.length} orders from Barron`);
     
     // Find order matching the customer reference
     const order = orders.find(
@@ -245,21 +258,33 @@ export async function getOrderStatus(invoiceNumber: string): Promise<OrderStatus
     );
     
     if (!order) {
+      console.log(`[getOrderStatus] No order found matching customerReference: ${customerReference}`);
       return null;
     }
     
+    console.log(`[getOrderStatus] Found order - Status: ${order.status}, CustomerReference: ${order.customerReference}`);
+    
     // Extract quote number from customerReference
     const quoteNo = extractQuoteNumber(order.customerReference);
+    console.log(`[getOrderStatus] Extracted quote number: ${quoteNo || 'null'}`);
     
     // Get customer information from quote
     let customer: CustomerInfo | null = null;
     if (quoteNo) {
       try {
+        console.log(`[getOrderStatus] Attempting to fetch customer from quote: ${quoteNo}`);
         customer = await getCustomerFromQuote(quoteNo);
+        if (customer) {
+          console.log(`[getOrderStatus] Customer found: ${customer.name}, ${customer.email}`);
+        } else {
+          console.log(`[getOrderStatus] No customer info found in quote: ${quoteNo}`);
+        }
       } catch (error) {
-        console.error('Error fetching customer from quote:', error);
+        console.error(`[getOrderStatus] Error fetching customer from quote ${quoteNo}:`, error);
         // Continue without customer info
       }
+    } else {
+      console.log(`[getOrderStatus] No quote number extracted, skipping customer lookup`);
     }
     
     return {
@@ -267,7 +292,7 @@ export async function getOrderStatus(invoiceNumber: string): Promise<OrderStatus
       customer,
     };
   } catch (error) {
-    console.error('Error fetching order status:', error);
+    console.error('[getOrderStatus] Error fetching order status:', error);
     throw error;
   }
 }

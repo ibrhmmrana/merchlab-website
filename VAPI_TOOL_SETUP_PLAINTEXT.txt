@@ -1,0 +1,444 @@
+================================================================================
+VAPI API REQUEST TOOL SETUP CARDS - MERCHLAB VOICE AGENT
+================================================================================
+
+PREREQUISITE: Create Custom Credential in Vapi Dashboard
+- Go to Vapi Dashboard → Credentials → Create New
+- Credential Name: merchlab-api-bearer-token
+- Type: Custom Credential
+- Value: [Store your Bearer token value here]
+- This credential will be selected in all tools below
+
+================================================================================
+TOOL A: get_order_status
+================================================================================
+
+Tool Name:
+get_order_status
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/get-order-status
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. invoice_number
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Invoice number (e.g., "INV-Q553-HFKTH" or "Q553-HFKTH")
+
+Processing Message:
+One moment while I check your order status.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"invoice_number": "INV-Q553-HFKTH", "status": "Processing", "customer": {...}}, "spoken_summary": "Your order with invoice INV-Q553-HFKTH is currently Processing."}
+Error: {"ok": false, "error": "Order not found for that invoice number.", "hint": "Please verify the invoice number and try again."}
+
+================================================================================
+TOOL B: get_quote_info
+================================================================================
+
+Tool Name:
+get_quote_info
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/get-quote-info
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. quote_number
+   - Type: string
+   - Required: No
+   - Default Value: (empty string)
+   - Description: Quote number (e.g., "Q553-HFKTH" or "ML-DM618"). Leave empty for "my quote" lookup by phone.
+
+Processing Message:
+Let me look up your quote information.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"quote_no": "Q553-HFKTH", "customer": {...}, "pdf_url": "...", "value": 12500.50, "items": [...]}, "spoken_summary": "I found your quote Q553-HFKTH dated January 15th with a total of R12,500.50."}
+Error: {"ok": false, "error": "No quote found for your phone number.", "hint": "Please provide a specific quote number or contact support."}
+
+================================================================================
+TOOL C: get_invoice_info
+================================================================================
+
+Tool Name:
+get_invoice_info
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/get-invoice-info
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. invoice_number
+   - Type: string
+   - Required: No
+   - Default Value: (empty string)
+   - Description: Invoice number (e.g., "INV-Q553-HFKTH" or "Q553-HFKTH"). Leave empty for "my invoice" lookup by phone.
+
+Processing Message:
+Let me retrieve your invoice details.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"invoice_no": "INV-Q553-HFKTH", "customer": {...}, "pdf_url": "...", "value": 12500.50, "items": [...]}, "spoken_summary": "I found your invoice INV-Q553-HFKTH dated January 20th with a total of R12,500.50."}
+Error: {"ok": false, "error": "Invoice not found for that invoice number.", "hint": "Please verify the invoice number. It should be in format INV-Q553-HFKTH or just Q553-HFKTH."}
+
+================================================================================
+TOOL D: get_customer_account_info
+================================================================================
+
+Tool Name:
+get_customer_account_info
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/get-customer-account-info
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. identifier
+   - Type: string
+   - Required: No
+   - Default Value: (empty string)
+   - Description: Optional identifier (quote number, invoice number, email, or name). If empty, uses caller_phone.
+
+Processing Message:
+Let me pull up your account information.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"customer": {...}, "order_count": 5, "total_order_value": 62500.00, "last_order_date": "2025-01-20T14:00:00Z", "quotes": [...], "invoices": [...]}, "spoken_summary": "You have 5 orders with a total value of R62,500. Your most recent order was on January 20th."}
+Error: {"ok": false, "error": "No account information found.", "hint": "Please verify your phone number or contact support."}
+
+================================================================================
+TOOL E: get_order_details
+================================================================================
+
+Tool Name:
+get_order_details
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/get-order-details
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. invoice_number
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Invoice number for the order
+
+Processing Message:
+Let me get the details of your order items.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"invoice_number": "INV-Q553-HFKTH", "quote_number": "Q553-HFKTH", "items": [{"description": "Custom T-Shirt", "quantity": 50, "colour": "Blue", "size": "Large", "price": 250.00}], "customer": {...}}, "spoken_summary": "Your order contains 2 items: 50 Custom T-Shirts in Blue, Large size, and 25 Custom Caps in Black. Would you like me to send the full itemized list to your WhatsApp?"}
+Error: {"ok": false, "error": "Order details not found for that invoice number.", "hint": "Please verify the invoice number and try again."}
+
+================================================================================
+TOOL F: get_delivery_info
+================================================================================
+
+Tool Name:
+get_delivery_info
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/get-delivery-info
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. invoice_number
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Invoice number for the order
+
+Processing Message:
+Let me check your delivery information.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"invoice_number": "INV-Q553-HFKTH", "is_delivery": true, "delivery_address": {"street": "123 Main Street", "suburb": "Sandton", "city": "Johannesburg", "province": "Gauteng", "postal_code": "2196", "country": "South Africa"}, "customer": {...}}, "spoken_summary": "Your order is set for delivery to 123 Main Street, Sandton, Johannesburg, Gauteng, 2196."}
+Error: {"ok": false, "error": "Delivery information not found for that invoice number.", "hint": "Please verify the invoice number and try again."}
+
+================================================================================
+TOOL G: escalate_to_human
+================================================================================
+
+Tool Name:
+escalate_to_human
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/escalate-to-human
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. reason
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Reason for escalation (e.g., "Customer requested to speak with human", "Complex issue requiring human assistance")
+
+3. conversation_summary
+   - Type: string
+   - Required: No
+   - Default Value: (empty string)
+   - Description: Brief summary of conversation context
+
+Processing Message:
+I'm connecting you with our support team.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"escalation_id": "ESC-20250128-001", "status": "pending", "email_sent": true}, "spoken_summary": "I've escalated your request to our support team. A team member will contact you shortly."}
+Error: {"ok": false, "error": "Failed to send escalation email.", "hint": "Please contact support directly at support@merchlab.io or call our main line."}
+
+================================================================================
+TOOL H: search_merchlab_knowledge_base
+================================================================================
+
+Tool Name:
+search_merchlab_knowledge_base
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/search-knowledge-base
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Caller's phone number from Vapi
+
+2. query
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Search query or question about MerchLab
+
+3. topK
+   - Type: number
+   - Required: No
+   - Default Value: 5
+   - Description: Number of results to return (default: 5, max: 50)
+
+4. doc_type
+   - Type: string
+   - Required: No
+   - Default Value: (empty string)
+   - Description: Optional filter by document type (e.g., "refund_policy", "terms_conditions")
+
+Processing Message:
+Let me search our knowledge base for that information.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"results": [{"content": "Our refund policy allows returns within 30 days...", "metadata": {"title": "Refund Policy", "doc_type": "refund_policy"}, "similarity_score": 0.92, "source_label": "Refund Policy - Section 3"}], "result_count": 1}, "spoken_summary": "According to our refund policy, you can return items within 30 days of purchase. Would you like me to send the full policy document to your WhatsApp?"}
+Error: {"ok": false, "error": "No relevant information found in our knowledge base.", "hint": "Please contact support for more specific information."}
+
+================================================================================
+TOOL I: send_whatsapp_message
+================================================================================
+
+Tool Name:
+send_whatsapp_message
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/send-whatsapp-message
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Recipient phone number (usually same as caller)
+
+2. message
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Text message to send via WhatsApp
+
+Processing Message:
+Sending that to your WhatsApp now.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"message_id": "wamid.ABC123", "recipient": "27693475825", "status": "sent"}, "spoken_summary": "Message sent successfully to your WhatsApp."}
+Error: {"ok": false, "error": "Failed to send WhatsApp message.", "hint": "Please ensure your phone number is registered with WhatsApp Business."}
+
+================================================================================
+TOOL J: send_whatsapp_pdf
+================================================================================
+
+Tool Name:
+send_whatsapp_pdf
+
+Request URL:
+{{PUBLIC_BASE_URL}}/api/vapi/send-whatsapp-pdf
+
+HTTP Method:
+POST
+
+Authorization:
+- Select Credential: merchlab-api-bearer-token
+- Type: Bearer Token
+
+Request Headers:
+Content-Type: application/json
+
+Request Body Properties:
+1. caller_phone
+   - Type: string
+   - Required: Yes
+   - Default Value: {{customer.number}}
+   - Description: Recipient phone number (usually same as caller)
+
+2. document_url
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Public URL of the PDF document
+
+3. caption
+   - Type: string
+   - Required: Yes
+   - Default Value: (none)
+   - Description: Caption text to include with the PDF
+
+4. filename
+   - Type: string
+   - Required: No
+   - Default Value: (empty string)
+   - Description: Filename for the document (defaults to extracting from URL)
+
+Processing Message:
+Sending the PDF to your WhatsApp now.
+
+Expected Response Shape:
+Success: {"ok": true, "data": {"message_id": "wamid.ABC123", "recipient": "27693475825", "document_url": "https://...", "status": "sent"}, "spoken_summary": "PDF sent successfully to your WhatsApp."}
+Error: {"ok": false, "error": "Failed to send PDF document.", "hint": "The PDF may be too large or the URL may be invalid. Please contact support."}
+
+================================================================================
+END OF TOOL SETUP CARDS
+================================================================================
