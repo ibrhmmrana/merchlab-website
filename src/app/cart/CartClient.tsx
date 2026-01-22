@@ -38,6 +38,146 @@ function validateBrandedItem(item: CartItem): boolean {
   });
 }
 
+// Email validation - checks for legitimate email patterns
+function validateEmail(email: string): { isValid: boolean; error?: string } {
+  if (!email || email.trim() === '') {
+    return { isValid: false, error: 'Email is required' };
+  }
+
+  const trimmedEmail = email.trim().toLowerCase();
+
+  // Basic email regex - more strict than HTML5 email input
+  const emailRegex = /^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]@[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
+  
+  if (!emailRegex.test(trimmedEmail)) {
+    return { isValid: false, error: 'Please enter a valid email address' };
+  }
+
+  const [localPart, domain] = trimmedEmail.split('@');
+  
+  // Reject emails that are too short (likely fake)
+  if (localPart.length < 2) {
+    return { isValid: false, error: 'Email address is too short' };
+  }
+
+  // Reject emails with suspicious patterns (all numbers, all same character, etc.)
+  if (/^\d+$/.test(localPart) && localPart.length < 5) {
+    return { isValid: false, error: 'Please enter a valid email address' };
+  }
+
+  // Reject common fake/test words in local part
+  const fakeLocalParts = [
+    'test', 'testing', 'fake', 'dummy', 'temp', 'temporary', 
+    'sample', 'demo', 'example', 'admin', 'user', 'guest',
+    'email', 'mail', 'contact', 'info', 'noreply', 'no-reply'
+  ];
+  
+  // Check if local part is exactly a fake word or starts with it followed by numbers only
+  if (fakeLocalParts.includes(localPart) || 
+      fakeLocalParts.some(fake => localPart === fake || localPart.match(new RegExp(`^${fake}\\d+$`)))) {
+    return { isValid: false, error: 'Please enter a real email address' };
+  }
+
+  // Reject domains that look fake or are commonly used for testing
+  const suspiciousDomains = [
+    'test.com', 'test.co.za', 'example.com', 'example.co.za',
+    'email.com', 'mail.com', 'testmail.com', 'tempmail.com',
+    'fakemail.com', 'dummy.com', 'sample.com', 'demo.com',
+    'test.org', 'example.org', 'test.net', 'example.net',
+    'domain.com', 'website.com', 'site.com', 'web.com'
+  ];
+  
+  if (suspiciousDomains.includes(domain)) {
+    return { isValid: false, error: 'Please enter a real email address' };
+  }
+
+  // Reject patterns where local part and domain are the same (e.g., test@test.com)
+  if (localPart === domain.split('.')[0]) {
+    return { isValid: false, error: 'Please enter a real email address' };
+  }
+
+  // Reject common fake email patterns (local@domain where both are suspicious)
+  const fakePatterns = [
+    /^test@test\./i,
+    /^test@email\./i,
+    /^test@mail\./i,
+    /^123@123\./i,
+    /^a@a\./i,
+    /^abc@abc\./i,
+    /^email@email\./i,
+    /^mail@mail\./i,
+    /^user@user\./i,
+    /^admin@admin\./i,
+    /^fake@fake\./i,
+    /^dummy@dummy\./i,
+    /^sample@sample\./i,
+    /^demo@demo\./i,
+  ];
+
+  for (const pattern of fakePatterns) {
+    if (pattern.test(trimmedEmail)) {
+      return { isValid: false, error: 'Please enter a real email address' };
+    }
+  }
+
+  // Reject emails where domain is just a generic word (like "email", "mail", "test")
+  const genericDomainWords = ['email', 'mail', 'test', 'example', 'domain', 'website', 'site', 'web'];
+  const domainBase = domain.split('.')[0];
+  if (genericDomainWords.includes(domainBase) && domain.split('.').length <= 2) {
+    return { isValid: false, error: 'Please enter a real email address' };
+  }
+
+  return { isValid: true };
+}
+
+// Phone number validation and cleaning for South African numbers
+function validateAndCleanPhone(phone: string): { isValid: boolean; cleaned: string; error?: string } {
+  if (!phone || phone.trim() === '') {
+    return { isValid: false, cleaned: '', error: 'Phone number is required' };
+  }
+
+  // Remove all non-digit characters
+  let cleaned = phone.replace(/\D/g, '');
+
+  // If it starts with 27 (country code), remove it
+  if (cleaned.startsWith('27')) {
+    cleaned = cleaned.substring(2);
+  }
+
+  // If it starts with 0, remove it (common South African format)
+  if (cleaned.startsWith('0')) {
+    cleaned = cleaned.substring(1);
+  }
+
+  // Should be exactly 9 digits for South African mobile numbers
+  if (cleaned.length !== 9) {
+    return { 
+      isValid: false, 
+      cleaned, 
+      error: cleaned.length < 9 
+        ? 'Phone number is too short. Please enter 9 digits after +27' 
+        : 'Phone number is too long. Please enter 9 digits after +27'
+    };
+  }
+
+  // South African mobile numbers typically start with 6, 7, or 8
+  const firstDigit = cleaned[0];
+  if (!['6', '7', '8'].includes(firstDigit)) {
+    return { 
+      isValid: false, 
+      cleaned, 
+      error: 'Please enter a valid South African mobile number (should start with 6, 7, or 8)' 
+    };
+  }
+
+  // Check for obviously fake numbers (all same digit, sequential, etc.)
+  if (/^(\d)\1{8}$/.test(cleaned)) {
+    return { isValid: false, cleaned, error: 'Please enter a valid phone number' };
+  }
+
+  return { isValid: true, cleaned };
+}
+
 export default function CartClient() {
   const hydrated = useHasHydrated();
   const router = useRouter();
@@ -109,6 +249,10 @@ export default function CartClient() {
   const [msg, setMsg] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [addressSelected, setAddressSelected] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{
+    email?: string;
+    phone?: string;
+  }>({});
 
   function generateMerchantOrderNo(): string {
     const timestamp = Date.now();
@@ -305,6 +449,24 @@ export default function CartClient() {
     if (activeCartGroup === 'branded' && !isBrandedValid) {
       setMsg("Please complete all branding details before submitting.");
       return;
+    }
+
+    // Validate email and phone before submission
+    const emailValidation = validateEmail(form.email);
+    const phoneValidation = validateAndCleanPhone(form.phone);
+
+    if (!emailValidation.isValid || !phoneValidation.isValid) {
+      setValidationErrors({
+        email: emailValidation.isValid ? undefined : emailValidation.error,
+        phone: phoneValidation.isValid ? undefined : phoneValidation.error
+      });
+      setMsg("Please fix the validation errors before submitting.");
+      return;
+    }
+
+    // Clean phone number before submission
+    if (phoneValidation.isValid && phoneValidation.cleaned !== form.phone) {
+      setForm({ ...form, phone: phoneValidation.cleaned });
     }
 
     setSubmitting(true);
@@ -789,9 +951,29 @@ export default function CartClient() {
                     <Input
                       type="email"
                       value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className="mt-1"
+                      onChange={(e) => {
+                        const email = e.target.value;
+                        setForm({ ...form, email });
+                        // Validate email
+                        const validation = validateEmail(email);
+                        setValidationErrors(prev => ({
+                          ...prev,
+                          email: validation.isValid ? undefined : validation.error
+                        }));
+                      }}
+                      onBlur={(e) => {
+                        // Re-validate on blur
+                        const validation = validateEmail(e.target.value);
+                        setValidationErrors(prev => ({
+                          ...prev,
+                          email: validation.isValid ? undefined : validation.error
+                        }));
+                      }}
+                      className={cn("mt-1", validationErrors.email && "border-red-500 focus-visible:ring-red-500")}
                     />
+                    {validationErrors.email && (
+                      <p className="text-sm text-red-600 mt-1">{validationErrors.email}</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700">Phone Number *</label>
@@ -801,10 +983,47 @@ export default function CartClient() {
                       </span>
                       <Input
                         value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        className="rounded-l-none"
+                        onChange={(e) => {
+                          const phone = e.target.value;
+                          // Clean and validate phone number
+                          const validation = validateAndCleanPhone(phone);
+                          if (validation.isValid) {
+                            setForm({ ...form, phone: validation.cleaned });
+                            setValidationErrors(prev => ({
+                              ...prev,
+                              phone: undefined
+                            }));
+                          } else {
+                            // Still allow typing, but show error
+                            setForm({ ...form, phone });
+                            setValidationErrors(prev => ({
+                              ...prev,
+                              phone: validation.error
+                            }));
+                          }
+                        }}
+                        onBlur={(e) => {
+                          // Clean phone number on blur
+                          const validation = validateAndCleanPhone(e.target.value);
+                          if (validation.isValid) {
+                            setForm({ ...form, phone: validation.cleaned });
+                            setValidationErrors(prev => ({
+                              ...prev,
+                              phone: undefined
+                            }));
+                          } else {
+                            setValidationErrors(prev => ({
+                              ...prev,
+                              phone: validation.error
+                            }));
+                          }
+                        }}
+                        className={cn("rounded-l-none", validationErrors.phone && "border-red-500 focus-visible:ring-red-500")}
                       />
                     </div>
+                    {validationErrors.phone && (
+                      <p className="text-sm text-red-600 mt-1">{validationErrors.phone}</p>
+                    )}
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-sm font-medium text-gray-700">Company Name</label>

@@ -17,7 +17,7 @@ Tool Name:
 get_order_status
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/get-order-status
+https://merchlab.io/api/vapi/get-order-status
 
 HTTP Method:
 POST
@@ -57,7 +57,7 @@ Tool Name:
 get_quote_info
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/get-quote-info
+https://merchlab.io/api/vapi/get-quote-info
 
 HTTP Method:
 POST
@@ -97,7 +97,7 @@ Tool Name:
 get_invoice_info
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/get-invoice-info
+https://merchlab.io/api/vapi/get-invoice-info
 
 HTTP Method:
 POST
@@ -137,7 +137,7 @@ Tool Name:
 get_customer_account_info
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/get-customer-account-info
+https://merchlab.io/api/vapi/get-customer-account-info
 
 HTTP Method:
 POST
@@ -177,7 +177,7 @@ Tool Name:
 get_order_details
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/get-order-details
+https://merchlab.io/api/vapi/get-order-details
 
 HTTP Method:
 POST
@@ -217,7 +217,7 @@ Tool Name:
 get_delivery_info
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/get-delivery-info
+https://merchlab.io/api/vapi/get-delivery-info
 
 HTTP Method:
 POST
@@ -257,7 +257,7 @@ Tool Name:
 escalate_to_human
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/escalate-to-human
+https://merchlab.io/api/vapi/escalate-to-human
 
 HTTP Method:
 POST
@@ -303,7 +303,7 @@ Tool Name:
 search_merchlab_knowledge_base
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/search-knowledge-base
+https://merchlab.io/api/vapi/search-knowledge-base
 
 HTTP Method:
 POST
@@ -355,7 +355,7 @@ Tool Name:
 send_whatsapp_message
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/send-whatsapp-message
+https://merchlab.io/api/vapi/send-whatsapp-message
 
 HTTP Method:
 POST
@@ -395,7 +395,7 @@ Tool Name:
 send_whatsapp_pdf
 
 Request URL:
-{{PUBLIC_BASE_URL}}/api/vapi/send-whatsapp-pdf
+https://merchlab.io/api/vapi/send-whatsapp-pdf
 
 HTTP Method:
 POST

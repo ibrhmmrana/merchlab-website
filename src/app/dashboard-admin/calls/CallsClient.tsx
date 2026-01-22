@@ -14,6 +14,7 @@ import {
 import { Phone, ChevronDown, ChevronUp, ExternalLink, Play, Loader2, PhoneCall, TrendingUp, XCircle, CheckCircle, AlertCircle, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { type PeriodKey } from '@/server/admin/metrics';
 
@@ -105,6 +106,14 @@ export default function CallsClient() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [ratingFilter, setRatingFilter] = useState<CallRating | 'ALL'>('ALL');
+  const [testCallDialogOpen, setTestCallDialogOpen] = useState(false);
+  const [testCallPhone, setTestCallPhone] = useState('');
+  const [testCallFirstName, setTestCallFirstName] = useState('');
+  const [testCallQuoteNumber, setTestCallQuoteNumber] = useState('');
+  const [recentQuotes, setRecentQuotes] = useState<Array<{ quote_no: string; created_at: string }>>([]);
+  const [loadingRecentQuotes, setLoadingRecentQuotes] = useState(false);
+  const [initiatingCall, setInitiatingCall] = useState(false);
+  const [pollingCall, setPollingCall] = useState(false);
 
   useEffect(() => {
     async function fetchCalls() {
@@ -241,6 +250,118 @@ export default function CallsClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, loading]);
 
+  // Fetch recent quotes when dialog opens
+  useEffect(() => {
+    if (testCallDialogOpen) {
+      fetchRecentQuotes();
+    }
+  }, [testCallDialogOpen]);
+
+  const fetchRecentQuotes = async () => {
+    try {
+      setLoadingRecentQuotes(true);
+      const response = await fetch('/api/admin/calls/recent-quotes', {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch recent quotes');
+      }
+
+      const result = await response.json();
+      setRecentQuotes(result.quotes || []);
+    } catch (err) {
+      console.error('Error fetching recent quotes:', err);
+    } finally {
+      setLoadingRecentQuotes(false);
+    }
+  };
+
+  const initiateTestCall = async () => {
+    if (!testCallPhone || !testCallFirstName || !testCallQuoteNumber) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setInitiatingCall(true);
+      const response = await fetch('/api/admin/calls/test-call', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: testCallPhone,
+          firstName: testCallFirstName,
+          quoteNumber: testCallQuoteNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to initiate test call');
+      }
+
+      // Close dialog and start polling
+      setTestCallDialogOpen(false);
+      setPollingCall(true);
+      
+      // Normalize phone number for comparison (remove + and spaces)
+      const normalizedPhone = testCallPhone.replace(/^\+/, '').replace(/\s/g, '');
+      const startTime = Date.now();
+      
+      // Poll for the call record (check every 2 seconds for up to 60 seconds)
+      let attempts = 0;
+      const maxAttempts = 30;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        
+        try {
+          const callsResponse = await fetch('/api/admin/calls?period=all', {
+            cache: 'no-store',
+          });
+          
+          if (callsResponse.ok) {
+            const callsData = await callsResponse.json();
+            // Find calls created in the last 2 minutes
+            const recentCalls = callsData.calls?.filter((call: CallRecord) => {
+              const callTime = new Date(call.created_at).getTime();
+              return callTime > startTime - 120000; // 2 minutes before we started
+            }) || [];
+            
+            // Find call matching the phone number
+            const matchingCall = recentCalls.find((call: CallRecord) => {
+              if (!call.phone) return false;
+              const callPhone = call.phone.replace(/\s/g, '');
+              return callPhone === normalizedPhone || callPhone.endsWith(normalizedPhone) || normalizedPhone.endsWith(callPhone);
+            });
+            
+            if (matchingCall) {
+              // Found the call, refresh the data
+              clearInterval(pollInterval);
+              setPollingCall(false);
+              window.location.reload();
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Error polling for call:', err);
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          setPollingCall(false);
+          alert('Test call initiated. The call record may take a moment to appear. Please refresh the page to see it.');
+        }
+      }, 2000);
+    } catch (err) {
+      console.error('Error initiating test call:', err);
+      alert(err instanceof Error ? err.message : 'Failed to initiate test call');
+    } finally {
+      setInitiatingCall(false);
+    }
+  };
+
   // Filter calls by rating
   const filteredCalls = data?.calls.filter((call) => {
     if (ratingFilter === 'ALL') return true;
@@ -365,11 +486,11 @@ export default function CallsClient() {
               </div>
             )}
             <Button
-              onClick={() => window.location.reload()}
-              variant="outline"
+              onClick={() => setTestCallDialogOpen(true)}
               size="sm"
             >
-              Refresh
+              <PhoneCall className="w-4 h-4 mr-2" />
+              Test Call
             </Button>
           </div>
         </div>
@@ -724,6 +845,110 @@ export default function CallsClient() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Test Call Dialog */}
+      <Dialog 
+        open={testCallDialogOpen} 
+        onOpenChange={(open) => {
+          setTestCallDialogOpen(open);
+          if (!open) {
+            // Reset form when dialog closes
+            setTestCallPhone('');
+            setTestCallFirstName('');
+            setTestCallQuoteNumber('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Initiate Test Call</DialogTitle>
+            <DialogDescription>
+              Enter the details to initiate a test call with the AI voice agent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Phone Number</label>
+              <Input
+                type="tel"
+                placeholder="+27693475825 or 0693475825"
+                value={testCallPhone}
+                onChange={(e) => setTestCallPhone(e.target.value)}
+                disabled={initiatingCall}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Include country code (e.g., +27 for South Africa)
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">First Name</label>
+              <Input
+                type="text"
+                placeholder="Nico"
+                value={testCallFirstName}
+                onChange={(e) => setTestCallFirstName(e.target.value)}
+                disabled={initiatingCall}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Quote Number</label>
+              {loadingRecentQuotes ? (
+                <div className="flex items-center gap-2 p-2 border rounded">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm text-gray-500">Loading quotes...</span>
+                </div>
+              ) : (
+                <select
+                  value={testCallQuoteNumber}
+                  onChange={(e) => setTestCallQuoteNumber(e.target.value)}
+                  disabled={initiatingCall}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+                >
+                  <option value="">Select a quote</option>
+                  {recentQuotes.map((quote) => (
+                    <option key={quote.quote_no} value={quote.quote_no}>
+                      {quote.quote_no} ({new Date(quote.created_at).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTestCallDialogOpen(false)}
+              disabled={initiatingCall}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={initiateTestCall}
+              disabled={initiatingCall || !testCallPhone || !testCallFirstName || !testCallQuoteNumber}
+            >
+              {initiatingCall ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Initiating...
+                </>
+              ) : (
+                <>
+                  <PhoneCall className="w-4 h-4 mr-2" />
+                  Initiate Call
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Polling Indicator */}
+      {pollingCall && (
+        <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Waiting for call record...</span>
+        </div>
+      )}
     </div>
   );
 }
