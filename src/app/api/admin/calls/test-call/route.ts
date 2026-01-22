@@ -63,13 +63,15 @@ export async function POST(request: NextRequest) {
 
     // Fetch quote details from quote_docs
     const supabase = getSupabaseAdmin();
-    const { data: quoteData, error: quoteError } = await supabase
+    let quoteData: { quote_no: string; payload: unknown } | null = null;
+    
+    const { data: initialQuoteData, error: quoteError } = await supabase
       .from('quote_docs')
       .select('quote_no, payload')
       .eq('quote_no', quoteNumber)
       .single();
 
-    if (quoteError || !quoteData) {
+    if (quoteError || !initialQuoteData) {
       // Try with different formats
       const variations = [
         quoteNumber,
@@ -77,7 +79,6 @@ export async function POST(request: NextRequest) {
         quoteNumber.toLowerCase(),
       ];
 
-      let foundQuote = null;
       for (const variation of variations) {
         const { data: altData } = await supabase
           .from('quote_docs')
@@ -86,20 +87,19 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (altData) {
-          foundQuote = altData;
+          quoteData = altData;
           break;
         }
       }
 
-      if (!foundQuote) {
+      if (!quoteData) {
         return NextResponse.json(
           { error: 'Quote not found' },
           { status: 404, headers: noIndexHeaders() }
         );
       }
-
-      quoteData.quote_no = foundQuote.quote_no;
-      quoteData.payload = foundQuote.payload;
+    } else {
+      quoteData = initialQuoteData;
     }
 
     const payload = parsePayload(quoteData.payload);
