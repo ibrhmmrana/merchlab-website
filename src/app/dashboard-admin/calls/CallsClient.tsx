@@ -871,20 +871,18 @@ export default function CallsClient() {
               <label className="text-sm font-medium mb-2 block">Phone Number</label>
               <Input
                 type="tel"
-                placeholder="+27693475825 or 0693475825"
                 value={testCallPhone}
                 onChange={(e) => setTestCallPhone(e.target.value)}
                 disabled={initiatingCall}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Include country code (e.g., +27 for South Africa)
+                Number can start with either +27 or 0
               </p>
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">First Name</label>
               <Input
                 type="text"
-                placeholder="Nico"
                 value={testCallFirstName}
                 onChange={(e) => setTestCallFirstName(e.target.value)}
                 disabled={initiatingCall}
@@ -898,20 +896,29 @@ export default function CallsClient() {
                   <span className="text-sm text-gray-500">Loading quotes...</span>
                 </div>
               ) : (
-                <select
-                  value={testCallQuoteNumber}
-                  onChange={(e) => setTestCallQuoteNumber(e.target.value)}
-                  disabled={initiatingCall}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
-                >
-                  <option value="">Select a quote</option>
-                  {recentQuotes.map((quote) => (
-                    <option key={quote.quote_no} value={quote.quote_no}>
-                      {quote.quote_no} ({new Date(quote.created_at).toLocaleDateString()})
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <Input
+                    type="text"
+                    list="recent-quotes-list"
+                    value={testCallQuoteNumber}
+                    onChange={(e) => setTestCallQuoteNumber(e.target.value)}
+                    disabled={initiatingCall}
+                    placeholder="Enter quote number or select from recent"
+                  />
+                  <datalist id="recent-quotes-list">
+                    {recentQuotes.map((quote) => (
+                      <option key={quote.quote_no} value={quote.quote_no}>
+                        {quote.quote_no} ({new Date(quote.created_at).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </datalist>
+                </>
               )}
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+              <p className="text-xs text-yellow-800">
+                <strong>Note:</strong> Payment links do not work for test calls.
+              </p>
             </div>
           </div>
           <DialogFooter>
