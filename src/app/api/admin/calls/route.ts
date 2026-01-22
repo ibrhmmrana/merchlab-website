@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 function resolvePeriod(period: PeriodKey, customStart?: string, customEnd?: string): { start?: Date; end?: Date } {
-  const end = new Date();
+  // Add 1 hour buffer to end time to ensure we include calls made right now
+  const end = new Date(Date.now() + 60 * 60 * 1000);
 
   if (period === 'ytd') {
     const start = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
@@ -16,12 +17,16 @@ function resolvePeriod(period: PeriodKey, customStart?: string, customEnd?: stri
 
   if (period === 'all' || period === 'custom') {
     if (period === 'custom' && customStart && customEnd) {
-      return { start: new Date(customStart), end: new Date(customEnd) };
+      // For custom, add buffer to end date
+      const customEndDate = new Date(customEnd);
+      customEndDate.setHours(customEndDate.getHours() + 1);
+      return { start: new Date(customStart), end: customEndDate };
     }
-    return { start: undefined, end };
+    // For 'all', return undefined for end so we don't filter by end date
+    return { start: undefined, end: undefined };
   }
 
-  const nowMs = end.getTime();
+  const nowMs = Date.now();
   const hoursMap: Partial<Record<Exclude<PeriodKey, 'ytd' | 'all' | 'custom'>, number>> = {
     '4h': 4,
     '12h': 12,
@@ -64,6 +69,7 @@ export async function GET(request: NextRequest) {
     if (start) {
       query = query.gte('created_at', start.toISOString());
     }
+    // Apply end filter if provided (for 'all', end is undefined so no filter is applied)
     if (end) {
       query = query.lte('created_at', end.toISOString());
     }

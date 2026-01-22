@@ -101,7 +101,7 @@ export default function CallsClient() {
   const [error, setError] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [analyzingCalls, setAnalyzingCalls] = useState<Set<number>>(new Set());
-  const [period, setPeriod] = useState<PeriodKey>('30d');
+  const [period, setPeriod] = useState<PeriodKey>('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [ratingFilter, setRatingFilter] = useState<CallRating | 'ALL'>('ALL');
