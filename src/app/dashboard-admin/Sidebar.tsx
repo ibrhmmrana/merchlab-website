@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, X, MessageSquare, Mail, ChevronLeft, ChevronRight, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, FileText, Receipt, Users, X, MessageSquare, Mail, ChevronLeft, ChevronRight, ShoppingCart, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -65,6 +65,26 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
   const pathname = usePathname();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const itemRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Auto-expand on hover, collapse on mouse leave (desktop only)
+  const handleMouseEnter = () => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      setIsHovered(true);
+      if (isCollapsed && setIsCollapsed) {
+        setIsCollapsed(false);
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      setIsHovered(false);
+      if (!isCollapsed && setIsCollapsed) {
+        setIsCollapsed(true);
+      }
+    }
+  };
 
   const navItems = [
     {
@@ -101,6 +121,11 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
 
   const communicationsItems = [
     {
+      href: '/dashboard-admin/calls',
+      label: 'Calls',
+      icon: Phone,
+    },
+    {
       href: '/dashboard-admin/communications/whatsapp',
       label: 'WhatsApp',
       icon: MessageSquare,
@@ -130,39 +155,24 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
           isCollapsed ? 'lg:w-20' : 'lg:w-64',
           'w-64'
         )}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        <div className={cn(
-          "border-b border-gray-200 flex items-center justify-between transition-all duration-300",
-          isCollapsed ? "p-3 lg:justify-center" : "p-6"
-        )}>
-          {!isCollapsed && (
-            <h1 className="text-xl font-bold">Admin Dashboard</h1>
-          )}
-          <div className="flex items-center gap-2">
-            {/* Desktop collapse toggle */}
-            {setIsCollapsed && (
+        {/* Header - only show on mobile */}
+        {isOpen && (
+          <div className="border-b border-gray-200 flex items-center justify-end p-6 lg:hidden">
+            <div className="flex items-center gap-2">
+              {/* Mobile close button */}
               <button
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="hidden lg:flex p-1.5 hover:bg-gray-100 rounded transition-colors"
-                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                onClick={() => setIsOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+                aria-label="Close menu"
               >
-                {isCollapsed ? (
-                  <ChevronRight className="w-4 h-4" />
-                ) : (
-                  <ChevronLeft className="w-4 h-4" />
-                )}
+                <X className="w-5 h-5" />
               </button>
-            )}
-            {/* Mobile close button */}
-            <button
-              onClick={() => setIsOpen(false)}
-              className="lg:hidden p-1 hover:bg-gray-100 rounded"
-              aria-label="Close menu"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            </div>
           </div>
-        </div>
+        )}
         {/* Scrollable content wrapper - allows tooltips to escape */}
         <div className="flex-1 overflow-y-auto overflow-x-visible">
           <nav className="p-4">
@@ -187,24 +197,27 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
                       onMouseLeave={() => setHoveredItem(null)}
                       onClick={() => {
                         setIsOpen(false); // Close on mobile
-                        if (setIsCollapsed && !isCollapsed) {
-                          setIsCollapsed(true); // Collapse on desktop if expanded
-                        }
                       }}
                       className={cn(
-                        'flex items-center rounded-lg transition-colors',
-                        isCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-4 py-2',
+                        'flex items-center rounded-lg transition-colors px-4 py-2',
                         isActive
                           ? 'bg-primary text-primary-foreground'
                           : 'text-gray-700 hover:bg-gray-100'
                       )}
                     >
                       <Icon className="w-5 h-5 flex-shrink-0" />
-                      {!isCollapsed && (
-                        <span className="font-medium">{item.label}</span>
-                      )}
+                      <span 
+                        className={cn(
+                          'font-medium whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden inline-block ml-3',
+                          isCollapsed 
+                            ? 'max-w-0 opacity-0 translate-x-2' 
+                            : 'max-w-[200px] opacity-100 translate-x-0'
+                        )}
+                      >
+                        {item.label}
+                      </span>
                     </Link>
-                    {/* Tooltip rendered via portal */}
+                    {/* Tooltip rendered via portal - only show when collapsed */}
                     {isCollapsed && (
                       <Tooltip
                         label={item.label}
@@ -248,24 +261,27 @@ export default function Sidebar({ isOpen, setIsOpen, isCollapsed = false, setIsC
                         onMouseLeave={() => setHoveredItem(null)}
                         onClick={() => {
                           setIsOpen(false); // Close on mobile
-                          if (setIsCollapsed && !isCollapsed) {
-                            setIsCollapsed(true); // Collapse on desktop if expanded
-                          }
                         }}
                         className={cn(
-                          'flex items-center rounded-lg transition-colors',
-                          isCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-4 py-2',
+                          'flex items-center rounded-lg transition-colors px-4 py-2',
                           isActive
                             ? 'bg-primary text-primary-foreground'
                             : 'text-gray-700 hover:bg-gray-100'
                         )}
                       >
                         <Icon className="w-5 h-5 flex-shrink-0" />
-                        {!isCollapsed && (
-                          <span className="font-medium">{item.label}</span>
-                        )}
+                        <span 
+                          className={cn(
+                            'font-medium whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden inline-block ml-3',
+                            isCollapsed 
+                              ? 'max-w-0 opacity-0 translate-x-2' 
+                              : 'max-w-[200px] opacity-100 translate-x-0'
+                          )}
+                        >
+                          {item.label}
+                        </span>
                       </Link>
-                      {/* Tooltip rendered via portal */}
+                      {/* Tooltip rendered via portal - only show when collapsed */}
                       {isCollapsed && (
                         <Tooltip
                           label={item.label}
