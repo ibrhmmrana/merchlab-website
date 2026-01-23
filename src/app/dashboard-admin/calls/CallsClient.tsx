@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Phone, ChevronDown, ChevronUp, ExternalLink, Play, Loader2, PhoneCall, TrendingUp, XCircle, CheckCircle, AlertCircle, DollarSign, Trash2 } from 'lucide-react';
+import { Phone, ChevronDown, ChevronUp, ExternalLink, Play, Loader2, PhoneCall, TrendingUp, XCircle, CheckCircle, AlertCircle, DollarSign, Trash2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -47,10 +47,8 @@ type CallsData = {
 };
 
 const formatDate = (dateString: string) => {
-  // Parse as UTC and subtract 2 hours to correct timezone offset
   const date = new Date(dateString);
-  const correctedDate = new Date(date.getTime() - 2 * 60 * 60 * 1000);
-  return correctedDate.toLocaleDateString('en-ZA', {
+  return date.toLocaleDateString('en-ZA', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -701,7 +699,19 @@ export default function CallsClient() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+                <div className="relative group">
+                  <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-10 pointer-events-none">
+                    <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 whitespace-normal w-64 shadow-lg relative">
+                      <p>The cost shown below excludes Twilio (phone provider) costs.</p>
+                      <p className="mt-1">Twilio charges $0.0270 per minute on top of the displayed cost.</p>
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <DollarSign className="w-5 h-5 text-gray-600" />
             </CardHeader>
             <CardContent>
