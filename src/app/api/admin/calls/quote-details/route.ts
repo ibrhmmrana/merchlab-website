@@ -60,7 +60,6 @@ export async function GET(request: NextRequest) {
         quoteNumber.toLowerCase(),
       ];
 
-      let found = false;
       for (const variation of variations) {
         const { data: altData } = await supabase
           .from('quote_docs')
