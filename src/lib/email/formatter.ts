@@ -39,7 +39,8 @@ export function formatEmailResponse(
   
   // Remove any sign-offs at the end (Best regards, Sincerely, etc.)
   // Match sign-offs that may span multiple lines (e.g., "Best regards,\nMerchLab AI Assistant")
-  cleanedContent = cleanedContent.replace(/\s*(Best\s+regards,?|Sincerely,?|Regards,?|Thank\s+you,?)\s*(?:\n\s*)?(?:MerchLab\s+AI\s+Assistant|AI\s+Assistant|.*)?\s*$/is, '').trim();
+  // Use [\s\S] instead of . with s flag for compatibility
+  cleanedContent = cleanedContent.replace(/[\s\S]*\s*(Best\s+regards,?|Sincerely,?|Regards,?|Thank\s+you,?)\s*(?:\n\s*)?(?:MerchLab\s+AI\s+Assistant|AI\s+Assistant|[\s\S]*)?\s*$/i, '').trim();
 
   // Format the cleaned AI response content
   // Convert markdown-style formatting to HTML
