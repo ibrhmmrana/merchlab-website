@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Phone, ChevronDown, ChevronUp, ExternalLink, Play, Loader2, PhoneCall, TrendingUp, XCircle, CheckCircle, AlertCircle, DollarSign } from 'lucide-react';
+import { Phone, ChevronDown, ChevronUp, ExternalLink, Play, Loader2, PhoneCall, TrendingUp, XCircle, CheckCircle, AlertCircle, DollarSign, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -123,6 +123,7 @@ export default function CallsClient() {
   const [manualCallQuoteNumber, setManualCallQuoteNumber] = useState('');
   const [loadingQuoteDetails, setLoadingQuoteDetails] = useState(false);
   const [initiatingManualCall, setInitiatingManualCall] = useState(false);
+  const [deletingCallId, setDeletingCallId] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchCalls() {
@@ -324,6 +325,45 @@ export default function CallsClient() {
   const handleQuoteSelect = (quoteNumber: string) => {
     setManualCallQuoteNumber(quoteNumber);
     fetchQuoteDetails(quoteNumber);
+  };
+
+  const deleteCall = async (callId: number) => {
+    if (!confirm('Are you sure you want to delete this call record? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setDeletingCallId(callId);
+      const response = await fetch(`/api/admin/calls/${callId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete call record');
+      }
+
+      // Remove the call from the local state
+      if (data) {
+        setData({
+          calls: data.calls.filter(call => call.id !== callId),
+        });
+      }
+
+      // Remove from expanded rows if it was expanded
+      setExpandedRows((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(callId);
+        return newSet;
+      });
+
+      alert('Call record deleted successfully');
+    } catch (err) {
+      console.error('Error deleting call record:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete call record');
+    } finally {
+      setDeletingCallId(null);
+    }
   };
 
   const initiateManualCall = async () => {
@@ -740,6 +780,7 @@ export default function CallsClient() {
                       <TableHead>Quote Number</TableHead>
                       <TableHead>Cost</TableHead>
                       <TableHead>Rating</TableHead>
+                      <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -795,10 +836,28 @@ export default function CallsClient() {
                                 <span className="text-xs text-gray-400">No transcript</span>
                               )}
                             </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent row expansion
+                                  deleteCall(call.id);
+                                }}
+                                disabled={deletingCallId === call.id}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                {deletingCallId === call.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </TableCell>
                           </TableRow>
                           {isExpanded && (
                             <TableRow key={`${call.id}-details`}>
-                              <TableCell colSpan={8} className="bg-gray-50 p-6">
+                              <TableCell colSpan={9} className="bg-gray-50 p-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                   {/* Left Column */}
                                   <div className="space-y-4">
