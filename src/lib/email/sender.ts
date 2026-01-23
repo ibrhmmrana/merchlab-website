@@ -22,6 +22,19 @@ export async function sendEmailReply(
       throw new Error('GMAIL_USER_EMAIL environment variable is required');
     }
 
+    // Determine which alias received the email (support@ or orders@)
+    // Use the first matching alias from the recipients list
+    const allRecipients = [
+      ...originalEmail.recipients.to,
+      ...originalEmail.recipients.cc,
+      ...originalEmail.recipients.bcc,
+    ].map(r => r.toLowerCase().trim());
+
+    // Find which alias received the email (support@merchlab.io or orders@merchlab.io)
+    const replyFromAddress = allRecipients.find(recipient => 
+      recipient === 'support@merchlab.io' || recipient === 'orders@merchlab.io'
+    ) || userEmail; // Fallback to default if no matching alias found
+
     // Format email response
     const formatted = formatEmailResponse(
       aiResponse,
@@ -32,7 +45,7 @@ export async function sendEmailReply(
 
     // Build email headers
     const headers: string[] = [
-      `From: ${userEmail}`,
+      `From: ${replyFromAddress}`,
       `To: ${originalEmail.senderEmail}${originalEmail.senderName ? ` <${originalEmail.senderEmail}>` : ''}`,
       `Subject: ${formatted.subject}`,
       `In-Reply-To: ${originalEmail.messageId}`,
