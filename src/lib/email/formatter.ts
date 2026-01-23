@@ -25,14 +25,25 @@ export function formatEmailResponse(
     ? `Re: ${(aiResponse as EmailAIResponse).emailMetadata?.subject || originalSubject || 'Your Inquiry'}`
     : 'Re: Your Inquiry';
 
-  // Greeting
+  // Greeting - always use customer name if available
   const greeting = customerName 
     ? `Dear ${customerName},`
     : 'Hello,';
 
-  // Format the AI response content
+  // Clean up AI response content
+  // Remove any existing greeting (Dear, Hello, Hi, etc.) from the start
+  let cleanedContent = aiResponse.content.trim();
+  
+  // Remove common greetings at the start of the response
+  cleanedContent = cleanedContent.replace(/^(Dear\s+[^,\n]+,?\s*|Hello,?\s*|Hi,?\s*|Good\s+(morning|afternoon|evening),?\s*)/i, '');
+  
+  // Remove any sign-offs at the end (Best regards, Sincerely, etc.)
+  // Match sign-offs that may span multiple lines (e.g., "Best regards,\nMerchLab AI Assistant")
+  cleanedContent = cleanedContent.replace(/\s*(Best\s+regards,?|Sincerely,?|Regards,?|Thank\s+you,?)\s*(?:\n\s*)?(?:MerchLab\s+AI\s+Assistant|AI\s+Assistant|.*)?\s*$/is, '').trim();
+
+  // Format the cleaned AI response content
   // Convert markdown-style formatting to HTML
-  let htmlContent = aiResponse.content
+  let htmlContent = cleanedContent
     // Convert **bold** to <strong>
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Convert *italic* to <em>
@@ -102,11 +113,7 @@ export function formatEmailResponse(
   </div>
   <div class="signature">
     <p>Best regards,<br>
-    <strong>MerchLab AI Assistant</strong></p>
-    <p style="font-size: 12px; color: #666; margin-top: 20px;">
-      This is an automated response from MerchLab's AI assistant. 
-      If you need to speak with a human representative, please reply to this email or contact us directly.
-    </p>
+    <strong>Mia</strong></p>
   </div>
 </body>
 </html>
@@ -116,14 +123,10 @@ export function formatEmailResponse(
   const plainTextBody = `
 ${greeting}
 
-${aiResponse.content}
+${cleanedContent}
 
 Best regards,
-MerchLab AI Assistant
-
----
-This is an automated response from MerchLab's AI assistant. 
-If you need to speak with a human representative, please reply to this email or contact us directly.
+Mia
   `.trim();
 
   return {
