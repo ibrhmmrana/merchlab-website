@@ -7,6 +7,12 @@ import { ParsedEmail } from './parser';
 const SKIP_ALIASES = ['hello@merchlab.io', 'info@merchlab.io'];
 
 /**
+ * Sender emails to skip processing
+ * Emails from these addresses will NOT be processed by the AI agent
+ */
+const SKIP_SENDERS = ['notifications@vercel.com'];
+
+/**
  * Whitelist of sender emails to process (for testing/development)
  * If set, only emails from these addresses will be processed
  * Set to empty array [] to allow all senders (production mode)
@@ -18,11 +24,23 @@ const ALLOWED_SENDERS: string[] = []; // Empty = allow all senders
  * 
  * Processing rules:
  * - Skips emails sent to addresses in SKIP_ALIASES (hello@, info@)
+ * - Skips emails from addresses in SKIP_SENDERS (notifications@vercel.com)
  * - Processes emails sent to support@merchlab.io and orders@merchlab.io
  * - If ALLOWED_SENDERS is set, only processes emails from those senders (testing mode)
  * - If ALLOWED_SENDERS is empty, processes emails from all senders (production mode)
  */
 export function shouldProcessEmail(email: ParsedEmail): boolean {
+  // Check if sender is in the skip list
+  const senderEmail = email.senderEmail.toLowerCase().trim();
+  const shouldSkipSender = SKIP_SENDERS.some(skipSender => 
+    senderEmail === skipSender.toLowerCase()
+  );
+
+  if (shouldSkipSender) {
+    console.log(`Skipping email ${email.messageId} - from skip sender: ${senderEmail}`);
+    return false;
+  }
+
   // Get all recipients (To, CC, BCC)
   const allRecipients = [
     ...email.recipients.to,
@@ -44,7 +62,6 @@ export function shouldProcessEmail(email: ParsedEmail): boolean {
 
   // If ALLOWED_SENDERS is set (testing mode), check sender
   if (ALLOWED_SENDERS.length > 0) {
-    const senderEmail = email.senderEmail.toLowerCase().trim();
     const isAllowedSender = ALLOWED_SENDERS.some(allowed => 
       senderEmail === allowed.toLowerCase()
     );
