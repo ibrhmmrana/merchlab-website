@@ -31,6 +31,26 @@ export interface OrderDetails {
   } | null;
 }
 
+export interface DeliveryEvent {
+  description: string;
+  branch: string;
+  datetime: string;
+}
+
+export interface PODDetail {
+  podDate: string;
+  podTime: string;
+  name: string;
+  podComments: string;
+  podFileAttached: boolean;
+}
+
+export interface DeliveryStatusResponse {
+  waybillNumber: string;
+  events: DeliveryEvent[];
+  podDetails: PODDetail[];
+}
+
 export interface DeliveryInfo {
   invoiceNumber: string;
   isDelivery: boolean;
@@ -48,6 +68,13 @@ export interface DeliveryInfo {
     email: string;
     phone: string;
   } | null;
+  // New delivery tracking fields
+  waybillNumber?: string;
+  deliveryEvents?: DeliveryEvent[];
+  podDetails?: PODDetail[];
+  isDelivered?: boolean;
+  latestEvent?: DeliveryEvent;
+  orderId?: string;
 }
 
 // Helper to safely extract string from unknown object
@@ -356,8 +383,58 @@ export async function getOrderDetails(invoiceNumber: string): Promise<OrderDetai
 }
 
 /**
+ * Fetch delivery status from Barron API using order ID
+ */
+async function fetchDeliveryStatus(orderId: string): Promise<DeliveryStatusResponse[] | null> {
+  try {
+    const accessToken = await getAccessToken();
+    
+    // Format order ID to BAR-SO format if needed
+    let formattedOrderId = orderId;
+    if (!formattedOrderId.startsWith('BAR-SO')) {
+      if (formattedOrderId.startsWith('SO')) {
+        formattedOrderId = `BAR-${formattedOrderId}`;
+      } else {
+        formattedOrderId = `BAR-SO${formattedOrderId}`;
+      }
+    }
+
+    const url = `https://integration.barron.com/orders/delivery-statuses/${formattedOrderId}`;
+    console.log(`[getDeliveryInfo] Fetching delivery status from: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Order not found or no delivery status available
+        console.log(`[getDeliveryInfo] No delivery status found for order: ${formattedOrderId}`);
+        return null;
+      }
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch delivery status: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (Array.isArray(data) && data.length > 0) {
+      return data as DeliveryStatusResponse[];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[getDeliveryInfo] Error fetching delivery status:', error);
+    throw error;
+  }
+}
+
+/**
  * Get delivery information by invoice number
- * Checks isDelivery flag from Barron API and gets delivery address from quote/invoice
+ * Uses new Barron delivery-statuses endpoint to get real-time tracking information
  */
 export async function getDeliveryInfo(invoiceNumber: string): Promise<DeliveryInfo | null> {
   try {
@@ -434,11 +511,50 @@ export async function getDeliveryInfo(invoiceNumber: string): Promise<DeliveryIn
       }
     }
 
+    // Fetch delivery status from new endpoint
+    let deliveryStatusData: DeliveryStatusResponse[] | null = null;
+    let waybillNumber: string | undefined;
+    let deliveryEvents: DeliveryEvent[] | undefined;
+    let podDetails: PODDetail[] | undefined;
+    let isDelivered = false;
+    let latestEvent: DeliveryEvent | undefined;
+
+    if (order.orderId) {
+      try {
+        deliveryStatusData = await fetchDeliveryStatus(order.orderId);
+        
+        if (deliveryStatusData && deliveryStatusData.length > 0) {
+          // Get the first waybill (most recent)
+          const firstWaybill = deliveryStatusData[0];
+          waybillNumber = firstWaybill.waybillNumber;
+          deliveryEvents = firstWaybill.events || [];
+          podDetails = firstWaybill.podDetails || [];
+
+          // Check if order is delivered (look for "Delivered" event)
+          if (deliveryEvents.length > 0) {
+            latestEvent = deliveryEvents[0]; // Events are typically in reverse chronological order
+            isDelivered = deliveryEvents.some(event => 
+              event.description.toLowerCase().includes('delivered')
+            );
+          }
+        }
+      } catch (error) {
+        console.error('[getDeliveryInfo] Error fetching delivery status, continuing without tracking info:', error);
+        // Continue without delivery status - don't fail the entire request
+      }
+    }
+
     return {
       invoiceNumber,
       isDelivery: order.isDelivery,
       deliveryAddress,
       customer,
+      waybillNumber,
+      deliveryEvents,
+      podDetails,
+      isDelivered,
+      latestEvent,
+      orderId: order.orderId,
     };
   } catch (error) {
     console.error('Error fetching delivery info:', error);

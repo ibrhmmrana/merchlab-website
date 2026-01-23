@@ -49,7 +49,26 @@ export async function POST(request: NextRequest) {
     // Build spoken summary
     let spoken_summary = '';
     
-    if (deliveryInfo.isDelivery && deliveryInfo.deliveryAddress) {
+    if (deliveryInfo.isDelivered) {
+      if (deliveryInfo.podDetails && deliveryInfo.podDetails.length > 0) {
+        const pod = deliveryInfo.podDetails[0];
+        spoken_summary = `Great news! Your order has been delivered on ${pod.podDate} at ${pod.podTime}.`;
+        if (pod.name) {
+          spoken_summary += ` It was signed for by ${pod.name}.`;
+        }
+      } else {
+        spoken_summary = `Great news! Your order has been delivered.`;
+      }
+    } else if (deliveryInfo.latestEvent) {
+      const event = deliveryInfo.latestEvent;
+      spoken_summary = `Your order's latest status is: ${event.description}`;
+      if (event.branch) {
+        spoken_summary += ` at ${event.branch}`;
+      }
+      if (event.datetime) {
+        spoken_summary += ` on ${event.datetime}`;
+      }
+    } else if (deliveryInfo.isDelivery && deliveryInfo.deliveryAddress) {
       const addr = deliveryInfo.deliveryAddress;
       const addressParts: string[] = [];
       if (addr.street) addressParts.push(addr.street);
@@ -69,6 +88,12 @@ export async function POST(request: NextRequest) {
       is_delivery: deliveryInfo.isDelivery,
       delivery_address: deliveryInfo.deliveryAddress,
       customer: deliveryInfo.customer,
+      waybill_number: deliveryInfo.waybillNumber,
+      delivery_events: deliveryInfo.deliveryEvents,
+      pod_details: deliveryInfo.podDetails,
+      is_delivered: deliveryInfo.isDelivered,
+      latest_event: deliveryInfo.latestEvent,
+      order_id: deliveryInfo.orderId,
     };
 
     return NextResponse.json(successResponse(responseData, spoken_summary));

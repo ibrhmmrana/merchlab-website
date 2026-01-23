@@ -1186,15 +1186,55 @@ export async function processMessage(
             toolResponse += `\nDelivery address not available.`;
           }
 
+          // Add delivery tracking information if available
+          if (deliveryInfo.waybillNumber) {
+            toolResponse += `\n\nWaybill Number: ${deliveryInfo.waybillNumber}`;
+          }
+
+          if (deliveryInfo.isDelivered) {
+            toolResponse += `\n\nStatus: ✅ Delivered`;
+            if (deliveryInfo.podDetails && deliveryInfo.podDetails.length > 0) {
+              const pod = deliveryInfo.podDetails[0];
+              toolResponse += `\nDelivered on: ${pod.podDate} at ${pod.podTime}`;
+              if (pod.name) {
+                toolResponse += `\nSigned by: ${pod.name}`;
+              }
+            }
+          } else if (deliveryInfo.latestEvent) {
+            toolResponse += `\n\nLatest Status: ${deliveryInfo.latestEvent.description}`;
+            if (deliveryInfo.latestEvent.branch) {
+              toolResponse += ` (${deliveryInfo.latestEvent.branch})`;
+            }
+            if (deliveryInfo.latestEvent.datetime) {
+              toolResponse += `\nDate/Time: ${deliveryInfo.latestEvent.datetime}`;
+            }
+          }
+
+          // Show recent delivery events if available
+          if (deliveryInfo.deliveryEvents && deliveryInfo.deliveryEvents.length > 0) {
+            toolResponse += `\n\nDelivery Tracking Events:`;
+            // Show up to 5 most recent events
+            const recentEvents = deliveryInfo.deliveryEvents.slice(0, 5);
+            for (const event of recentEvents) {
+              toolResponse += `\n- ${event.description}`;
+              if (event.branch) {
+                toolResponse += ` (${event.branch})`;
+              }
+              if (event.datetime) {
+                toolResponse += ` - ${event.datetime}`;
+              }
+            }
+            if (deliveryInfo.deliveryEvents.length > 5) {
+              toolResponse += `\n... and ${deliveryInfo.deliveryEvents.length - 5} more events`;
+            }
+          }
+
           if (deliveryInfo.customer) {
             toolResponse += `\n\nCustomer: ${deliveryInfo.customer.name}`;
             if (deliveryInfo.customer.company && deliveryInfo.customer.company !== '-') {
               toolResponse += ` (${deliveryInfo.customer.company})`;
             }
           }
-
-          // Note: Delivery date is not available from Barron API, so we don't include it
-          toolResponse += `\n\nNote: For delivery date information, please contact our support team.`;
         } else {
           toolResponse = `Order not found for invoice number: ${invoiceNumber}. Please verify the invoice number.`;
         }
