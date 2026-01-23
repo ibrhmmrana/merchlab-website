@@ -1,8 +1,16 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 export default function WhatsAppWidget() {
+  const pathname = usePathname();
+  
+  // Hide widget on dashboard pages
+  if (pathname?.startsWith('/dashboard-admin')) {
+    return null;
+  }
+  
   return (
     <Link
       href="https://wa.me/+27726187461"
