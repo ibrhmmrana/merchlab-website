@@ -7,6 +7,7 @@ import CookieConsent from "@/components/CookieConsent";
 import { BrandingProvider } from "@/components/providers/BrandingProvider";
 import { ConditionalFooter } from "@/components/ConditionalFooter";
 import { ConditionalHeader } from "@/components/ConditionalHeader";
+import WhatsAppWidget from "@/components/WhatsAppWidget";
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://merchlab.io'),
@@ -62,6 +63,7 @@ export default function RootLayout({
             <ConditionalFooter />
             <CartDrawer />
             <CookieConsent />
+            <WhatsAppWidget />
           </div>
         </GlobalLoadingProvider>
         </BrandingProvider>
