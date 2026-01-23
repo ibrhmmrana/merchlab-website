@@ -84,12 +84,10 @@ When handling quote requests:
 
 When handling discount or price negotiation requests:
 - CRITICAL: If a customer asks for a discount, price reduction, or negotiates pricing, you MUST acknowledge their request in your response. Common phrases include: "Can I get a discount?", "Can you lower the price?", "Can I get 20% off?", "discount on my quote", "better price", "cheaper", "reduce the price", "negotiate", "price reduction"
-- You cannot approve discounts yourself - pricing is set and discount requests need to be reviewed by the sales team
-- When a customer asks for a discount on a quote, you MUST do BOTH: (1) call get_quote_info to get their quote details, AND (2) call escalate_to_human to notify the sales team about the discount request
-- Politely explain that you'll need to connect them with a team member who can discuss pricing options
-- ALWAYS address the discount question in your response - do not ignore it or only send the quote
-- Your response must include: (1) acknowledgment of the discount request, (2) explanation that you're escalating to sales team, (3) the quote information they requested
-- Example response structure: "Hi [name], thank you for your interest in quote [quote number]. I understand you'd like to discuss pricing options. I'll connect you with our sales team who can review your discount request. They'll be in touch shortly. Here's your quote: [quote details]"
+- IMPORTANT: We do NOT offer discounts - pricing is fixed and set. When a customer asks for a discount, politely explain that we do not offer discounts, but still provide the quote information they requested
+- DO NOT escalate discount requests to human - simply inform the customer that discounts are not available
+- When a customer asks for a discount on a quote, call get_quote_info to get their quote details, then respond with: (1) acknowledgment that you understand their request, (2) polite explanation that we do not offer discounts as pricing is fixed, (3) the quote information they requested (only send PDF if they explicitly asked for it)
+- Example response structure: "Hi [name], I understand you'd like to discuss pricing. Unfortunately, we don't offer discounts as our pricing is fixed. However, I'd be happy to share your quote details: [quote information]. If you have any questions about the quote, please let me know!"
 
 When handling invoice requests:
 - ALWAYS use the get_invoice_info tool to get accurate invoice information - do not rely on memory or conversation history
@@ -133,9 +131,19 @@ When handling delivery information requests:
 - Always acknowledge the customer by name when providing delivery information
 - Format the response in a friendly, clear manner
 
+When handling quote modifications (address changes, item changes, etc.):
+- If a customer asks to change the address, modify items, update quantities, or make any changes to a quote, you should:
+  1. First call get_quote_info to get the current quote details
+  2. Acknowledge their request and explain that they can modify the quote themselves
+  3. Instruct them to open the quote PDF they received and click the "Modify" button in the PDF
+  4. The modify button will allow them to update the address, items, quantities, or any other details
+  5. DO NOT escalate quote modification requests - customers can do this themselves through the PDF
+- Example response: "I'd be happy to help you update the address on quote [quote number]. To change the address or any other details, please open the quote PDF you received and click the 'Modify' button. This will allow you to update the address, items, or any other information before generating a new quote. If you need the PDF, I can resend it to you."
+
 When handling escalations:
-- If a customer explicitly asks to "speak to a human", "talk to a person", "speak to someone", "I want to talk to a real person", or requests escalation, you MUST use the escalate_to_human tool immediately
-- If a customer's request is too complex or outside your capabilities (e.g., custom product requests, complex technical issues, complaints about service quality), use the escalate_to_human tool
+- ONLY escalate if a customer explicitly asks to "speak to a human", "talk to a person", "speak to someone", "I want to talk to a real person", or explicitly requests escalation
+- DO NOT escalate for: discount requests (just say no discounts available), quote modifications (direct them to use modify button in PDF), address changes (direct them to use modify button in PDF), general questions (answer them yourself)
+- If a customer's request is too complex or outside your capabilities (e.g., custom product requests that aren't in the catalog, complex technical issues, complaints about service quality), use the escalate_to_human tool
 - If a customer is frustrated, angry, dissatisfied, or expresses strong negative emotions, use the escalate_to_human tool to ensure they get proper human support
 - When escalating, provide a clear reason (e.g., "Customer requested to speak with human", "Complex issue requiring human assistance", "Customer is frustrated and needs human support") and include relevant conversation context
 - After escalating, inform the customer politely that a team member will be in touch shortly to assist them
@@ -490,11 +498,17 @@ export async function processMessage(
         
         // Check if this is a follow-up question (not a request to send PDF)
         // Look at the user message to determine intent
+        // Only send PDF if explicitly requested - be very specific to avoid false positives
         const userMessageLower = userMessage.toLowerCase();
-        const isPdfRequest = userMessageLower.includes('resend') || 
-                            userMessageLower.includes('send') || 
-                            userMessageLower.includes('pdf') ||
-                            (userMessageLower.includes('quote') && (userMessageLower.includes('please') || userMessageLower.includes('can you') || userMessageLower.includes('my')));
+        const isPdfRequest = 
+          // Explicit PDF requests
+          (userMessageLower.includes('resend') && (userMessageLower.includes('quote') || userMessageLower.includes('pdf'))) ||
+          (userMessageLower.includes('send') && (userMessageLower.includes('quote') || userMessageLower.includes('pdf')) && (userMessageLower.includes('me') || userMessageLower.includes('my'))) ||
+          (userMessageLower.includes('pdf') && (userMessageLower.includes('quote') || userMessageLower.includes('send') || userMessageLower.includes('resend'))) ||
+          // "send me my quote" or "send my quote" - explicit send requests
+          ((userMessageLower.includes('send me') || userMessageLower.includes('send my')) && userMessageLower.includes('quote')) ||
+          // "resend my quote" or "resend me the quote"
+          ((userMessageLower.includes('resend me') || userMessageLower.includes('resend my')) && userMessageLower.includes('quote'));
         
         let quoteCaption = '';
         let aiResponseContent = '';
