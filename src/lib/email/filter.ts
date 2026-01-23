@@ -2,32 +2,27 @@ import { ParsedEmail } from './parser';
 
 /**
  * Email aliases to skip processing
+ * These addresses will NOT be processed by the AI agent
  */
 const SKIP_ALIASES = ['hello@merchlab.io', 'info@merchlab.io'];
 
 /**
- * Whitelist of sender emails to process (for testing)
- * Only emails from these addresses will be processed
+ * Whitelist of sender emails to process (for testing/development)
+ * If set, only emails from these addresses will be processed
+ * Set to empty array [] to allow all senders (production mode)
  */
-const ALLOWED_SENDERS = ['ibrahim@sagentics.ai'];
+const ALLOWED_SENDERS: string[] = []; // Empty = allow all senders
 
 /**
  * Check if email should be processed or skipped
- * Skips emails sent to hello@merchlab.io or info@merchlab.io
- * Only processes emails from allowed senders (for testing)
+ * 
+ * Processing rules:
+ * - Skips emails sent to addresses in SKIP_ALIASES (hello@, info@)
+ * - Processes emails sent to support@merchlab.io and orders@merchlab.io
+ * - If ALLOWED_SENDERS is set, only processes emails from those senders (testing mode)
+ * - If ALLOWED_SENDERS is empty, processes emails from all senders (production mode)
  */
 export function shouldProcessEmail(email: ParsedEmail): boolean {
-  // Check if sender is in the allowed list (for testing)
-  const senderEmail = email.senderEmail.toLowerCase().trim();
-  const isAllowedSender = ALLOWED_SENDERS.some(allowed => 
-    senderEmail === allowed.toLowerCase()
-  );
-
-  if (!isAllowedSender) {
-    console.log(`Skipping email ${email.messageId} - sender ${senderEmail} not in allowed list`);
-    return false;
-  }
-
   // Get all recipients (To, CC, BCC)
   const allRecipients = [
     ...email.recipients.to,
@@ -47,6 +42,20 @@ export function shouldProcessEmail(email: ParsedEmail): boolean {
     return false;
   }
 
+  // If ALLOWED_SENDERS is set (testing mode), check sender
+  if (ALLOWED_SENDERS.length > 0) {
+    const senderEmail = email.senderEmail.toLowerCase().trim();
+    const isAllowedSender = ALLOWED_SENDERS.some(allowed => 
+      senderEmail === allowed.toLowerCase()
+    );
+
+    if (!isAllowedSender) {
+      console.log(`Skipping email ${email.messageId} - sender ${senderEmail} not in allowed list`);
+      return false;
+    }
+  }
+
+  // Email passed all checks - process it
   return true;
 }
 
