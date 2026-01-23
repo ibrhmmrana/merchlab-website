@@ -15,6 +15,7 @@ import { Phone, ChevronDown, ChevronUp, ExternalLink, Play, Loader2, PhoneCall, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { type PeriodKey } from '@/server/admin/metrics';
 
@@ -114,6 +115,14 @@ export default function CallsClient() {
   const [loadingRecentQuotes, setLoadingRecentQuotes] = useState(false);
   const [initiatingCall, setInitiatingCall] = useState(false);
   const [pollingCall, setPollingCall] = useState(false);
+  
+  // Manual call state
+  const [manualCallDialogOpen, setManualCallDialogOpen] = useState(false);
+  const [manualCallPhone, setManualCallPhone] = useState('');
+  const [manualCallFirstName, setManualCallFirstName] = useState('');
+  const [manualCallQuoteNumber, setManualCallQuoteNumber] = useState('');
+  const [loadingQuoteDetails, setLoadingQuoteDetails] = useState(false);
+  const [initiatingManualCall, setInitiatingManualCall] = useState(false);
 
   useEffect(() => {
     async function fetchCalls() {
@@ -257,6 +266,13 @@ export default function CallsClient() {
     }
   }, [testCallDialogOpen]);
 
+  // Fetch recent quotes when manual call dialog opens
+  useEffect(() => {
+    if (manualCallDialogOpen) {
+      fetchRecentQuotes();
+    }
+  }, [manualCallDialogOpen]);
+
   const fetchRecentQuotes = async () => {
     try {
       setLoadingRecentQuotes(true);
@@ -274,6 +290,120 @@ export default function CallsClient() {
       console.error('Error fetching recent quotes:', err);
     } finally {
       setLoadingRecentQuotes(false);
+    }
+  };
+
+  const fetchQuoteDetails = async (quoteNumber: string) => {
+    if (!quoteNumber) return;
+    
+    try {
+      setLoadingQuoteDetails(true);
+      const response = await fetch(`/api/admin/calls/quote-details?quoteNumber=${encodeURIComponent(quoteNumber)}`, {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch quote details');
+      }
+
+      const result = await response.json();
+      if (result.firstName) {
+        setManualCallFirstName(result.firstName);
+      }
+      if (result.phone) {
+        setManualCallPhone(result.phone);
+      }
+    } catch (err) {
+      console.error('Error fetching quote details:', err);
+      alert('Failed to load quote details. You can still enter the information manually.');
+    } finally {
+      setLoadingQuoteDetails(false);
+    }
+  };
+
+  const handleQuoteSelect = (quoteNumber: string) => {
+    setManualCallQuoteNumber(quoteNumber);
+    fetchQuoteDetails(quoteNumber);
+  };
+
+  const initiateManualCall = async () => {
+    if (!manualCallPhone || !manualCallFirstName || !manualCallQuoteNumber) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setInitiatingManualCall(true);
+      const response = await fetch('/api/admin/calls/manual-call', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: manualCallPhone,
+          firstName: manualCallFirstName,
+          quoteNumber: manualCallQuoteNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to initiate call');
+      }
+
+      // Close dialog and start polling
+      setManualCallDialogOpen(false);
+      setPollingCall(true);
+      
+      // Normalize phone number for comparison (remove + and spaces)
+      const normalizedPhone = manualCallPhone.replace(/^\+/, '').replace(/\s/g, '');
+      const startTime = Date.now();
+      
+      // Poll for the call record (check every 2 seconds for up to 60 seconds)
+      let attempts = 0;
+      const maxAttempts = 30;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        
+        if (attempts > maxAttempts || Date.now() - startTime > 60000) {
+          clearInterval(pollInterval);
+          setPollingCall(false);
+          alert('Call initiated. The call record may take a moment to appear. Please refresh the page to see it.');
+          return;
+        }
+
+        try {
+          const params = new URLSearchParams({
+            period: 'all',
+          });
+          const pollResponse = await fetch(`/api/admin/calls?${params.toString()}`);
+          if (pollResponse.ok) {
+            const pollData = await pollResponse.json();
+            const newCall = pollData.calls?.find((call: CallRecord) => {
+              const callPhone = call.phone?.replace(/^\+/, '').replace(/\s/g, '') || '';
+              return callPhone === normalizedPhone && 
+                     call.quote_number === manualCallQuoteNumber &&
+                     new Date(call.created_at).getTime() > startTime - 5000; // Allow 5 second buffer
+            });
+
+            if (newCall) {
+              clearInterval(pollInterval);
+              setPollingCall(false);
+              // Refresh the page to show the new call
+              window.location.reload();
+            }
+          }
+        } catch (pollErr) {
+          console.error('Error polling for call:', pollErr);
+        }
+      }, 2000);
+
+      alert('Call initiated. The call record may take a moment to appear. Please refresh the page to see it.');
+    } catch (err) {
+      console.error('Error initiating manual call:', err);
+      alert(err instanceof Error ? err.message : 'Failed to initiate call');
+    } finally {
+      setInitiatingManualCall(false);
     }
   };
 
@@ -488,9 +618,17 @@ export default function CallsClient() {
             <Button
               onClick={() => setTestCallDialogOpen(true)}
               size="sm"
+              variant="outline"
             >
               <PhoneCall className="w-4 h-4 mr-2" />
               Test Call
+            </Button>
+            <Button
+              onClick={() => setManualCallDialogOpen(true)}
+              size="sm"
+            >
+              <Phone className="w-4 h-4 mr-2" />
+              Manual Call
             </Button>
           </div>
         </div>
@@ -941,6 +1079,129 @@ export default function CallsClient() {
               ) : (
                 <>
                   <PhoneCall className="w-4 h-4 mr-2" />
+                  Initiate Call
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Call Dialog */}
+      <Dialog 
+        open={manualCallDialogOpen} 
+        onOpenChange={(open) => {
+          setManualCallDialogOpen(open);
+          if (!open) {
+            // Reset form when dialog closes
+            setManualCallPhone('');
+            setManualCallFirstName('');
+            setManualCallQuoteNumber('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Initiate Manual Call</DialogTitle>
+            <DialogDescription>
+              Select a quote to automatically fill customer information, or enter details manually.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Quote Number</label>
+              {loadingRecentQuotes ? (
+                <div className="flex items-center gap-2 p-2 border rounded">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm text-gray-500">Loading quotes...</span>
+                </div>
+              ) : (
+                <>
+                  <Select
+                    value={manualCallQuoteNumber}
+                    onValueChange={handleQuoteSelect}
+                    disabled={initiatingManualCall || loadingQuoteDetails}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a quote from recent quotes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recentQuotes.map((quote) => (
+                        <SelectItem key={quote.quote_no} value={quote.quote_no}>
+                          {quote.quote_no} ({new Date(quote.created_at).toLocaleDateString()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="text"
+                    value={manualCallQuoteNumber}
+                    onChange={(e) => {
+                      setManualCallQuoteNumber(e.target.value);
+                      if (e.target.value) {
+                        fetchQuoteDetails(e.target.value);
+                      }
+                    }}
+                    disabled={initiatingManualCall || loadingQuoteDetails}
+                    placeholder="Or enter quote number manually"
+                    className="mt-2"
+                  />
+                </>
+              )}
+              {loadingQuoteDetails && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Loading quote details...</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Phone Number</label>
+              <Input
+                type="tel"
+                value={manualCallPhone}
+                onChange={(e) => setManualCallPhone(e.target.value)}
+                disabled={initiatingManualCall}
+                placeholder="Phone number will be auto-filled from quote"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Number can start with either +27 or 0. You can edit this value.
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">First Name</label>
+              <Input
+                type="text"
+                value={manualCallFirstName}
+                onChange={(e) => setManualCallFirstName(e.target.value)}
+                disabled={initiatingManualCall}
+                placeholder="First name will be auto-filled from quote"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                You can edit this value.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setManualCallDialogOpen(false)}
+              disabled={initiatingManualCall}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={initiateManualCall}
+              disabled={initiatingManualCall || !manualCallPhone || !manualCallFirstName || !manualCallQuoteNumber}
+            >
+              {initiatingManualCall ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Initiating...
+                </>
+              ) : (
+                <>
+                  <Phone className="w-4 h-4 mr-2" />
                   Initiate Call
                 </>
               )}
