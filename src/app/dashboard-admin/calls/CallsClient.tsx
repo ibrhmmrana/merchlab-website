@@ -111,7 +111,7 @@ export default function CallsClient() {
   const [testCallPhone, setTestCallPhone] = useState('');
   const [testCallFirstName, setTestCallFirstName] = useState('');
   const [testCallQuoteNumber, setTestCallQuoteNumber] = useState('');
-  const [recentQuotes, setRecentQuotes] = useState<Array<{ quote_no: string; created_at: string }>>([]);
+  const [recentQuotes, setRecentQuotes] = useState<Array<{ quote_no: string; created_at: string; value: number }>>([]);
   const [loadingRecentQuotes, setLoadingRecentQuotes] = useState(false);
   const [initiatingCall, setInitiatingCall] = useState(false);
   const [pollingCall, setPollingCall] = useState(false);
@@ -1103,11 +1103,17 @@ export default function CallsClient() {
                     placeholder="Enter quote number or select from recent"
                   />
                   <datalist id="recent-quotes-list">
-                    {recentQuotes.map((quote) => (
-                      <option key={quote.quote_no} value={quote.quote_no}>
-                        {quote.quote_no} ({new Date(quote.created_at).toLocaleDateString()})
-                      </option>
-                    ))}
+                    {recentQuotes.map((quote) => {
+                      const formattedValue = new Intl.NumberFormat('en-ZA', {
+                        style: 'currency',
+                        currency: 'ZAR',
+                      }).format(quote.value);
+                      return (
+                        <option key={quote.quote_no} value={quote.quote_no}>
+                          {quote.quote_no} - {formattedValue} ({new Date(quote.created_at).toLocaleDateString()})
+                        </option>
+                      );
+                    })}
                   </datalist>
                 </>
               )}
@@ -1184,13 +1190,19 @@ export default function CallsClient() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select a quote from recent quotes" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {recentQuotes.map((quote) => (
+                  <SelectContent>
+                    {recentQuotes.map((quote) => {
+                      const formattedValue = new Intl.NumberFormat('en-ZA', {
+                        style: 'currency',
+                        currency: 'ZAR',
+                      }).format(quote.value);
+                      return (
                         <SelectItem key={quote.quote_no} value={quote.quote_no}>
-                          {quote.quote_no} ({new Date(quote.created_at).toLocaleDateString()})
+                          {quote.quote_no} - {formattedValue} ({new Date(quote.created_at).toLocaleDateString()})
                         </SelectItem>
-                      ))}
-                    </SelectContent>
+                      );
+                    })}
+                  </SelectContent>
                   </Select>
                   <Input
                     type="text"
