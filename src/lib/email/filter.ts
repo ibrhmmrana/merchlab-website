@@ -1,10 +1,11 @@
 import { ParsedEmail } from './parser';
 
 /**
- * Email aliases to skip processing
- * These addresses will NOT be processed by the AI agent
+ * Email aliases to skip processing (e.g. internal-only addresses).
+ * Emails sent to these addresses will NOT be processed by the AI agent.
+ * Empty = process all incoming emails (hello@ and info@ are both handled).
  */
-const SKIP_ALIASES = ['hello@merchlab.io', 'info@merchlab.io'];
+const SKIP_ALIASES: string[] = [];
 
 /**
  * Sender emails to skip processing
@@ -23,9 +24,9 @@ const ALLOWED_SENDERS: string[] = []; // Empty = allow all senders
  * Check if email should be processed or skipped
  * 
  * Processing rules:
- * - Skips emails sent to addresses in SKIP_ALIASES (hello@, info@)
- * - Skips emails from addresses in SKIP_SENDERS (notifications@vercel.com)
- * - Processes emails sent to support@merchlab.io and orders@merchlab.io
+ * - Skips emails sent to addresses in SKIP_ALIASES (when non-empty)
+ * - Skips emails from addresses in SKIP_SENDERS (e.g. notifications@vercel.com)
+ * - Processes emails sent to hello@ and info@ (and any other inbox addresses)
  * - If ALLOWED_SENDERS is set, only processes emails from those senders (testing mode)
  * - If ALLOWED_SENDERS is empty, processes emails from all senders (production mode)
  */
