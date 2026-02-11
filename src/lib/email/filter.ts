@@ -8,10 +8,13 @@ import { ParsedEmail } from './parser';
 const SKIP_ALIASES: string[] = [];
 
 /**
- * Sender emails to skip processing
- * Emails from these addresses will NOT be processed by the AI agent
+ * Sender exclusion list – the agent will NOT reply to emails from these addresses.
  */
-const SKIP_SENDERS = ['notifications@vercel.com'];
+const SKIP_SENDERS = [
+  'notifications@vercel.com',
+  'incontact@fnb.co.za',
+  'no-reply@barron.com',
+];
 
 /**
  * Whitelist of sender emails to process (for testing/development)
