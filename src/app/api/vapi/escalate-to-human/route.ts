@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         errorResponse(
           'Failed to send escalation email',
-          'Please contact support directly at support@merchlab.io or call our main line'
+          'Please contact support directly at hello@merchlab.io or call our main line'
         ),
         { status: 500 }
       );

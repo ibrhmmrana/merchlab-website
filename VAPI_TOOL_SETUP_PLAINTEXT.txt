@@ -293,7 +293,7 @@ I'm connecting you with our support team.
 
 Expected Response Shape:
 Success: {"ok": true, "data": {"escalation_id": "ESC-20250128-001", "status": "pending", "email_sent": true}, "spoken_summary": "I've escalated your request to our support team. A team member will contact you shortly."}
-Error: {"ok": false, "error": "Failed to send escalation email.", "hint": "Please contact support directly at support@merchlab.io or call our main line."}
+Error: {"ok": false, "error": "Failed to send escalation email.", "hint": "Please contact support directly at hello@merchlab.io or call our main line."}
 
 ================================================================================
 TOOL H: search_merchlab_knowledge_base

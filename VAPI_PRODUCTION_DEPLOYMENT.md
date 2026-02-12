@@ -30,7 +30,7 @@ BARRON_CLIENT_SECRET=<your_barron_client_secret>
 BARRON_REFRESH_TOKEN=<your_barron_refresh_token>
 OPENAI_API_KEY=<your_openai_key>
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-STAFF_EMAIL=support@merchlab.io
+STAFF_EMAIL=anita@merchlab.io
 GMAIL_USER_EMAIL=<your_gmail_account>
 ```
 

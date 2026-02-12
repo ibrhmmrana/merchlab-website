@@ -279,52 +279,16 @@ export default function WhatsappClient() {
     fetchConversations();
   }, []);
 
-  // Check for unread customer messages when conversations are first loaded
+  // Derive unread conversations from list summary (no per-conversation fetch)
   useEffect(() => {
-    if (conversations.length === 0) {
-      return;
+    const unread = new Set<string>();
+    for (const conv of conversations) {
+      if (conv.lastCustomerMessageId != null && !viewedMessageIds.has(conv.lastCustomerMessageId)) {
+        unread.add(conv.sessionId);
+      }
     }
-
-    async function checkUnreadMessages() {
-      const unreadConversations = new Set<string>();
-      const currentViewedIds = viewedMessageIdsRef.current; // Use ref to get latest value
-      
-      await Promise.all(
-        conversations.map(async (conv: WhatsappConversationSummary) => {
-          try {
-            const encodedSessionId = encodeURIComponent(conv.sessionId);
-            const messagesResponse = await fetch(`/api/admin/whatsapp/conversations/${encodedSessionId}`);
-            if (messagesResponse.ok) {
-              const messagesData = await messagesResponse.json();
-              const conversationMessages = messagesData.messages || [];
-              
-              // Check if there are any unread customer messages
-              const hasUnreadCustomerMessage = conversationMessages.some(
-                (msg: WhatsappMessage) => 
-                  msg.senderType === 'human' && !currentViewedIds.has(msg.id)
-              );
-              
-              if (hasUnreadCustomerMessage) {
-                unreadConversations.add(conv.sessionId);
-              }
-            }
-          } catch (error) {
-            console.error(`Error checking unread messages for conversation ${conv.sessionId}:`, error);
-          }
-        })
-      );
-      
-      setConversationsWithUnread(unreadConversations);
-    }
-
-    // Only check when conversations are loaded, not on every viewedMessageIds change
-    // We'll update unread status when messages are marked as viewed or new messages arrive
-    const timeoutId = setTimeout(() => {
-      checkUnreadMessages();
-    }, 500); // Small delay to avoid checking too frequently
-
-    return () => clearTimeout(timeoutId);
-  }, [conversations]); // Only depend on conversations, not viewedMessageIds
+    setConversationsWithUnread(unread);
+  }, [conversations, viewedMessageIds]);
 
   // Filter conversations based on search
   useEffect(() => {

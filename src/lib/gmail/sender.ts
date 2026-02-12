@@ -71,18 +71,17 @@ export interface EscalationContext {
   whatsappSessionId?: string;
 }
 
+/** Default escalation recipient when STAFF_EMAIL is not set */
+const DEFAULT_ESCALATION_EMAIL = 'anita@merchlab.io';
+
 export async function sendEscalationEmail(context: EscalationContext): Promise<void> {
-  const staffEmail = process.env.STAFF_EMAIL;
-  
-  if (!staffEmail) {
-    throw new Error('STAFF_EMAIL environment variable is required');
-  }
+  const staffEmail = process.env.STAFF_EMAIL ?? DEFAULT_ESCALATION_EMAIL;
 
   // Parse staff emails (support comma-separated list)
   const staffEmails = staffEmail.split(',').map(email => email.trim()).filter(email => email.length > 0);
 
   if (staffEmails.length === 0) {
-    throw new Error('No valid staff email addresses found in STAFF_EMAIL');
+    throw new Error('No valid staff email addresses in STAFF_EMAIL (or default)');
   }
 
   // Build email subject

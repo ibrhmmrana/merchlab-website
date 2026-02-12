@@ -31,6 +31,8 @@ export type WhatsappConversationSummary = {
   lastMessageContent: string;
   lastMessageAt?: string;
   messageCount: number;
+  /** Id of the most recent customer (human) message; used for unread indicator without fetching full thread */
+  lastCustomerMessageId?: number;
 };
 
 // Helper to safely parse JSON strings
@@ -220,6 +222,17 @@ function processConversationData(data: N8nChatHistoryRow[]): WhatsappConversatio
         const message = parseMessage(messageData || {});
         const lastMessageContent = message.content;
 
+        // Find the latest customer (human) message id for unread indicator
+        const sortedByTime = [...rows].sort((a, b) => {
+          const aVal = a.date_time ? new Date(a.date_time).getTime() : (a.id ?? 0);
+          const bVal = b.date_time ? new Date(b.date_time).getTime() : (b.id ?? 0);
+          return bVal - aVal; // descending = newest first
+        });
+        const latestCustomerRow = sortedByTime.find(
+          (r) => parseMessage(r.message).type === 'human'
+        );
+        const lastCustomerMessageId = latestCustomerRow?.id;
+
         summaries.push({
           sessionId,
           customerName,
@@ -227,6 +240,7 @@ function processConversationData(data: N8nChatHistoryRow[]): WhatsappConversatio
           lastMessageContent,
           lastMessageAt: latestRow.date_time || latestRow.created_at, // Prefer date_time, fallback to created_at
           messageCount: rows.length,
+          lastCustomerMessageId,
         });
       } catch (rowError) {
         console.error(`Error processing session ${sessionId}:`, rowError);

@@ -110,7 +110,7 @@ The agent categorizes emails into:
 
 ### Escalation
 - Same escalation logic as WhatsApp
-- Sends email to staff when customer requests human support
+- Sends escalation email to anita@merchlab.io (or STAFF_EMAIL if set) when customer requests human support
 - Includes full conversation context
 
 ## Testing

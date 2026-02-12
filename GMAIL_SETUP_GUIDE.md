@@ -80,8 +80,8 @@ GMAIL_CLIENT_SECRET=your-client-secret-here
 GMAIL_REFRESH_TOKEN=your-refresh-token-here
 GMAIL_USER_EMAIL=hello@merchlab.io  # The Gmail account to send emails from
 
-# Staff email for escalations
-STAFF_EMAIL=staff@merchlab.io  # Or use a comma-separated list: staff1@merchlab.io,staff2@merchlab.io
+# Staff email for escalations (defaults to anita@merchlab.io if not set)
+STAFF_EMAIL=anita@merchlab.io  # Or use a comma-separated list: anita@merchlab.io,other@merchlab.io
 ```
 
 ## What We'll Implement
