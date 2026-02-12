@@ -504,8 +504,9 @@ export default function ProductCard({ group }: Props) {
           availableVariants: variants?.map(v => ({ colour: v.colour, size: v.size, stock_id: v.stock_id }))
         });
         
-        // After user saves branding, add to cart including branding data
-        if (result && result.selections && result.selections.length > 0) {
+        // After user saves branding, add to cart including branding data (single result only; bulk returns array)
+        const singleResult = result && !Array.isArray(result) ? result : null;
+        if (singleResult?.selections && singleResult.selections.length > 0) {
           if (!selectedVariant) {
             console.error('ProductCard: No selected variant available to add to cart', {
               colourBeforeBranding,
@@ -517,7 +518,7 @@ export default function ProductCard({ group }: Props) {
           }
           
           // Convert branding selections to the format expected by cart
-          const brandingSelections = result.selections.map(sel => ({
+          const brandingSelections = singleResult.selections.map(sel => ({
             branding_position: sel.position,
             branding_type: sel.type || '',
             branding_size: sel.size || '',
@@ -1260,7 +1261,8 @@ export default function ProductCard({ group }: Props) {
                     });
 
                     if (Array.isArray(result) && result.length > 0) {
-                      result.forEach((item: { variantId?: string; colour?: string; size?: string; quantity: number; selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string; artwork_url?: string; logo_file?: string }> }) => {
+                      type BulkItem = { variantId?: string; colour?: string; size?: string; quantity: number; selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string; artwork_url?: string; logo_file?: string }> };
+                      (result as unknown as BulkItem[]).forEach((item) => {
                         const variant = variants?.find((v) => String(v.stock_id) === item.variantId);
                         if (variant && item.selections?.length) {
                           const brandingSelections = item.selections.map((sel) => ({
