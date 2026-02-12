@@ -13,5 +13,25 @@ export type BrandingCompletePayload = {
   selections: BrandingSelectionInput[];
 };
 
+/** When completing bulk branding (multiple items from Add by size) */
+export type BulkBrandingCompletePayload = {
+  bulk: true;
+  items: Array<{
+    variantId: string;
+    colour?: string;
+    size?: string;
+    quantity: number;
+    selections: BrandingSelectionInput[];
+  }>;
+};
+
 export type BrandingMode = 'branded' | 'unbranded';
+
+export type BrandingBulkItem = {
+  variantId: string;
+  colour?: string;
+  size?: string;
+  quantity: number;
+  imageUrl: string;
+};
 

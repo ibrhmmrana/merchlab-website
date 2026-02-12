@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import type { BrandingCompletePayload } from "./types";
+import type { BrandingCompletePayload, BulkBrandingCompletePayload, BrandingBulkItem } from "./types";
 
 const BrandingSheet = dynamic(() => import("./BrandingSheet"), { ssr: false });
 
@@ -10,13 +10,13 @@ export type BrandingOpenPayload = {
   productId: string;
   productName: string;
   stockHeaderId: number;
-  // include whatever you already have for variant/colour/size on your card
   variantId?: string;
   colour?: string;
   size?: string;
   quantity?: number;
-  // the key you use to identify a cart line; we can set or compute later
   itemKey?: string;
+  /** When set, sheet shows item grid under "Choose your position type(s)" and Next advances through items */
+  bulkItems?: BrandingBulkItem[];
 };
 
 type NormalizedBrandingResult = {
@@ -27,7 +27,7 @@ type NormalizedBrandingResult = {
 type BrandingResult = NormalizedBrandingResult | null;
 
 type Ctx = {
-  openBranding: (p: BrandingOpenPayload) => Promise<BrandingResult>;
+  openBranding: (p: BrandingOpenPayload) => Promise<BrandingResult | NormalizedBrandingResult[]>;
 };
 
 const BrandingCtx = createContext<Ctx | null>(null);
@@ -40,15 +40,14 @@ export function useBrandingSheet() {
 
 export function BrandingSheetProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<BrandingOpenPayload | null>(null);
-  const [resolver, setResolver] = useState<((v: BrandingResult) => void) | null>(null);
+  const [resolver, setResolver] = useState<((v: BrandingResult | NormalizedBrandingResult[]) => void) | null>(null);
 
   const openBranding = useCallback((p: BrandingOpenPayload) => {
-    // Guard: log if stock_header_id looks suspicious
     if (p.stockHeaderId < 1000) {
       console.warn('BrandingSheetProvider: stockHeaderId seems too small:', p.stockHeaderId);
     }
     setPending(p);
-    return new Promise<BrandingResult>((resolve) => {
+    return new Promise<BrandingResult | NormalizedBrandingResult[]>((resolve) => {
       setResolver(() => resolve);
     });
   }, []);
@@ -62,47 +61,55 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
     setResolver(null);
   }
 
-  function handleComplete(payload: BrandingCompletePayload) {
+  function handleComplete(payload: BrandingCompletePayload | BulkBrandingCompletePayload) {
     console.log('BrandingSheetContext: handleComplete called with:', payload);
-    
-    // Guard: every selection must have type and size
-    const allChosen = payload.selections.every(s => s.type && s.size);
-    if (!allChosen) {
-      console.warn('BrandingSheetContext: Some selections are missing type or size');
-      // Return null to indicate incomplete selection
-      if (resolver) {
-        resolver(null);
-      }
+
+    if ('bulk' in payload && payload.bulk) {
+      const bulk = payload as BulkBrandingCompletePayload;
+      const normalized = bulk.items.map((item) => ({
+        stockHeaderId: pending!.stockHeaderId,
+        variantId: item.variantId,
+        colour: item.colour,
+        size: item.size,
+        quantity: item.quantity,
+        selections: item.selections.map(s => ({
+          position: s.position,
+          type: s.type!,
+          size: s.size!,
+          colorCount: s.colorCount,
+          comment: s.comment,
+          artwork_url: s.artwork_url,
+          logo_file: s.logo_file,
+        })),
+      }));
+      if (resolver) resolver(normalized);
       close();
       return;
     }
 
-    // Normalize to stricter internal shape (non-null assertions safe after guard)
+    const single = payload as BrandingCompletePayload;
+    const allChosen = single.selections.every(s => s.type && s.size);
+    if (!allChosen) {
+      console.warn('BrandingSheetContext: Some selections are missing type or size');
+      if (resolver) resolver(null);
+      close();
+      return;
+    }
+
     const normalized: NormalizedBrandingResult = {
-      stockHeaderId: payload.stockHeaderId,
-      selections: payload.selections.map(s => ({
+      stockHeaderId: single.stockHeaderId,
+      selections: single.selections.map(s => ({
         position: s.position,
-        type: s.type!,   // non-null now
-        size: s.size!,   // non-null now
+        type: s.type!,
+        size: s.size!,
         colorCount: s.colorCount,
         comment: s.comment,
-        artwork_url: s.artwork_url, // Include artwork_url
-        logo_file: s.logo_file, // Include vectorized SVG URL
+        artwork_url: s.artwork_url,
+        logo_file: s.logo_file,
       })),
     };
-    
-    console.debug('[branding] context normalized', { 
-      selectionsCount: normalized.selections.length,
-      selections: normalized.selections.map(s => ({ 
-        position: s.position, 
-        artwork_url: s.artwork_url, 
-        logo_file: s.logo_file 
-      }))
-    });
 
-    if (resolver) {
-      resolver(normalized);
-    }
+    if (resolver) resolver(normalized);
     close();
   }
 
@@ -118,6 +125,7 @@ export function BrandingSheetProvider({ children }: { children: React.ReactNode 
           colour={pending.colour}
           size={pending.size}
           itemKey={pending.itemKey}
+          bulkItems={pending.bulkItems}
           onComplete={handleComplete}
         />
       ) : null}

@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
 import { getAccessToken, getBarronOAuthConfig } from '@/lib/whatsapp/barronAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { sendFlaggedOrderEmail } from '@/lib/gmail/sender';
 
 export const runtime = 'nodejs';
+
+function formatOrderId(id: string): string {
+  const trimmed = String(id || '').trim();
+  if (trimmed.startsWith('BAR-SO')) return trimmed;
+  if (trimmed.startsWith('SO')) return `BAR-${trimmed}`;
+  return `BAR-SO${trimmed}`;
+}
 
 // Fetch all orders from Barron API (handles pagination)
 async function fetchAllOrders(): Promise<Array<{
@@ -520,8 +529,52 @@ export async function GET(request: NextRequest) {
         }
       });
     }
-    
+
     console.log(`Processed ${orders.length} orders, grouped into ${Object.keys(statusCounts).length} status categories`);
+
+    // Notify staff for flagged (stuck) orders – at most once per order per day
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+    const stuckOrders: Array<{ formattedOrderId: string; order: any; displayStage: string; statusDate: string }> = [];
+    for (const [, data] of Object.entries(statusCounts)) {
+      for (const o of data.orders) {
+        if (o.isStuck) {
+          stuckOrders.push({
+            formattedOrderId: formatOrderId(o.orderId),
+            order: o,
+            displayStage: o.deliveryStage,
+            statusDate: o.statusDate || o.orderDate || '',
+          });
+        }
+      }
+    }
+    if (stuckOrders.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data: alreadyNotified } = await supabase
+          .from('flagged_order_notification_log')
+          .select('order_id')
+          .eq('notified_date', today);
+        const notifiedSet = new Set((alreadyNotified || []).map((r: { order_id: string }) => r.order_id));
+        for (const { formattedOrderId, order, displayStage, statusDate } of stuckOrders) {
+          if (notifiedSet.has(formattedOrderId)) continue;
+          await sendFlaggedOrderEmail({
+            orderId: formattedOrderId,
+            stage: displayStage,
+            statusDate,
+            customerReference: order.customerReference,
+            orderDate: order.orderDate,
+          });
+          await supabase.from('flagged_order_notification_log').insert({
+            order_id: formattedOrderId,
+            notified_date: today,
+          });
+          notifiedSet.add(formattedOrderId);
+        }
+      } catch (notifyError) {
+        console.error('Error sending flagged order notifications:', notifyError);
+        // Do not fail the request – status counts still return
+      }
+    }
 
     return NextResponse.json(
       {

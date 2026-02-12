@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -14,7 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { fetchBrandingPositions, fetchBrandingTypes, fetchBrandingSizes } from '@/lib/branding';
-import type { BrandingCompletePayload } from './types';
+import type { BrandingCompletePayload, BulkBrandingCompletePayload, BrandingBulkItem, BrandingSelectionInput } from './types';
 import { getOrCreateSessionToken } from '@/lib/session';
 
 export type PositionOption = string;
@@ -28,13 +28,13 @@ export type BrandingSheetProps = {
   productName: string;
   stockHeaderId: number;
 
-  // initial variant/qty context if you want to show it in the header later
   colour?: string | null;
   size?: string | null;
-  itemKey?: string; // Cart item key for saving branding selections
+  itemKey?: string;
+  /** When set, show item grid under "Choose your position type(s)" and Next advances through items */
+  bulkItems?: BrandingBulkItem[];
 
-  // when user presses "Save Branding", we resolve with selections
-  onComplete: (payload: BrandingCompletePayload) => void;
+  onComplete: (payload: BrandingCompletePayload | BulkBrandingCompletePayload) => void;
 };
 
 type PosDraft = {
@@ -49,11 +49,18 @@ type PosDraft = {
 };
 
 export default function BrandingSheet(props: BrandingSheetProps) {
-  const { open, onClose, productName, stockHeaderId, colour, size, itemKey, onComplete } = props;
+  const { open, onClose, productName, stockHeaderId, colour, size, itemKey, bulkItems, onComplete } = props;
+
+  const isBulk = Boolean(bulkItems && bulkItems.length > 0);
 
   const [screen, setScreen] = useState<"choose" | "details">("choose");
   const [picked, setPicked] = useState<string[]>([]);
   const [active, setActive] = useState<string | null>(null);
+
+  // Bulk: indices into bulkItems selected for applying the current branding (multiselect)
+  const [bulkSelectedIndices, setBulkSelectedIndices] = useState<number[]>([]);
+  // Bulk: accumulated completed item payloads (so we can apply different branding to different subsets)
+  const [bulkCompletedItems, setBulkCompletedItems] = useState<Array<{ variantId: string; colour?: string; size?: string; quantity: number; selections: BrandingSelectionInput[] }>>([]);
   const [loading, setLoading] = useState(false);
   const [positions, setPositions] = useState<string[]>([]);
   
@@ -112,8 +119,23 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       setActive(null);
       setDrafts({});
       setVectorized({});
+      setBulkSelectedIndices([]);
+      setBulkCompletedItems([]);
     }
   }, [open]);
+
+  // When bulk has a single item, pre-select it so Next is enabled
+  useEffect(() => {
+    if (open && isBulk && bulkItems && bulkItems.length === 1 && bulkSelectedIndices.length === 0 && bulkCompletedItems.length === 0) {
+      setBulkSelectedIndices([0]);
+    }
+  }, [open, isBulk, bulkItems?.length, bulkSelectedIndices.length, bulkCompletedItems.length]);
+
+  const isBulkItemCompleted = useCallback((idx: number) => {
+    if (!bulkItems || idx < 0 || idx >= bulkItems.length) return false;
+    const item = bulkItems[idx];
+    return bulkCompletedItems.some((c) => c.variantId === item.variantId && c.size === item.size);
+  }, [bulkItems, bulkCompletedItems]);
 
   // Auto-vectorize existing artwork when details screen opens
   useEffect(() => {
@@ -273,7 +295,7 @@ export default function BrandingSheet(props: BrandingSheetProps) {
     }
   }, [picked, drafts, stockHeaderId, sizesByPositionType]);
 
-  const canNext = picked.length > 0;
+  const canNext = picked.length > 0 && (!isBulk || bulkSelectedIndices.length > 0);
   const allValid = useMemo(() => {
     if (picked.length === 0) return false;
     return picked.every((p) => {
@@ -482,17 +504,33 @@ export default function BrandingSheet(props: BrandingSheetProps) {
       colorCount: drafts[p].colorCount,
       comment: drafts[p].comment?.trim() || undefined,
       artwork_url: drafts[p].artwork_url,
-      logo_file: drafts[p].logo_file, // Include vectorized SVG URL
+      logo_file: drafts[p].logo_file,
     }));
 
-    console.log('Saving branding selections:', { stockHeaderId, selections });
-    
-    onComplete({
-      stockHeaderId,
-      selections,
-    });
+    if (isBulk && bulkItems && bulkSelectedIndices.length > 0) {
+      const newPayloads = bulkSelectedIndices.map((idx) => ({
+        variantId: bulkItems[idx].variantId,
+        colour: bulkItems[idx].colour,
+        size: bulkItems[idx].size,
+        quantity: bulkItems[idx].quantity,
+        selections,
+      }));
+      const nextCompleted = [...bulkCompletedItems, ...newPayloads];
+      if (nextCompleted.length >= bulkItems.length) {
+        onComplete({ bulk: true, items: nextCompleted });
+        return;
+      }
+      setBulkCompletedItems(nextCompleted);
+      setBulkSelectedIndices([]);
+      setScreen("choose");
+      setPicked([]);
+      setDrafts({});
+      setActive(null);
+      return;
+    }
 
-    // Don't call onClose here - let onComplete handle it
+    console.log('Saving branding selections:', { stockHeaderId, selections });
+    onComplete({ stockHeaderId, selections });
   }
 
   return (
@@ -505,14 +543,62 @@ export default function BrandingSheet(props: BrandingSheetProps) {
           <div className="text-sm text-muted-foreground">
             <div className="font-medium">{productName}</div>
             <div className="space-x-2">
-              {colour ? <span>Colour: {colour}</span> : null}
-              {size ? <span>Size: {size}</span> : null}
+              {isBulk && bulkItems
+                ? (screen === "choose"
+                    ? <span>{bulkCompletedItems.length} of {bulkItems.length} items configured · Select items to apply branding to</span>
+                    : <span>Apply to {bulkSelectedIndices.length} selected item{bulkSelectedIndices.length !== 1 ? "s" : ""}</span>)
+                : (
+                  <>
+                    {colour ? <span>Colour: {colour}</span> : null}
+                    {size ? <span>Size: {size}</span> : null}
+                  </>
+                )}
             </div>
           </div>
         </DialogHeader>
 
         {screen === "choose" ? (
           <div>
+            {isBulk && bulkItems && bulkItems.length > 0 ? (
+              <div className="mb-4 overflow-x-auto">
+                <p className="text-xs text-muted-foreground mb-2">Click items to select which will get this branding. Selected items can be applied in one go.</p>
+                <div className="flex flex-wrap gap-3 justify-center py-2">
+                  {bulkItems.map((item, idx) => {
+                    const completed = isBulkItemCompleted(idx);
+                    const selected = bulkSelectedIndices.includes(idx);
+                    return (
+                      <button
+                        key={`${item.variantId}-${item.size ?? idx}`}
+                        type="button"
+                        onClick={() => {
+                          if (completed) return;
+                          setBulkSelectedIndices((prev) =>
+                            prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+                          );
+                        }}
+                        className={cn(
+                          "flex flex-col items-center rounded-xl border-2 p-2 min-w-[100px] transition",
+                          completed && "opacity-60 cursor-default border-green-200 bg-green-50 dark:bg-green-950/20",
+                          !completed && selected && "border-primary ring-2 ring-primary/30 bg-primary/5 cursor-pointer",
+                          !completed && !selected && "border-gray-200 bg-muted/30 hover:border-gray-300 cursor-pointer"
+                        )}
+                      >
+                        <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 mb-1">
+                          <img src={item.imageUrl} alt={item.size ?? ""} className="w-full h-full object-cover" />
+                          {completed ? (
+                            <span className="absolute inset-0 flex items-center justify-center bg-green-500/20 text-green-700 dark:text-green-400">
+                              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            </span>
+                          ) : null}
+                        </div>
+                        <span className="font-medium text-xs">{item.size ?? "—"}</span>
+                        <span className="text-xs text-muted-foreground">Qty: {item.quantity}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             <p className="mb-4 text-sm text-muted-foreground">
               Choosing branding positions helps define how your brand is perceived. Select one or more positions to proceed
             </p>
@@ -545,7 +631,14 @@ export default function BrandingSheet(props: BrandingSheetProps) {
               <Button variant="ghost" onClick={onClose}>
                 Skip Branding
               </Button>
-              <Button disabled={!canNext} onClick={() => { setScreen("details"); setActive(picked[0] ?? null); }}>
+              <Button
+                disabled={!canNext}
+                onClick={() => {
+                  setScreen("details");
+                  setActive(picked[0] ?? null);
+                  setDrafts({});
+                }}
+              >
                 Next
               </Button>
             </div>
@@ -778,7 +871,11 @@ export default function BrandingSheet(props: BrandingSheetProps) {
 
             <div className="flex items-center justify-between">
               <Button variant="secondary" onClick={() => setScreen("choose")}>Back</Button>
-              <Button disabled={!allValid} onClick={handleSave}>Save Branding</Button>
+              <Button disabled={!allValid} onClick={handleSave}>
+                {isBulk && bulkItems && bulkSelectedIndices.length > 0
+                  ? `Apply to ${bulkSelectedIndices.length} selected item${bulkSelectedIndices.length !== 1 ? "s" : ""}`
+                  : "Save Branding"}
+              </Button>
             </div>
           </div>
         )}

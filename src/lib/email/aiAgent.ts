@@ -172,16 +172,16 @@ export async function processEmail(
       : email.body;
 
     // Process with existing WhatsApp AI agent
-    // Pass channel='email' to enable email-specific logging
-    // Pass email-specific system prompt that emphasizes knowledge base usage
+    // Pass channel='email' and emailMetadata so escalation emails use the Email AI template
     const aiResponse = await processMessage(
       sessionId,
       emailContent,
       undefined, // phone number - not available from email
       email.senderName, // customer name from email
       email.senderEmail, // customer email for lookups
-      'email' as AgentChannel, // channel for logging
-      EMAIL_SYSTEM_PROMPT // email-specific system prompt
+      'email' as AgentChannel,
+      EMAIL_SYSTEM_PROMPT,
+      { threadId: email.threadId, messageId: email.messageId, subject: email.subject ?? '' }
     );
 
     // Add email metadata to response

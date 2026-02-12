@@ -18,6 +18,13 @@ import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
 import { cn } from "@/lib/utils";
 import ProductDetailsModal from "@/components/ProductDetailsModal";
 import { usePathname } from "next/navigation";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // Type guard helper for branding mode
 const isBranded = (m: BrandingMode | undefined): m is 'branded' => m === 'branded';
@@ -108,6 +115,9 @@ export default function ProductCard({ group }: Props) {
   const [showToast, setShowToast] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [quickAddQty, setQuickAddQty] = useState(1);
+  const [showBulkBySizeModal, setShowBulkBySizeModal] = useState(false);
+  const [bulkSizeQuantities, setBulkSizeQuantities] = useState<Record<string, number>>({});
   const [brandingMode, setBrandingMode] = useState<BrandingMode | undefined>(undefined);
   const [brandingSelections, setBrandingSelections] = useState<BrandingSelection[]>([]);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
@@ -314,6 +324,17 @@ export default function ProductCard({ group }: Props) {
     return sortSizes(sizes);
   }, [variants, selectedColour]);
 
+  // Rows for "Add by size" modal: one per size for selected colour, with qty available
+  const bulkBySizeRows = useMemo(() => {
+    if (!variants || !selectedColour) return [];
+    return sizesForSelected.map((size) => {
+      const v = variants.find(
+        (x) => norm(x.colour) === norm(selectedColour) && norm(x.size) === norm(size)
+      );
+      return { size, qtyAvailable: v?.qty_available ?? 0 };
+    });
+  }, [variants, selectedColour, sizesForSelected]);
+
   // All available sizes for the product (for hover display) - only show sizes with stock
   const allSizes = useMemo(() => {
     if (!variants) return [];
@@ -450,7 +471,7 @@ export default function ProductCard({ group }: Props) {
           variantId: variantBeforeBranding ? String(variantBeforeBranding.stock_id) : undefined,
           colour: colourBeforeBranding ?? undefined,
           size: sizeBeforeBranding ?? undefined,
-          quantity: 1,
+          quantity: quickAddQty,
           itemKey: tempItemKey,
         });
         
@@ -523,7 +544,7 @@ export default function ProductCard({ group }: Props) {
           
           add({
             ...selectedVariant,
-            quantity: 1,
+            quantity: quickAddQty,
             brandingMode: 'branded',
             branding: brandingSelections,
           });
@@ -618,7 +639,7 @@ export default function ProductCard({ group }: Props) {
     try {
       add({ 
         ...realVariant, 
-        quantity: 1,
+        quantity: quickAddQty,
         brandingMode: brandingMode ?? undefined,
         branding: isBranded(brandingMode) ? brandingSelections : undefined,
       });
@@ -1000,22 +1021,93 @@ export default function ProductCard({ group }: Props) {
               </button>
             </div>
           </div>
+
+          {/* Quantity selector */}
+          <div className="flex items-center justify-center gap-2 mb-2 relative z-10">
+            <div className="flex items-center rounded-md border border-gray-300 bg-white sm:border-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setQuickAddQty((q) => Math.max(1, q - 1));
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-l-md border-r border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed sm:h-9 sm:w-9"
+                disabled={quickAddQty <= 1}
+                aria-label="Decrease quantity"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+              </button>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={quickAddQty}
+                onChange={(e) => {
+                  const v = e.target.value === "" ? 1 : parseInt(e.target.value, 10);
+                  if (!Number.isNaN(v)) setQuickAddQty(Math.min(99, Math.max(1, v)));
+                }}
+                onBlur={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (Number.isNaN(v) || v < 1) setQuickAddQty(1);
+                  else if (v > 99) setQuickAddQty(99);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="h-8 w-10 border-0 bg-transparent p-0 text-center text-sm font-medium tabular-nums focus:outline-none focus:ring-0 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none sm:h-9 sm:w-12"
+                aria-label="Quantity"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setQuickAddQty((q) => Math.min(99, q + 1));
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-r-md border-l border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed sm:h-9 sm:w-9"
+                disabled={quickAddQty >= 99}
+                aria-label="Increase quantity"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </div>
+          </div>
           
-          <button 
-            disabled={loading || !selectedColour || !selectedSize} 
-            onClick={(e) => {
-              e.stopPropagation();
-              console.log("Button clicked!", { selectedColour, selectedSize, loading, brandingMode });
-              quickAddIfReady();
-            }} 
-            className={`luxury-btn w-full ${
-              isPressed 
-                ? 'scale-95 shadow-inner' 
-                : 'scale-100'
-            } ${loading || !selectedColour || !selectedSize ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {loading ? "Loading…" : isPressed ? "Adding..." : brandingMode === "branded" ? "Customize & Add" : "Quick Add To Cart"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!selectedColour || bulkBySizeRows.length === 0}
+              onClick={(e) => {
+                e.stopPropagation();
+                const initial: Record<string, number> = {};
+                bulkBySizeRows.forEach((r) => { initial[r.size] = 0; });
+                setBulkSizeQuantities(initial);
+                setShowBulkBySizeModal(true);
+              }}
+              className={cn(
+                "flex-1 luxury-btn min-w-0 py-1.5 px-2 text-xs font-semibold whitespace-nowrap text-center flex items-center justify-center",
+                !selectedColour || bulkBySizeRows.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+              )}
+            >
+              Add by size
+            </button>
+            <button 
+              disabled={loading || !selectedColour || !selectedSize} 
+              onClick={(e) => {
+                e.stopPropagation();
+                console.log("Button clicked!", { selectedColour, selectedSize, loading, brandingMode });
+                quickAddIfReady();
+              }} 
+              className={cn(
+                "flex-1 luxury-btn min-w-0 py-1.5 px-2 text-xs font-semibold whitespace-nowrap text-center flex items-center justify-center",
+                isPressed ? "scale-95 shadow-inner" : "scale-100",
+                loading || !selectedColour || !selectedSize ? "opacity-50 cursor-not-allowed" : ""
+              )}
+            >
+              {loading ? "Loading…" : isPressed ? "Adding..." : brandingMode === "branded" ? "Customize & Add" : "Quick Add To Cart"}
+            </button>
+          </div>
         </div>
         )}
       </div>
@@ -1033,7 +1125,187 @@ export default function ProductCard({ group }: Props) {
       <Toast open={showToast} onOpenChange={setShowToast}>
         Added to cart!
       </Toast>
-      
+
+      {/* Add by size modal */}
+      <Dialog open={showBulkBySizeModal} onOpenChange={setShowBulkBySizeModal}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Add by size — {selectedColour ?? ""}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 font-medium">Size</th>
+                  <th className="text-right py-2 font-medium">Available</th>
+                  <th className="text-right py-2 font-medium">Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkBySizeRows.map((row) => (
+                  <tr key={row.size} className="border-b border-gray-100">
+                    <td className="py-2">{row.size}</td>
+                    <td className="text-right py-2 tabular-nums">{row.qtyAvailable}</td>
+                    <td className="py-2 text-right">
+                      <div className="inline-flex items-center gap-0 rounded-md border border-gray-300 bg-white w-fit">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setBulkSizeQuantities((prev) => ({
+                              ...prev,
+                              [row.size]: Math.max(0, (prev[row.size] ?? 0) - 1),
+                            }))
+                          }
+                          className="flex h-7 w-7 items-center justify-center rounded-l-md border-r border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                          disabled={(bulkSizeQuantities[row.size] ?? 0) <= 0}
+                          aria-label={`Decrease quantity for ${row.size}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                          </svg>
+                        </button>
+                        <input
+                          type="number"
+                          min={0}
+                          max={row.qtyAvailable}
+                          value={bulkSizeQuantities[row.size] ?? 0}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
+                            if (!Number.isNaN(v))
+                              setBulkSizeQuantities((prev) => ({
+                                ...prev,
+                                [row.size]: Math.min(row.qtyAvailable, Math.max(0, v)),
+                              }));
+                          }}
+                          onBlur={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            if (Number.isNaN(v) || v < 0)
+                              setBulkSizeQuantities((prev) => ({ ...prev, [row.size]: 0 }));
+                            else if (v > row.qtyAvailable)
+                              setBulkSizeQuantities((prev) => ({ ...prev, [row.size]: row.qtyAvailable }));
+                          }}
+                          className="h-7 w-10 min-w-[2.5rem] border-0 bg-gray-100 text-gray-900 p-0 text-center text-sm font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          aria-label={`Quantity for size ${row.size}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setBulkSizeQuantities((prev) => ({
+                              ...prev,
+                              [row.size]: Math.min(row.qtyAvailable, (prev[row.size] ?? 0) + 1),
+                            }))
+                          }
+                          className="flex h-7 w-7 items-center justify-center rounded-r-md border-l border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                          disabled={(bulkSizeQuantities[row.size] ?? 0) >= row.qtyAvailable}
+                          aria-label={`Increase quantity for ${row.size}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={async () => {
+                if (!selectedColour || !variants) return;
+                const rowsToAdd = bulkBySizeRows.filter(
+                  (row) => (bulkSizeQuantities[row.size] ?? 0) > 0
+                ).map((row) => ({
+                  row,
+                  qty: Math.min(row.qtyAvailable, bulkSizeQuantities[row.size] ?? 0),
+                  variant: variants.find(
+                    (v) => norm(v.colour) === norm(selectedColour) && norm(v.size) === norm(row.size)
+                  ) as Variant | undefined,
+                })).filter((x) => x.variant && x.qty > 0);
+
+                if (rowsToAdd.length === 0) return;
+
+                const isBranded = brandingMode === "branded";
+
+                if (isBranded) {
+                  let colourImageUrl = group.representative_image_url ?? null;
+                  if (colourMap) {
+                    const colorOption = colourMap.find((c) => c.name === selectedColour);
+                    if (colorOption?.image_url) colourImageUrl = colorOption.image_url;
+                  }
+                  if (!colourImageUrl) colourImageUrl = generateColorSvg(selectedColour);
+
+                  const bulkItems = rowsToAdd.map(({ row, qty, variant }) => ({
+                    variantId: String(variant!.stock_id),
+                    colour: selectedColour ?? undefined,
+                    size: row.size,
+                    quantity: qty,
+                    imageUrl: (variant!.image_url ?? colourImageUrl) as string,
+                  }));
+
+                  setShowBulkBySizeModal(false);
+                  setBulkSizeQuantities({});
+
+                  try {
+                    const result = await openBranding({
+                      productId: String(group.stock_header_id),
+                      productName: group.group_name ?? "Product",
+                      stockHeaderId: group.stock_header_id,
+                      variantId: String(rowsToAdd[0].variant!.stock_id),
+                      colour: selectedColour ?? undefined,
+                      size: rowsToAdd[0].row.size,
+                      quantity: rowsToAdd[0].qty,
+                      bulkItems,
+                    });
+
+                    if (Array.isArray(result) && result.length > 0) {
+                      result.forEach((item: { variantId?: string; colour?: string; size?: string; quantity: number; selections: Array<{ position: string; type: string; size: string; colorCount: number; comment?: string; artwork_url?: string; logo_file?: string }> }) => {
+                        const variant = variants?.find((v) => String(v.stock_id) === item.variantId);
+                        if (variant && item.selections?.length) {
+                          const brandingSelections = item.selections.map((sel) => ({
+                            branding_position: sel.position,
+                            branding_type: sel.type ?? "",
+                            branding_size: sel.size ?? "",
+                            color_count: sel.colorCount,
+                            comment: sel.comment,
+                            artwork_url: sel.artwork_url,
+                            logo_file: sel.logo_file,
+                          }));
+                          add({
+                            ...variant,
+                            quantity: item.quantity,
+                            brandingMode: "branded",
+                            branding: brandingSelections,
+                          });
+                        }
+                      });
+                      setShowToast(true);
+                    }
+                  } catch (e) {
+                    console.error("Bulk branding error:", e);
+                  }
+                  return;
+                } else {
+                  rowsToAdd.forEach(({ qty, variant }) => {
+                    if (variant) add({ ...variant, quantity: qty });
+                  });
+                }
+
+                setShowToast(true);
+                setShowBulkBySizeModal(false);
+                setBulkSizeQuantities({});
+              }}
+              disabled={
+                !bulkBySizeRows.some((row) => (bulkSizeQuantities[row.size] ?? 0) > 0)
+              }
+            >
+              Add to cart
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Branding Modal */}
       {(() => {
         // Get stock_header_id from selected variant or fall back to product group
