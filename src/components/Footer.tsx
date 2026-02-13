@@ -100,14 +100,17 @@ export function Footer() {
         <div className="border-t border-gray-700 mt-12 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
                 <div className="flex flex-wrap gap-6 text-sm text-gray-300 mb-4 md:mb-0">
-                  <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
-                  <Link href="/cookies" className="hover:text-white transition-colors">Cookies Policy</Link>
-                  <Link href="/popia" className="hover:text-white transition-colors">POPIA</Link>
+                  <Link href="/about" className="hover:text-white transition-colors">About us</Link>
+                  <Link href="/terms" className="hover:text-white transition-colors">Terms of Use</Link>
+                  <Link href="/terms-and-conditions" className="hover:text-white transition-colors">Terms &amp; Conditions</Link>
                   <Link href="/paia" className="hover:text-white transition-colors">PAIA</Link>
+                  <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+                  <Link href="/cookies" className="hover:text-white transition-colors">Cookies Policy</Link>
+                  <Link href="/artwork-guidelines" className="hover:text-white transition-colors">Artwork Guidelines</Link>
                 </div>
             <div className="text-center md:text-right">
               <p className="text-sm text-gray-300 mb-2">
-                © 2025 MerchLab. All rights reserved.
+                © 2026 MerchLab. All rights reserved.
               </p>
               <p className="text-xs text-gray-400">
                 Custom merchandise solutions for businesses across South Africa

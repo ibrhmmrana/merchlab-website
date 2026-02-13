@@ -101,12 +101,20 @@ export function Header() {
                   {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
                 </LoadingLink>
                 {!isBuildAQuotePage && (
-                  <LoadingLink
-                    href="/contact"
-                    className="luxury-nav-item"
-                  >
-                    Contact
-                  </LoadingLink>
+                  <>
+                    <LoadingLink
+                      href="/about"
+                      className="luxury-nav-item"
+                    >
+                      About
+                    </LoadingLink>
+                    <LoadingLink
+                      href="/contact"
+                      className="luxury-nav-item"
+                    >
+                      Contact
+                    </LoadingLink>
+                  </>
                 )}
               </>
             )}
@@ -221,12 +229,20 @@ export function Header() {
                     {isBuildAQuotePage ? "Dashboard" : "Shop Now"}
                   </LoadingLink>
                   {!isBuildAQuotePage && (
-                    <LoadingLink
-                      href="/contact"
-                      className="luxury-nav-item text-sm"
-                    >
-                      Contact
-                    </LoadingLink>
+                    <>
+                      <LoadingLink
+                        href="/about"
+                        className="luxury-nav-item text-sm"
+                      >
+                        About
+                      </LoadingLink>
+                      <LoadingLink
+                        href="/contact"
+                        className="luxury-nav-item text-sm"
+                      >
+                        Contact
+                      </LoadingLink>
+                    </>
                   )}
                 </>
               )}
