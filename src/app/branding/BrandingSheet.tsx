@@ -740,6 +740,17 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                                 alt="Uploaded artwork" 
                                 className="max-h-32 max-w-full rounded border object-contain"
                               />
+                              {!d.vectorizing && (d.logo_file || d.artwork_url) && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-2"
+                                  onClick={() => window.open(d.logo_file || d.artwork_url!, '_blank', 'noopener,noreferrer')}
+                                >
+                                  View artwork
+                                </Button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setDraft(p, { artwork_url: undefined, logo_file: undefined })}
