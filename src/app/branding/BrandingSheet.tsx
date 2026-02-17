@@ -626,7 +626,14 @@ export default function BrandingSheet(props: BrandingSheetProps) {
                 onClick={() => {
                   setScreen("details");
                   setActive(picked[0] ?? null);
-                  setDrafts({});
+                  // Re-initialize drafts for picked positions (preserve any existing data)
+                  setDrafts(() => {
+                    const next: Record<string, PosDraft> = {};
+                    for (const p of picked) {
+                      next[p] = { type: null, size: null, colorCount: 1 };
+                    }
+                    return next;
+                  });
                 }}
               >
                 Next
