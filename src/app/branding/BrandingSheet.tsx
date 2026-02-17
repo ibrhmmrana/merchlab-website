@@ -173,12 +173,13 @@ export default function BrandingSheet(props: BrandingSheetProps) {
               if (vectorizeResponse.ok) {
                 const vectorizeData = await vectorizeResponse.json();
                 if (vectorizeData.logo_file) {
-                  const updatedDraft = { ...draft, logo_file: vectorizeData.logo_file, vectorizing: false };
-                  setDraft(p, updatedDraft);
-                  // Save to DB
-                  if (draft.type && draft.size) {
-                    saveBrandingSelectionToDb(p, updatedDraft);
-                  }
+                  setDrafts((prev) => {
+                    const updated = { ...prev[p], logo_file: vectorizeData.logo_file, vectorizing: false };
+                    if (updated.type && updated.size && itemKey) {
+                      saveBrandingSelectionToDb(p, updated);
+                    }
+                    return { ...prev, [p]: updated };
+                  });
                 } else {
                   throw new Error('No logo_file in response');
                 }
@@ -436,26 +437,15 @@ export default function BrandingSheet(props: BrandingSheetProps) {
           if (vectorizeResponse.ok) {
             const vectorizeData = await vectorizeResponse.json();
             if (vectorizeData.logo_file) {
-              // Update draft with SVG URL (preserve existing fields)
-              const currentDraft = drafts[position];
-              const updatedDraft = {
-                ...currentDraft,
-                logo_file: vectorizeData.logo_file,
-                vectorizing: false,
-              };
-              setDraft(position, updatedDraft);
               setVectorized((prev) => ({ ...prev, [position]: true }));
-              
-              console.debug('[branding] vectorized ready', {
-                position,
-                svgUrl: vectorizeData.logo_file,
-                draftForPositionAfterMerge: updatedDraft,
+              setDrafts((prev) => {
+                const updated = { ...prev[position], logo_file: vectorizeData.logo_file, vectorizing: false };
+                if (updated.type && updated.size && itemKey) {
+                  saveBrandingSelectionToDb(position, updated);
+                }
+                return { ...prev, [position]: updated };
               });
-              
-              // Save to DB if we have complete selection
-              if (currentDraft?.type && currentDraft?.size && itemKey) {
-                saveBrandingSelectionToDb(position, updatedDraft);
-              }
+              console.debug('[branding] vectorized ready', { position, svgUrl: vectorizeData.logo_file });
             } else {
               throw new Error('No logo_file in response');
             }
