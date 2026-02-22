@@ -35,6 +35,13 @@ export default function CartDrawer() {
     (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)),
     0
   );
+  const DELIVERY_THRESHOLD = 1000;
+  const DELIVERY_FEE = 99;
+  const VAT_RATE = 0.15;
+  const delivery = subtotal > 0 && subtotal < DELIVERY_THRESHOLD ? DELIVERY_FEE : 0;
+  const amountBeforeVat = subtotal + delivery;
+  const vat = amountBeforeVat * VAT_RATE;
+  const total = amountBeforeVat + vat;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -147,9 +154,25 @@ export default function CartDrawer() {
         {/* Fixed bottom section */}
         <div className="flex-shrink-0 px-6 py-4 border-t bg-gray-50 space-y-3">
           {activeItems.length > 0 && (
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-semibold">R {subtotal.toFixed(2)}</span>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>R {subtotal.toFixed(2)}</span>
+              </div>
+              {delivery > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Delivery (under R1,000)</span>
+                  <span>R {delivery.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">VAT (15%)</span>
+                <span>R {vat.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1.5 border-t border-gray-200 font-semibold">
+                <span>Total</span>
+                <span>R {total.toFixed(2)}</span>
+              </div>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">

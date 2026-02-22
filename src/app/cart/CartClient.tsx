@@ -14,6 +14,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { getOrCreateSessionToken } from "@/lib/session";
 import { fetchQuoteBrandingSelections, type QuoteBrandingSelection } from "@/lib/branding";
+import {
+  brandedLinePricing,
+  getMarginFactor,
+  DELIVERY_THRESHOLD_BRANDED,
+  DELIVERY_FEE_BRANDED,
+  type BrandingPricingRow,
+} from "@/lib/brandedPricing";
 
 // Validation helper for branded items
 function validateBrandedItem(item: CartItem): boolean {
@@ -192,12 +199,60 @@ export default function CartClient() {
   const remove = useCartStore((s) => s.remove);
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
-  const subtotal = activeItems.reduce(
-    (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)),
-    0
-  );
+
+  // Branding pricing for branded tab (fetched when on branded)
+  const [brandingPricing, setBrandingPricing] = useState<Map<number, BrandingPricingRow[]>>(new Map());
+  const fetchedPricingRef = useRef<Set<number>>(new Set());
+  // Margin from dashboard settings (applies to both branded and unbranded)
+  const [shopMarginPercent, setShopMarginPercent] = useState<number>(25);
+
+  // Totals: both use margin from settings; branded = margin on bundle, unbranded = margin on product
+  const VAT_RATE = 0.15;
+  let subtotal: number;
+  let delivery: number;
+  let vat: number;
+  let total: number;
+  if (activeCartGroup === 'branded') {
+    const itemsSubtotalExVat = activeItems.reduce((sum, item) => {
+      const { lineTotalExVat } = brandedLinePricing(item, brandingPricing, shopMarginPercent);
+      return sum + lineTotalExVat;
+    }, 0);
+    const itemsSubtotalIncVat = itemsSubtotalExVat * (1 + VAT_RATE);
+    const hasChargeable = itemsSubtotalExVat > 0;
+    delivery = hasChargeable && itemsSubtotalIncVat < DELIVERY_THRESHOLD_BRANDED ? DELIVERY_FEE_BRANDED : 0;
+    const subtotalExVat = itemsSubtotalExVat + delivery;
+    vat = subtotalExVat * VAT_RATE;
+    total = subtotalExVat + vat;
+    subtotal = itemsSubtotalExVat; // display: items ex VAT only; delivery shown separately
+  } else {
+    const factor = getMarginFactor(shopMarginPercent);
+    const itemsSubtotalExVat = activeItems.reduce(
+      (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)) * factor,
+      0
+    );
+    const DELIVERY_THRESHOLD = 1000;
+    const DELIVERY_FEE = 99;
+    const itemsSubtotalIncVat = itemsSubtotalExVat * (1 + VAT_RATE);
+    delivery = itemsSubtotalExVat > 0 && itemsSubtotalIncVat < DELIVERY_THRESHOLD ? DELIVERY_FEE : 0;
+    const subtotalExVat = itemsSubtotalExVat + delivery;
+    vat = subtotalExVat * VAT_RATE;
+    total = subtotalExVat + vat;
+    subtotal = itemsSubtotalExVat;
+  }
+
   const isUpdatingUrlRef = useRef(false);
   const hasInitializedRef = useRef(false);
+
+  // Load margin from settings (used for both branded and unbranded)
+  useEffect(() => {
+    fetch('/api/settings/shop-price-margin')
+      .then((r) => r.json())
+      .then((data) => {
+        const m = data?.margin;
+        if (Number.isFinite(m) && m >= 0 && m < 100) setShopMarginPercent(Number(m));
+      })
+      .catch(() => {});
+  }, []);
 
   // Sync URL query param with activeCartGroup on initial mount only
   useEffect(() => {
@@ -227,6 +282,54 @@ export default function CartClient() {
       router.replace(`/cart?${params.toString()}`, { scroll: false });
     }
   }, [activeCartGroup, searchParams, router]);
+
+  // Fetch branding pricing when on branded tab
+  useEffect(() => {
+    if (activeCartGroup !== 'branded' || brandedItems.length === 0) return;
+    const norm = (v: string | null | undefined) => String(v ?? "").trim().toLowerCase();
+    const safeNumber = (v: unknown, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    brandedItems.forEach((item) => {
+      const stockHeaderId = item.stock_header_id;
+      if (!stockHeaderId || fetchedPricingRef.current.has(stockHeaderId)) return;
+      fetchedPricingRef.current.add(stockHeaderId);
+      fetch(`/api/branding-pricing?stockHeaderId=${stockHeaderId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!Array.isArray(data) || data.length === 0) return;
+          const itemBranding = item.branding ?? [];
+          const matchedPricing: BrandingPricingRow[] = itemBranding
+            .map((b) => {
+              let candidates = data.filter(
+                (p: { BrandingType?: string; BrandingSize?: string; BrandingPosition?: string }) =>
+                  norm(p.BrandingType) === norm(b.branding_type) &&
+                  norm(p.BrandingSize) === norm(b.branding_size)
+              );
+              if (b.branding_position && candidates.length) {
+                const withPos = candidates.filter((p: { BrandingPosition?: string }) => p && norm(p.BrandingPosition) === norm(b.branding_position));
+                if (withPos.length) candidates = withPos;
+              }
+              const pick = candidates[0] ?? data[0];
+              if (!pick) return null;
+              return {
+                brandingType: String(pick.BrandingType ?? b.branding_type ?? ""),
+                brandingPosition: String(pick.BrandingPosition ?? b.branding_position ?? ""),
+                brandingSize: String(pick.BrandingSize ?? b.branding_size ?? ""),
+                unitPrice: safeNumber(pick.DiscountedUnitPrice ?? pick.UnitPrice, 0),
+                setupFee: safeNumber(pick.DiscountedSetupFee ?? pick.SetupFee, 0),
+              };
+            })
+            .filter((x): x is BrandingPricingRow => x != null);
+          if (matchedPricing.length > 0) {
+            setBrandingPricing((prev) => {
+              const next = new Map(prev);
+              next.set(stockHeaderId, matchedPricing);
+              return next;
+            });
+          }
+        })
+        .catch(() => fetchedPricingRef.current.delete(stockHeaderId));
+    });
+  }, [activeCartGroup, brandedItems]);
 
   // Validate branded items
   const isBrandedValid = activeCartGroup === 'branded'
@@ -863,6 +966,10 @@ export default function CartClient() {
                   <div className="space-y-4">
                     {activeItems.map((item) => {
                       const itemKey = getCartItemKey(item);
+                      const lineTotalRaw = activeCartGroup === 'branded' && isBranded(item)
+                        ? brandedLinePricing(item, brandingPricing, shopMarginPercent).lineTotalExVat
+                        : (item.discounted_price ?? item.base_price ?? 0) * item.quantity * getMarginFactor(shopMarginPercent);
+                      const lineTotal = Math.round(lineTotalRaw * 100) / 100;
                       return (
                         <div key={itemKey} className="flex items-center gap-4 border rounded p-3">
                           <div className="relative w-20 h-20 rounded bg-gray-50 overflow-hidden">
@@ -889,7 +996,7 @@ export default function CartClient() {
                                 ))}
                               </div>
                             ) : null}
-                            <div className="mt-2 flex items-center gap-2">
+                            <div className="mt-2 flex items-center gap-2 flex-wrap">
                               <button
                                 className="h-7 w-7 rounded border text-sm"
                                 onClick={() => updateQty(itemKey, Math.max(1, item.quantity - 1))}
@@ -918,6 +1025,9 @@ export default function CartClient() {
                               <button className="ml-2 text-xs underline" onClick={() => remove(itemKey)}>
                                 Remove
                               </button>
+                              <span className="ml-auto text-sm font-semibold tabular-nums">
+                                R {lineTotal.toFixed(2)}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1141,11 +1251,21 @@ export default function CartClient() {
                   <>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="font-medium">R {subtotal.toFixed(2)}</span>
+                      <span>R {subtotal.toFixed(2)}</span>
+                    </div>
+                    {delivery > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Delivery (under R1,000)</span>
+                        <span>R {delivery.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">VAT (15%)</span>
+                      <span>R {vat.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-base font-semibold border-t border-gray-300 pt-2">
                       <span>Total</span>
-                      <span>R {subtotal.toFixed(2)}</span>
+                      <span>R {total.toFixed(2)}</span>
                     </div>
                   </>
                 )}
@@ -1166,9 +1286,9 @@ export default function CartClient() {
                     />
                     <label htmlFor="terms" className="text-sm text-gray-600">
                       I have read and accept the{" "}
-                      <a href="#" className="text-blue-600 hover:underline">
+                      <Link href="/terms-and-conditions" className="text-blue-600 hover:underline">
                         Terms & Conditions
-                      </a>{" "}
+                      </Link>{" "}
                       for this website.
                     </label>
                   </div>
