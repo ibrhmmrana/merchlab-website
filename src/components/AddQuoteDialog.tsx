@@ -386,6 +386,10 @@ export default function AddQuoteDialog({ open, onOpenChange }: AddQuoteDialogPro
         throw new Error("No items could be added to cart");
       }
 
+      const { metaPixel } = await import('@/lib/analytics/metaPixel');
+      metaPixel.lead({ content_name: 'Quote (add to cart from quote)' });
+      metaPixel.addToCart({ content_type: 'product', num_items: addedCount });
+
       setSuccess(
         `Successfully added ${addedCount} item${addedCount !== 1 ? 's' : ''} to cart` +
         (skippedCount > 0 ? ` (${skippedCount} skipped)` : '')

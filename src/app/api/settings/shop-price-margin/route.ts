@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAuthed } from '@/lib/adminAuth';
-import { cookies } from 'next/headers';
 
 const KEY = 'shop_price_margin';
 
@@ -30,11 +29,7 @@ export async function GET() {
 /** PUT: set shop price margin. Admin only. */
 export async function PUT(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const mockRequest = {
-      cookies: { get: (name: string) => cookieStore.get(name) },
-    };
-    if (!isAuthed(mockRequest)) {
+    if (!(await isAuthed())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

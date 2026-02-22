@@ -26,7 +26,7 @@ function pickStr(obj: unknown, keys: string[]): string {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }

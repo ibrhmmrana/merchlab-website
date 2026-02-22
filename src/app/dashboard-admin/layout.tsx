@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers';
 import { isAuthed } from '@/lib/adminAuth';
 import LoginForm from './LoginForm';
 import DashboardLayoutClient from './DashboardLayoutClient';
@@ -13,17 +12,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  
-  // Create a mock request-like object to check auth
-  const mockRequest = {
-    cookies: {
-      get: (name: string) => cookieStore.get(name),
-    },
-  };
-  
-  // Check if authenticated
-  const authed = isAuthed(mockRequest);
+  const authed = await isAuthed();
 
   if (!authed) {
     return <LoginForm />;

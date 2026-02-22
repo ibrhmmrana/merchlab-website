@@ -18,6 +18,7 @@ import { useBrandingSheet } from "@/app/branding/BrandingSheetContext";
 import { cn } from "@/lib/utils";
 import ProductDetailsModal from "@/components/ProductDetailsModal";
 import { usePathname } from "next/navigation";
+import { metaPixel } from "@/lib/analytics/metaPixel";
 import {
   Dialog,
   DialogContent,
@@ -577,7 +578,12 @@ export default function ProductCard({ group }: Props) {
             brandingMode: 'branded',
             branding: brandingSelections,
           });
-          
+          metaPixel.addToCart({
+            content_ids: [String(group.stock_header_id)],
+            content_name: group.group_name ?? undefined,
+            content_type: 'product',
+            num_items: quickAddQty,
+          });
           setShowToast(true);
         } else {
           console.log('ProductCard: No branding selections or user cancelled');
@@ -671,6 +677,12 @@ export default function ProductCard({ group }: Props) {
         quantity: quickAddQty,
         brandingMode: brandingMode ?? undefined,
         branding: isBranded(brandingMode) ? brandingSelections : undefined,
+      });
+      metaPixel.addToCart({
+        content_ids: [String(group.stock_header_id)],
+        content_name: group.group_name ?? undefined,
+        content_type: 'product',
+        num_items: quickAddQty,
       });
       console.log("Successfully added to cart - no popup needed");
       setShowToast(true);
@@ -1148,7 +1160,7 @@ export default function ProductCard({ group }: Props) {
         onOpenChange={debugSetOpen}
         loading={loading}
         variants={variants ?? []}
-        onAdd={(v) => { add({ ...v, quantity: 1 }); setShowToast(true); }}
+        onAdd={(v) => { add({ ...v, quantity: 1 }); metaPixel.addToCart({ content_ids: [String(group.stock_header_id)], content_name: group.group_name ?? undefined, content_type: 'product', num_items: 1 }); setShowToast(true); }}
         title={group.group_name ?? "Select variant"}
         initialPreview={preview ?? undefined}
       />
@@ -1310,6 +1322,12 @@ export default function ProductCard({ group }: Props) {
                             brandingMode: "branded",
                             branding: brandingSelections,
                           });
+                          metaPixel.addToCart({
+                            content_ids: [String(group.stock_header_id)],
+                            content_name: group.group_name ?? undefined,
+                            content_type: 'product',
+                            num_items: item.quantity,
+                          });
                         }
                       });
                       setShowToast(true);
@@ -1319,8 +1337,15 @@ export default function ProductCard({ group }: Props) {
                   }
                   return;
                 } else {
+                  let totalQty = 0;
                   rowsToAdd.forEach(({ qty, variant }) => {
-                    if (variant) add({ ...variant, quantity: qty });
+                    if (variant) { add({ ...variant, quantity: qty }); totalQty += qty; }
+                  });
+                  metaPixel.addToCart({
+                    content_ids: [String(group.stock_header_id)],
+                    content_name: group.group_name ?? undefined,
+                    content_type: 'product',
+                    num_items: totalQty,
                   });
                 }
 

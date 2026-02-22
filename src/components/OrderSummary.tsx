@@ -58,6 +58,9 @@ export function OrderSummary() {
       });
 
       if (response.ok) {
+        const { metaPixel } = await import('@/lib/analytics/metaPixel');
+        metaPixel.lead({ content_name: 'Quote (order summary)' });
+        metaPixel.quoteSubmitted({ action: 'send', num_items: items.length });
         clear();
         alert('Quote submitted successfully! We\'ll get back to you soon.');
         setFormData({

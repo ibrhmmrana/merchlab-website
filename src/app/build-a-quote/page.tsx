@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,6 +109,16 @@ function BuildAQuotePageContent() {
   }
 
   useEffect(() => { load(true); /* initial + on filter/url changes */ }, [search, sort, JSON.stringify(filters)]); // eslint-disable-line
+
+  const catalogTrackedRef = useRef(false);
+  useEffect(() => {
+    if (groups.length > 0 && !catalogTrackedRef.current) {
+      catalogTrackedRef.current = true;
+      import('@/lib/analytics/metaPixel').then(({ metaPixel }) => {
+        metaPixel.viewContent({ content_type: 'product_catalog', content_category: 'build-a-quote' });
+      });
+    }
+  }, [groups.length]);
 
   function onApplyFilters(next: FiltersState) { 
     setFilters(prev => ({
@@ -356,7 +366,7 @@ function BuildAQuotePageContent() {
       </div>
 
       <div className="flex flex-col md:flex-row gap-2 md:items-center md:justify-between mb-4">
-        <form onSubmit={(e)=>{e.preventDefault(); load(true);}} className="flex gap-2">
+        <form onSubmit={async (e)=>{e.preventDefault(); if (search.trim()) { const { metaPixel } = await import('@/lib/analytics/metaPixel'); metaPixel.search({ search_string: search.trim(), content_category: 'build-a-quote' }); } load(true);}} className="flex gap-2">
           <Input placeholder="Search products or codes…" value={search} onChange={(e)=> setSearch(e.target.value)} />
         <Button type="submit">Search</Button>
       </form>

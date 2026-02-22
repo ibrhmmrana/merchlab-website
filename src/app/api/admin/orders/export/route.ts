@@ -432,7 +432,7 @@ function renderOrdersHTML(orders: Array<{
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }

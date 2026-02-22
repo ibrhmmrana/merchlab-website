@@ -21,6 +21,7 @@ import {
   DELIVERY_THRESHOLD_BRANDED,
   DELIVERY_FEE_BRANDED,
 } from "@/lib/brandedPricing";
+import { metaPixel } from "@/lib/analytics/metaPixel";
 
 type EditableItem = CartItem & {
   customPrice?: number;
@@ -870,6 +871,9 @@ export default function BuildQuoteClient() {
         const errorText = await response.text();
         throw new Error(errorText || 'Failed to submit quote');
       }
+
+      metaPixel.lead({ content_name: action === 'send' ? 'Quote (build-quote send)' : 'Quote (build-quote save)' });
+      metaPixel.quoteSubmitted({ action, num_items: activeItems.length });
 
       // Remove submitted items from cart for both 'save' and 'send'
       const submittedItemKeys = activeItems.map(item => getCartItemKey(item));

@@ -42,6 +42,9 @@ export default function ContactPage() {
       );
 
       if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+      const { metaPixel } = await import('@/lib/analytics/metaPixel');
+      metaPixel.lead({ content_name: 'Contact form' });
+      metaPixel.contactSubmitted();
       setStatus("success");
     } catch (err) {
       console.error("Contact form error:", err);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { metaPixel } from "@/lib/analytics/metaPixel";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,12 @@ export default function ProductDetailsModal({
       setError(null);
       return;
     }
+
+    metaPixel.viewContent({
+      content_ids: [String(stockHeaderId)],
+      content_name: productName ?? undefined,
+      content_type: 'product',
+    });
 
     // Abort controller for request cancellation
     const abortController = new AbortController();

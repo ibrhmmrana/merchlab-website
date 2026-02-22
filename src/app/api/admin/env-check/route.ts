@@ -6,16 +6,16 @@ export const runtime = 'nodejs';
 
 export async function GET() {
   // Check environment variables (return booleans only, no secrets)
-  const hasPasswordEnv = !!process.env.ADMIN_DASH_PASSWORD;
-  const hasCookieSecret = !!process.env.ADMIN_DASH_COOKIE_SECRET;
+  const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const hasSupabaseAnonKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const runtime = 'nodejs';
   const nodeEnv = process.env.NODE_ENV || 'unknown';
   const isVercel = !!process.env.VERCEL;
 
   return NextResponse.json(
     {
-      hasPasswordEnv,
-      hasCookieSecret,
+      hasSupabaseUrl,
+      hasSupabaseAnonKey,
       runtime,
       nodeEnv,
       isVercel,

@@ -10,7 +10,7 @@ export const runtime = 'nodejs';
 const APIFY_ACTOR_ID = 'M2FMdjRVeF1HPGFcc';
 
 export async function POST(request: NextRequest) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }

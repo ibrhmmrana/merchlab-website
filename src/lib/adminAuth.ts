@@ -1,38 +1,28 @@
-import { NextRequest } from 'next/server';
-import { createHmac } from 'crypto';
+import { type Session } from '@supabase/supabase-js';
+import { createAuthServerClient } from '@/lib/supabase/authServer';
 
-export const cookieName = process.env.ADMIN_DASH_COOKIE_NAME ?? 'ml_admin_auth';
+export const noIndexHeaders = () => ({
+  'X-Robots-Tag': 'noindex, nofollow',
+});
 
-export function hashToken(value: string): string {
-  const secret = process.env.ADMIN_DASH_COOKIE_SECRET;
-  if (!secret) {
-    throw new Error('ADMIN_DASH_COOKIE_SECRET is not set');
+/**
+ * Get current Supabase auth session (dashboard admin).
+ * Uses cookies set by Supabase Auth (refreshed by middleware on /dashboard-admin).
+ */
+export async function getAdminSession(): Promise<Session | null> {
+  try {
+    const supabase = await createAuthServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  } catch {
+    return null;
   }
-  return createHmac('sha256', secret).update(value).digest('hex');
 }
 
-export function makeCookie(password: string): string {
-  return hashToken(password);
+/**
+ * Returns true if the request has a valid Supabase auth session (dashboard admin).
+ */
+export async function isAuthed(): Promise<boolean> {
+  const session = await getAdminSession();
+  return !!session?.user;
 }
-
-export function isAuthed(req: NextRequest | { cookies: { get: (name: string) => { value?: string } | undefined } }): boolean {
-  const cookie = req.cookies.get(cookieName);
-  if (!cookie?.value) {
-    return false;
-  }
-
-  const adminPassword = process.env.ADMIN_DASH_PASSWORD;
-  if (!adminPassword) {
-    return false;
-  }
-
-  const expectedHash = makeCookie(adminPassword);
-  return cookie.value === expectedHash;
-}
-
-export function noIndexHeaders() {
-  return {
-    'X-Robots-Tag': 'noindex, nofollow',
-  };
-}
-

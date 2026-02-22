@@ -8,7 +8,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }

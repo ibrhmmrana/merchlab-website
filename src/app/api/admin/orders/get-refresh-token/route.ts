@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
  * 5. Save the refresh_token as BARRON_REFRESH_TOKEN environment variable
  */
 export async function GET(request: NextRequest) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }

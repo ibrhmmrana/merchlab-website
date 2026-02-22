@@ -21,6 +21,7 @@ import {
   DELIVERY_FEE_BRANDED,
   type BrandingPricingRow,
 } from "@/lib/brandedPricing";
+import { metaPixel } from "@/lib/analytics/metaPixel";
 
 // Validation helper for branded items
 function validateBrandedItem(item: CartItem): boolean {
@@ -242,6 +243,14 @@ export default function CartClient() {
 
   const isUpdatingUrlRef = useRef(false);
   const hasInitializedRef = useRef(false);
+  const initiatedCheckoutRef = useRef(false);
+
+  // Fire InitiateCheckout once when user lands on cart with items
+  useEffect(() => {
+    if (!hydrated || activeItems.length === 0 || initiatedCheckoutRef.current) return;
+    initiatedCheckoutRef.current = true;
+    metaPixel.initiateCheckout({ num_items: activeItems.length, currency: 'ZAR' });
+  }, [hydrated, activeItems.length]);
 
   // Load margin from settings (used for both branded and unbranded)
   useEffect(() => {
@@ -679,6 +688,8 @@ export default function CartClient() {
         }
         
         // Success - remove branded items
+        metaPixel.lead({ content_name: 'Quote (branded)' });
+        metaPixel.quoteSubmitted({ action: 'send', num_items: activeItems.length });
         const otherGroup = 'unbranded';
         const otherItems = unbrandedItems;
         const willHaveRemainingItems = otherItems.length > 0;
@@ -747,6 +758,8 @@ export default function CartClient() {
       });
       if (!res.ok) throw new Error("Failed to submit quote");
       
+      metaPixel.lead({ content_name: 'Quote (unbranded)' });
+      metaPixel.quoteSubmitted({ action: 'send', num_items: activeItems.length });
       // Check what will remain before removing
       const otherGroup = 'branded';
       const otherItems = brandedItems;

@@ -20,6 +20,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toggle-group": "^1.1.11",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.76.1",
     "@types/pg": "^8.15.6",
     "apify-client": "^2.20.0",

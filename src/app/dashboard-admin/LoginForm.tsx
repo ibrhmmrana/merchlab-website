@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { createAuthBrowserClient } from '@/lib/supabase/authBrowser';
 
 export default function LoginForm() {
   const router = useRouter();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,20 +19,23 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+      const supabase = createAuthBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
       });
 
-      if (response.ok) {
-        router.refresh();
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Invalid password');
+      if (signInError) {
+        setError(signInError.message === 'Invalid login credentials'
+          ? 'Invalid email or password.'
+          : signInError.message);
+        setLoading(false);
+        return;
       }
+
+      router.refresh();
     } catch {
-      setError('Failed to login. Please try again.');
+      setError('Failed to sign in. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -43,16 +48,32 @@ export default function LoginForm() {
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <Input
+                type="email"
+                id="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="admin@example.com"
+                disabled={loading}
+              />
+            </div>
+            <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                 Password
               </label>
               <Input
                 type="password"
                 id="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="Enter admin password"
+                placeholder="Enter password"
                 disabled={loading}
               />
             </div>
@@ -64,7 +85,7 @@ export default function LoginForm() {
               className="w-full"
               disabled={loading}
             >
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </Button>
           </div>
         </form>
@@ -72,4 +93,3 @@ export default function LoginForm() {
     </div>
   );
 }
-

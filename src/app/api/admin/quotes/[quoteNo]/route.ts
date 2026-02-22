@@ -9,7 +9,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ quoteNo: string }> }
 ) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }

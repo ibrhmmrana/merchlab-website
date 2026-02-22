@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
  * GET - Check if human is in control for a session
  */
 export async function GET(request: NextRequest) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
  * POST - Set human control state for a session
  */
 export async function POST(request: NextRequest) {
-  if (!isAuthed(request)) {
+  if (!(await isAuthed())) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers: noIndexHeaders() }
