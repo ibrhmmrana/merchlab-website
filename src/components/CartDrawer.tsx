@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect, useRef } from "react";
 import { useUiStore } from "@/store/ui";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useCartStore, getCartItemKey, isBranded } from "@/store/cart";
@@ -7,6 +8,13 @@ import { useRouter } from "next/navigation";
 import SmartImage from "@/components/SmartImage";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import {
+  brandedLinePricing,
+  getMarginFactor,
+  DELIVERY_THRESHOLD_BRANDED,
+  DELIVERY_FEE_BRANDED,
+  type BrandingPricingRow,
+} from "@/lib/brandedPricing";
 
 function Thumb({ src, alt }: { src: string | null | undefined; alt: string }) {
   return (
@@ -31,17 +39,92 @@ export default function CartDrawer() {
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
 
-  const subtotal = activeItems.reduce(
-    (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)),
-    0
-  );
-  const DELIVERY_THRESHOLD = 1000;
-  const DELIVERY_FEE = 99;
+  const [shopMarginPercent, setShopMarginPercent] = useState<number>(25);
+  const [brandingPricing, setBrandingPricing] = useState<Map<number, BrandingPricingRow[]>>(new Map());
+  const fetchedPricingRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    fetch("/api/settings/shop-price-margin")
+      .then((r) => r.json())
+      .then((data) => {
+        const m = data?.margin;
+        if (Number.isFinite(m) && m >= 0 && m < 100) setShopMarginPercent(Number(m));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (activeCartGroup !== "branded" || brandedItems.length === 0) return;
+    const norm = (v: string | null | undefined) => String(v ?? "").trim().toLowerCase();
+    const safeNumber = (v: unknown, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    brandedItems.forEach((item) => {
+      const stockHeaderId = item.stock_header_id;
+      if (!stockHeaderId || fetchedPricingRef.current.has(stockHeaderId)) return;
+      fetchedPricingRef.current.add(stockHeaderId);
+      fetch(`/api/branding-pricing?stockHeaderId=${stockHeaderId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!Array.isArray(data) || data.length === 0) return;
+          const itemBranding = item.branding ?? [];
+          const matchedPricing: BrandingPricingRow[] = itemBranding
+            .map((b) => {
+              let candidates = data.filter(
+                (p: { BrandingType?: string; BrandingSize?: string; BrandingPosition?: string }) =>
+                  norm(p.BrandingType) === norm(b.branding_type) &&
+                  norm(p.BrandingSize) === norm(b.branding_size)
+              );
+              if (b.branding_position && candidates.length) {
+                const withPos = candidates.filter(
+                  (p: { BrandingPosition?: string }) =>
+                    p && norm(p.BrandingPosition) === norm(b.branding_position)
+                );
+                if (withPos.length) candidates = withPos;
+              }
+              const pick = candidates[0] ?? data[0];
+              if (!pick) return null;
+              return {
+                brandingType: String(pick.BrandingType ?? b.branding_type ?? ""),
+                brandingPosition: String(pick.BrandingPosition ?? b.branding_position ?? ""),
+                brandingSize: String(pick.BrandingSize ?? b.branding_size ?? ""),
+                unitPrice: safeNumber(pick.DiscountedUnitPrice ?? pick.UnitPrice, 0),
+                setupFee: safeNumber(pick.DiscountedSetupFee ?? pick.SetupFee, 0),
+              };
+            })
+            .filter((x): x is BrandingPricingRow => x != null);
+          if (matchedPricing.length > 0) {
+            setBrandingPricing((prev) => {
+              const next = new Map(prev);
+              next.set(stockHeaderId, matchedPricing);
+              return next;
+            });
+          }
+        })
+        .catch(() => fetchedPricingRef.current.delete(stockHeaderId));
+    });
+  }, [activeCartGroup, brandedItems]);
+
   const VAT_RATE = 0.15;
-  const delivery = subtotal > 0 && subtotal < DELIVERY_THRESHOLD ? DELIVERY_FEE : 0;
-  const amountBeforeVat = subtotal + delivery;
-  const vat = amountBeforeVat * VAT_RATE;
-  const total = amountBeforeVat + vat;
+  let itemsSubtotalExVat: number;
+  if (activeCartGroup === "branded") {
+    itemsSubtotalExVat = activeItems.reduce((sum, item) => {
+      const { lineTotalExVat } = brandedLinePricing(item, brandingPricing, shopMarginPercent);
+      return sum + lineTotalExVat;
+    }, 0);
+  } else {
+    const factor = getMarginFactor(shopMarginPercent);
+    itemsSubtotalExVat = activeItems.reduce(
+      (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)) * factor,
+      0
+    );
+  }
+  const itemsSubtotalIncVat = itemsSubtotalExVat * (1 + VAT_RATE);
+  const hasChargeable = itemsSubtotalExVat > 0;
+  const delivery =
+    hasChargeable && itemsSubtotalIncVat < DELIVERY_THRESHOLD_BRANDED ? DELIVERY_FEE_BRANDED : 0;
+  const subtotalExVat = itemsSubtotalExVat + delivery;
+  const vat = subtotalExVat * VAT_RATE;
+  const total = subtotalExVat + vat;
+  const subtotal = itemsSubtotalExVat;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -157,7 +240,7 @@ export default function CartDrawer() {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>R {subtotal.toFixed(2)}</span>
+                <span>R {Math.round(subtotal * 100) / 100}</span>
               </div>
               {delivery > 0 && (
                 <div className="flex justify-between">
@@ -167,11 +250,11 @@ export default function CartDrawer() {
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">VAT (15%)</span>
-                <span>R {vat.toFixed(2)}</span>
+                <span>R {Math.round(vat * 100) / 100}</span>
               </div>
               <div className="flex justify-between items-center pt-1.5 border-t border-gray-200 font-semibold">
                 <span>Total</span>
-                <span>R {total.toFixed(2)}</span>
+                <span>R {Math.round(total * 100) / 100}</span>
               </div>
             </div>
           )}
