@@ -29,6 +29,10 @@ import {
 // Type guard helper for branding mode
 const isBranded = (m: BrandingMode | undefined): m is 'branded' => m === 'branded';
 
+// Shared cache for shop price margin (so all cards on /shop share one fetch)
+let shopMarginCache: { value: number; timestamp: number } | null = null;
+const SHOP_MARGIN_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
 type Props = { group: ProductGroup };
 
 type ColourOption = { name: string; image_url: string | null; sizes: string[] };
@@ -124,8 +128,32 @@ export default function ProductCard({ group }: Props) {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedVariantPrice, setSelectedVariantPrice] = useState<number | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
+  const [shopMarginPercent, setShopMarginPercent] = useState<number | null>(null);
   const { openBranding } = useBrandingSheet();
   const pathname = usePathname();
+
+  // Fetch shop price margin when on /shop (shared cache so only one request per page)
+  useEffect(() => {
+    if (!pathname?.startsWith('/shop')) return;
+    if (shopMarginCache && Date.now() - shopMarginCache.timestamp < SHOP_MARGIN_CACHE_TTL) {
+      setShopMarginPercent(shopMarginCache.value);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/settings/shop-price-margin')
+      .then((r) => r.json())
+      .then((data) => {
+        const margin = Number.isFinite(data.margin) ? Number(data.margin) : 0;
+        if (!cancelled) {
+          shopMarginCache = { value: margin, timestamp: Date.now() };
+          setShopMarginPercent(margin);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setShopMarginPercent(0);
+      });
+    return () => { cancelled = true; };
+  }, [pathname]);
 
   // Calculate total stock from variants (sum of qty_available which already includes wh3_bond)
   const totalStock = useMemo(() => {
@@ -812,13 +840,15 @@ export default function ProductCard({ group }: Props) {
               </span>
             ) : null
           )}
-          {/* Show price when variant is selected - ONLY on build-a-quote page */}
-          {selectedVariant && pathname?.startsWith('/build-a-quote') && (
+          {/* Show price when variant is selected - on shop (with optional margin) and build-a-quote (unchanged) */}
+          {selectedVariant && (pathname?.startsWith('/build-a-quote') || pathname?.startsWith('/shop')) && (
             <span className="text-xs border border-gray-300 px-2 py-1 rounded bg-green-50 text-green-700 font-medium">
               {loadingPrice ? (
                 'Loading price...'
               ) : selectedVariantPrice !== null ? (
-                `R ${selectedVariantPrice.toFixed(2)}`
+                pathname?.startsWith('/shop') && shopMarginPercent !== null && shopMarginPercent > 0 && shopMarginPercent < 100
+                  ? `R ${(selectedVariantPrice / (1 - shopMarginPercent / 100)).toFixed(2)}`
+                  : `R ${selectedVariantPrice.toFixed(2)}`
               ) : (
                 'Price unavailable'
               )}
