@@ -31,6 +31,11 @@ export default function CartDrawer() {
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
 
+  const subtotal = activeItems.reduce(
+    (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)),
+    0
+  );
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent side="right" className="w-[380px] sm:w-[420px] flex flex-col p-0">
@@ -140,7 +145,13 @@ export default function CartDrawer() {
         </div>
 
         {/* Fixed bottom section */}
-        <div className="flex-shrink-0 px-6 py-4 border-t bg-gray-50">
+        <div className="flex-shrink-0 px-6 py-4 border-t bg-gray-50 space-y-3">
+          {activeItems.length > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-semibold">R {subtotal.toFixed(2)}</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <button onClick={() => setOpen(false)} className="luxury-btn-secondary text-sm">
               Continue shopping

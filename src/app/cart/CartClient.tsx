@@ -192,6 +192,10 @@ export default function CartClient() {
   const remove = useCartStore((s) => s.remove);
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
+  const subtotal = activeItems.reduce(
+    (sum, i) => sum + (i.quantity * (i.discounted_price ?? i.base_price ?? 0)),
+    0
+  );
   const isUpdatingUrlRef = useRef(false);
   const hasInitializedRef = useRef(false);
 
@@ -1133,6 +1137,18 @@ export default function CartClient() {
                     {activeItems.length} {activeItems.length === 1 ? 'product' : 'products'}
                   </span>
                 </div>
+                {activeItems.length > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span className="font-medium">R {subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-semibold border-t border-gray-300 pt-2">
+                      <span>Total</span>
+                      <span>R {subtotal.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
                 {activeCartGroup === 'branded' && !isBrandedValid && (
                   <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
                     Please complete all branding details before submitting.
