@@ -195,6 +195,16 @@ const QUOTE_PROGRESS_STAGES = [
   "Finalising",
 ];
 
+const QUOTE_URLS_STORAGE_KEY = "merchlab_quote_urls";
+
+function simpleHash(str: string): string {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
+
 export default function CartClient() {
   const hydrated = useHasHydrated();
   const router = useRouter();
@@ -808,7 +818,49 @@ export default function CartClient() {
     }
   }
 
-  // Unbranded only: call webhook, show progress, then redirect to quoteURL or pay_url
+  // Fingerprint for current cart+form so we can reuse the same quote for Pay Now / View Quote
+  function getUnbrandedQuoteFingerprint(items: CartItem[], f: typeof form): string {
+    const canonical = {
+      type: "unbranded",
+      items: items
+        .map((i) => ({
+          s: i.stock_id,
+          h: i.stock_header_id,
+          q: i.quantity,
+          c: i.colour ?? "",
+          z: i.size ?? "",
+        }))
+        .sort((a, b) => (a.s - b.s || a.c.localeCompare(b.c) || a.z.localeCompare(b.z))),
+      e: (f.email ?? "").trim().toLowerCase(),
+      p: (f.phone ?? "").trim().replace(/\s/g, ""),
+    };
+    return simpleHash(JSON.stringify(canonical));
+  }
+
+  function getBrandedQuoteFingerprint(
+    items: CartItem[],
+    f: typeof form,
+    selections: QuoteBrandingSelection[]
+  ): string {
+    const canonical = {
+      type: "branded",
+      items: items.map((i) => ({
+        k: getCartItemKey(i),
+        q: i.quantity,
+        b: (i.branding ?? []).map((b) => ({
+          p: b.branding_position,
+          t: b.branding_type,
+          s: b.branding_size,
+        })),
+      })),
+      e: (f.email ?? "").trim().toLowerCase(),
+      p: (f.phone ?? "").trim().replace(/\s/g, ""),
+      sel: selections.map((s) => ({ k: s.item_key, p: s.branding_position, t: s.branding_type, sz: s.branding_size })).sort((a, b) => (a.k ?? "").localeCompare(b.k ?? "") || a.p.localeCompare(b.p)),
+    };
+    return simpleHash(JSON.stringify(canonical));
+  }
+
+  // Unbranded: call webhook (or reuse stored quote URLs), then redirect
   async function submitUnbrandedQuote(redirectTo: "pay" | "view") {
     if (activeCartGroup !== "unbranded" || activeItems.length === 0) {
       setMsg("No unbranded items to submit.");
@@ -832,10 +884,24 @@ export default function CartClient() {
       return;
     }
     setMsg(null);
+    const fingerprint = getUnbrandedQuoteFingerprint(activeItems, form);
+    try {
+      const storedRaw = typeof window !== "undefined" ? sessionStorage.getItem(QUOTE_URLS_STORAGE_KEY) : null;
+      const stored = storedRaw ? (JSON.parse(storedRaw) as { fingerprint?: string; quoteURL?: string; pay_url?: string }) : null;
+      if (stored?.fingerprint === fingerprint && stored.quoteURL && stored.pay_url) {
+        const targetUrl = redirectTo === "pay" ? stored.pay_url : stored.quoteURL;
+        if (targetUrl) {
+          window.location.href = targetUrl;
+          return;
+        }
+      }
+    } catch {
+      // ignore parse error, proceed to create new quote
+    }
     setQuoteProgressActive(true);
     setQuoteProgressStage(0);
     quoteProgressIntervalRef.current = setInterval(() => {
-      setQuoteProgressStage((i) => (i + 1) % QUOTE_PROGRESS_STAGES.length);
+      setQuoteProgressStage((i) => Math.min(i + 1, QUOTE_PROGRESS_STAGES.length - 1));
     }, 2000);
     try {
       const mon = generateMerchantOrderNo();
@@ -862,6 +928,12 @@ export default function CartClient() {
       }
       const payUrl = data.pay_url ?? null;
       const quoteUrl = data.quoteURL ?? data.quoteUrl ?? null;
+      if (quoteUrl && payUrl && typeof window !== "undefined") {
+        sessionStorage.setItem(
+          QUOTE_URLS_STORAGE_KEY,
+          JSON.stringify({ fingerprint, quoteURL: quoteUrl, pay_url: payUrl })
+        );
+      }
       const targetUrl = redirectTo === "pay" ? payUrl : quoteUrl;
       if (targetUrl && typeof targetUrl === "string") {
         metaPixel.lead({ content_name: redirectTo === "pay" ? "Quote (unbranded) Pay" : "Quote (unbranded) View" });
@@ -880,7 +952,7 @@ export default function CartClient() {
     }
   }
 
-  // Branded: call webhook via API, show progress, then redirect to quoteURL or pay_url
+  // Branded: call webhook (or reuse stored quote URLs), then redirect
   async function submitBrandedQuote(redirectTo: "pay" | "view") {
     if (activeCartGroup !== "branded" || activeItems.length === 0) {
       setMsg("No branded items to submit.");
@@ -908,49 +980,58 @@ export default function CartClient() {
       return;
     }
     setMsg(null);
+    const sessionToken = getOrCreateSessionToken();
+    const itemKeys = activeItems.map((item) => getCartItemKey(item));
+    const selectionsFromCart = activeItems.flatMap((item) => {
+      if (!item.branding || item.branding.length === 0) return [];
+      const key = getCartItemKey(item);
+      return item.branding.map((b) => ({
+        item_key: key,
+        stock_header_id: item.stock_header_id,
+        branding_position: b.branding_position,
+        branding_type: b.branding_type,
+        branding_size: b.branding_size,
+        color_count: b.color_count,
+        comment: b.comment || null,
+        artwork_url: b.artwork_url || null,
+        logo_file: b.logo_file || null,
+      }));
+    });
+    let dbSelections: QuoteBrandingSelection[] = [];
+    try {
+      dbSelections = await fetchQuoteBrandingSelections(sessionToken, itemKeys);
+    } catch {
+      // use cart selections only
+    }
+    const selections = selectionsFromCart.length > 0 ? selectionsFromCart : dbSelections;
+    const itemsWithoutSelections = activeItems.filter((item) => {
+      const key = getCartItemKey(item);
+      return !selections.some((s) => s.item_key === key) && (!item.branding || item.branding.length === 0);
+    });
+    if (itemsWithoutSelections.length > 0) {
+      setMsg("Some items are missing branding selections. Please ensure all branded items have saved selections.");
+      return;
+    }
+    const fingerprint = getBrandedQuoteFingerprint(activeItems, form, selections);
+    try {
+      const storedRaw = typeof window !== "undefined" ? sessionStorage.getItem(QUOTE_URLS_STORAGE_KEY) : null;
+      const stored = storedRaw ? (JSON.parse(storedRaw) as { fingerprint?: string; quoteURL?: string; pay_url?: string }) : null;
+      if (stored?.fingerprint === fingerprint && stored.quoteURL && stored.pay_url) {
+        const targetUrl = redirectTo === "pay" ? stored.pay_url : stored.quoteURL;
+        if (targetUrl) {
+          window.location.href = targetUrl;
+          return;
+        }
+      }
+    } catch {
+      // ignore parse error, proceed to create new quote
+    }
     setQuoteProgressActive(true);
     setQuoteProgressStage(0);
     quoteProgressIntervalRef.current = setInterval(() => {
-      setQuoteProgressStage((i) => (i + 1) % QUOTE_PROGRESS_STAGES.length);
+      setQuoteProgressStage((i) => Math.min(i + 1, QUOTE_PROGRESS_STAGES.length - 1));
     }, 2000);
     try {
-      const sessionToken = getOrCreateSessionToken();
-      const itemKeys = activeItems.map((item) => getCartItemKey(item));
-      const selectionsFromCart = activeItems.flatMap((item) => {
-        if (!item.branding || item.branding.length === 0) return [];
-        const key = getCartItemKey(item);
-        return item.branding.map((b) => ({
-          item_key: key,
-          stock_header_id: item.stock_header_id,
-          branding_position: b.branding_position,
-          branding_type: b.branding_type,
-          branding_size: b.branding_size,
-          color_count: b.color_count,
-          comment: b.comment || null,
-          artwork_url: b.artwork_url || null,
-          logo_file: b.logo_file || null,
-        }));
-      });
-      let dbSelections: QuoteBrandingSelection[] = [];
-      try {
-        dbSelections = await fetchQuoteBrandingSelections(sessionToken, itemKeys);
-      } catch {
-        // use cart selections only
-      }
-      const selections = selectionsFromCart.length > 0 ? selectionsFromCart : dbSelections;
-      const itemsWithoutSelections = activeItems.filter((item) => {
-        const key = getCartItemKey(item);
-        return !selections.some((s) => s.item_key === key) && (!item.branding || item.branding.length === 0);
-      });
-      if (itemsWithoutSelections.length > 0) {
-        setQuoteProgressActive(false);
-        if (quoteProgressIntervalRef.current) {
-          clearInterval(quoteProgressIntervalRef.current);
-          quoteProgressIntervalRef.current = null;
-        }
-        setMsg("Some items are missing branding selections. Please ensure all branded items have saved selections.");
-        return;
-      }
       const brandedPayload = buildBrandedPayload(activeItems, selections);
       const res = await fetch("/api/quote-branded", {
         method: "POST",
@@ -969,6 +1050,12 @@ export default function CartClient() {
       }
       const payUrl = data.pay_url ?? null;
       const quoteUrl = data.quoteURL ?? data.quoteUrl ?? null;
+      if (quoteUrl && payUrl && typeof window !== "undefined") {
+        sessionStorage.setItem(
+          QUOTE_URLS_STORAGE_KEY,
+          JSON.stringify({ fingerprint, quoteURL: quoteUrl, pay_url: payUrl })
+        );
+      }
       const targetUrl = redirectTo === "pay" ? payUrl : quoteUrl;
       if (targetUrl && typeof targetUrl === "string") {
         metaPixel.lead({ content_name: redirectTo === "pay" ? "Quote (branded) Pay" : "Quote (branded) View" });
