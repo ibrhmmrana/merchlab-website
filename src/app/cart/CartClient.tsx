@@ -186,6 +186,15 @@ function validateAndCleanPhone(phone: string): { isValid: boolean; cleaned: stri
   return { isValid: true, cleaned };
 }
 
+const QUOTE_PROGRESS_STAGES = [
+  "Getting product images",
+  "Getting prices",
+  "Getting quantities",
+  "Preparing your quote",
+  "Calculating totals",
+  "Finalising",
+];
+
 export default function CartClient() {
   const hydrated = useHasHydrated();
   const router = useRouter();
@@ -200,6 +209,11 @@ export default function CartClient() {
   const remove = useCartStore((s) => s.remove);
 
   const activeItems = activeCartGroup === 'branded' ? brandedItems : unbrandedItems;
+
+  // Unbranded quote: Pay Now / View Quote flow (wait for webhook, then redirect)
+  const [quoteProgressActive, setQuoteProgressActive] = useState(false);
+  const [quoteProgressStage, setQuoteProgressStage] = useState(0);
+  const quoteProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Branding pricing for branded tab (fetched when on branded)
   const [brandingPricing, setBrandingPricing] = useState<Map<number, BrandingPricingRow[]>>(new Map());
@@ -794,6 +808,194 @@ export default function CartClient() {
     }
   }
 
+  // Unbranded only: call webhook, show progress, then redirect to quoteURL or pay_url
+  async function submitUnbrandedQuote(redirectTo: "pay" | "view") {
+    if (activeCartGroup !== "unbranded" || activeItems.length === 0) {
+      setMsg("No unbranded items to submit.");
+      return;
+    }
+    const emailValidation = validateEmail(form.email);
+    const phoneValidation = validateAndCleanPhone(form.phone);
+    if (!emailValidation.isValid || !phoneValidation.isValid) {
+      setValidationErrors({
+        email: emailValidation.isValid ? undefined : emailValidation.error,
+        phone: phoneValidation.isValid ? undefined : phoneValidation.error,
+      });
+      setMsg("Please fix the validation errors before continuing.");
+      return;
+    }
+    if (phoneValidation.isValid && phoneValidation.cleaned !== form.phone) {
+      setForm({ ...form, phone: phoneValidation.cleaned });
+    }
+    if (!termsAccepted) {
+      setMsg("Please accept the Terms & Conditions.");
+      return;
+    }
+    setMsg(null);
+    setQuoteProgressActive(true);
+    setQuoteProgressStage(0);
+    quoteProgressIntervalRef.current = setInterval(() => {
+      setQuoteProgressStage((i) => (i + 1) % QUOTE_PROGRESS_STAGES.length);
+    }, 2000);
+    try {
+      const mon = generateMerchantOrderNo();
+      const fullEnquiryJson = buildQuotePayload(mon, activeItems);
+      const timestamp = new Date().toISOString();
+      const res = await fetch("/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fullEnquiryJson: JSON.stringify(fullEnquiryJson),
+          timestamp,
+          merchant_order_no: mon,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (quoteProgressIntervalRef.current) {
+        clearInterval(quoteProgressIntervalRef.current);
+        quoteProgressIntervalRef.current = null;
+      }
+      setQuoteProgressActive(false);
+      if (!res.ok) {
+        setMsg(data.error || data.details || "Failed to create quote.");
+        return;
+      }
+      const payUrl = data.pay_url ?? null;
+      const quoteUrl = data.quoteURL ?? data.quoteUrl ?? null;
+      const targetUrl = redirectTo === "pay" ? payUrl : quoteUrl;
+      if (targetUrl && typeof targetUrl === "string") {
+        metaPixel.lead({ content_name: redirectTo === "pay" ? "Quote (unbranded) Pay" : "Quote (unbranded) View" });
+        metaPixel.quoteSubmitted({ action: "send", num_items: activeItems.length });
+        window.location.href = targetUrl;
+        return;
+      }
+      setMsg("Quote created but no redirect URL was returned. Please contact support.");
+    } catch (e: unknown) {
+      if (quoteProgressIntervalRef.current) {
+        clearInterval(quoteProgressIntervalRef.current);
+        quoteProgressIntervalRef.current = null;
+      }
+      setQuoteProgressActive(false);
+      setMsg(e instanceof Error ? e.message : "Something went wrong.");
+    }
+  }
+
+  // Branded: call webhook via API, show progress, then redirect to quoteURL or pay_url
+  async function submitBrandedQuote(redirectTo: "pay" | "view") {
+    if (activeCartGroup !== "branded" || activeItems.length === 0) {
+      setMsg("No branded items to submit.");
+      return;
+    }
+    if (!isBrandedValid) {
+      setMsg("Please complete all branding details before continuing.");
+      return;
+    }
+    const emailValidation = validateEmail(form.email);
+    const phoneValidation = validateAndCleanPhone(form.phone);
+    if (!emailValidation.isValid || !phoneValidation.isValid) {
+      setValidationErrors({
+        email: emailValidation.isValid ? undefined : emailValidation.error,
+        phone: phoneValidation.isValid ? undefined : phoneValidation.error,
+      });
+      setMsg("Please fix the validation errors before continuing.");
+      return;
+    }
+    if (phoneValidation.isValid && phoneValidation.cleaned !== form.phone) {
+      setForm({ ...form, phone: phoneValidation.cleaned });
+    }
+    if (!termsAccepted) {
+      setMsg("Please accept the Terms & Conditions.");
+      return;
+    }
+    setMsg(null);
+    setQuoteProgressActive(true);
+    setQuoteProgressStage(0);
+    quoteProgressIntervalRef.current = setInterval(() => {
+      setQuoteProgressStage((i) => (i + 1) % QUOTE_PROGRESS_STAGES.length);
+    }, 2000);
+    try {
+      const sessionToken = getOrCreateSessionToken();
+      const itemKeys = activeItems.map((item) => getCartItemKey(item));
+      const selectionsFromCart = activeItems.flatMap((item) => {
+        if (!item.branding || item.branding.length === 0) return [];
+        const key = getCartItemKey(item);
+        return item.branding.map((b) => ({
+          item_key: key,
+          stock_header_id: item.stock_header_id,
+          branding_position: b.branding_position,
+          branding_type: b.branding_type,
+          branding_size: b.branding_size,
+          color_count: b.color_count,
+          comment: b.comment || null,
+          artwork_url: b.artwork_url || null,
+          logo_file: b.logo_file || null,
+        }));
+      });
+      let dbSelections: QuoteBrandingSelection[] = [];
+      try {
+        dbSelections = await fetchQuoteBrandingSelections(sessionToken, itemKeys);
+      } catch {
+        // use cart selections only
+      }
+      const selections = selectionsFromCart.length > 0 ? selectionsFromCart : dbSelections;
+      const itemsWithoutSelections = activeItems.filter((item) => {
+        const key = getCartItemKey(item);
+        return !selections.some((s) => s.item_key === key) && (!item.branding || item.branding.length === 0);
+      });
+      if (itemsWithoutSelections.length > 0) {
+        setQuoteProgressActive(false);
+        if (quoteProgressIntervalRef.current) {
+          clearInterval(quoteProgressIntervalRef.current);
+          quoteProgressIntervalRef.current = null;
+        }
+        setMsg("Some items are missing branding selections. Please ensure all branded items have saved selections.");
+        return;
+      }
+      const brandedPayload = buildBrandedPayload(activeItems, selections);
+      const res = await fetch("/api/quote-branded", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ payload: brandedPayload }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (quoteProgressIntervalRef.current) {
+        clearInterval(quoteProgressIntervalRef.current);
+        quoteProgressIntervalRef.current = null;
+      }
+      setQuoteProgressActive(false);
+      if (!res.ok) {
+        setMsg(data.error || data.details || "Failed to create quote.");
+        return;
+      }
+      const payUrl = data.pay_url ?? null;
+      const quoteUrl = data.quoteURL ?? data.quoteUrl ?? null;
+      const targetUrl = redirectTo === "pay" ? payUrl : quoteUrl;
+      if (targetUrl && typeof targetUrl === "string") {
+        metaPixel.lead({ content_name: redirectTo === "pay" ? "Quote (branded) Pay" : "Quote (branded) View" });
+        metaPixel.quoteSubmitted({ action: "send", num_items: activeItems.length });
+        window.location.href = targetUrl;
+        return;
+      }
+      setMsg("Quote created but no redirect URL was returned. Please contact support.");
+    } catch (e: unknown) {
+      if (quoteProgressIntervalRef.current) {
+        clearInterval(quoteProgressIntervalRef.current);
+        quoteProgressIntervalRef.current = null;
+      }
+      setQuoteProgressActive(false);
+      setMsg(e instanceof Error ? e.message : "Something went wrong.");
+    }
+  }
+
+  // Clear quote progress interval on unmount
+  useEffect(() => {
+    return () => {
+      if (quoteProgressIntervalRef.current) {
+        clearInterval(quoteProgressIntervalRef.current);
+      }
+    };
+  }, []);
+
   function buildQuotePayload(merchantOrderNo: string, groupItems: CartItem[]) {
     const now = new Date();
     const nowIso = now.toISOString();
@@ -905,6 +1107,37 @@ export default function CartClient() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Quote progress overlay (unbranded Pay Now / View Quote) */}
+      {quoteProgressActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <div className="w-14 h-14 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xs font-medium text-primary">{quoteProgressStage + 1}/{QUOTE_PROGRESS_STAGES.length}</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-lg font-semibold text-gray-900 mb-1">
+              {QUOTE_PROGRESS_STAGES[quoteProgressStage]}
+            </p>
+            <p className="text-sm text-gray-500">Please wait while we prepare your quote.</p>
+            <div className="mt-6 flex justify-center gap-1">
+              {QUOTE_PROGRESS_STAGES.map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "h-1.5 rounded-full w-8 transition-all duration-300",
+                    i === quoteProgressStage ? "bg-primary" : "bg-gray-200"
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
@@ -1307,13 +1540,42 @@ export default function CartClient() {
                   </div>
                 </div>
 
-                <button
-                  disabled={submitting || activeItems.length === 0 || !termsAccepted || (activeCartGroup === 'branded' && !isBrandedValid)}
-                  onClick={submitQuote}
-                  className="luxury-btn w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? "Submitting…" : "Submit Quote"}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    disabled={
+                      quoteProgressActive ||
+                      submitting ||
+                      activeItems.length === 0 ||
+                      !termsAccepted ||
+                      (activeCartGroup === "branded" && !isBrandedValid)
+                    }
+                    onClick={() =>
+                      activeCartGroup === "unbranded"
+                        ? submitUnbrandedQuote("view")
+                        : submitBrandedQuote("view")
+                    }
+                    className="luxury-btn flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {quoteProgressActive ? "Preparing…" : "View Quote"}
+                  </button>
+                  <button
+                    disabled={
+                      quoteProgressActive ||
+                      submitting ||
+                      activeItems.length === 0 ||
+                      !termsAccepted ||
+                      (activeCartGroup === "branded" && !isBrandedValid)
+                    }
+                    onClick={() =>
+                      activeCartGroup === "unbranded"
+                        ? submitUnbrandedQuote("pay")
+                        : submitBrandedQuote("pay")
+                    }
+                    className="luxury-btn flex-1 disabled:opacity-50 disabled:cursor-not-allowed bg-green-600 hover:bg-green-700 text-white border-0"
+                  >
+                    {quoteProgressActive ? "Preparing…" : "Pay Now"}
+                  </button>
+                </div>
 
                 {msg && (
                   <div className={`text-sm ${msg.includes("submitted") ? "text-green-600" : "text-red-600"}`}>

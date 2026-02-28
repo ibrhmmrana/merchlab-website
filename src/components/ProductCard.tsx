@@ -859,8 +859,8 @@ export default function ProductCard({ group }: Props) {
                 'Loading price...'
               ) : selectedVariantPrice !== null ? (
                 pathname?.startsWith('/shop') && shopMarginPercent !== null && shopMarginPercent > 0 && shopMarginPercent < 100
-                  ? `R ${(selectedVariantPrice / (1 - shopMarginPercent / 100)).toFixed(2)}`
-                  : `R ${selectedVariantPrice.toFixed(2)}`
+                  ? `R ${Math.round(selectedVariantPrice / (1 - shopMarginPercent / 100))}`
+                  : `R ${Math.round(selectedVariantPrice)}`
               ) : (
                 'Price unavailable'
               )}

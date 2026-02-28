@@ -203,6 +203,13 @@ export async function POST(req: Request) {
 
     const responseData = await response.text();
     console.log("Webhook response:", responseData);
+
+    let webhookBody: { quoteURL?: string; pay_url?: string; [key: string]: unknown } = {};
+    try {
+      webhookBody = JSON.parse(responseData);
+    } catch {
+      // Non-JSON response: still return success but no URLs
+    }
     
     // LinkedIn search feature is currently disabled
     // To reactivate, uncomment the code below
@@ -252,7 +259,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       ok: true, 
       message: "Quote submitted successfully",
-      merchant_order_no 
+      merchant_order_no,
+      quoteURL: webhookBody.quoteURL ?? null,
+      pay_url: webhookBody.pay_url ?? null,
     });
   } catch (e: unknown) {
     console.error("Quote submission error:", e);
