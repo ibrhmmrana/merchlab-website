@@ -240,21 +240,21 @@ export default function CartDrawer() {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>R {Math.round(subtotal * 100) / 100}</span>
+                <span>R {Math.round(subtotal)}</span>
               </div>
               {delivery > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Delivery (under R1,000)</span>
-                  <span>R {delivery.toFixed(2)}</span>
+                  <span>R {Math.round(delivery)}</span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">VAT (15%)</span>
-                <span>R {Math.round(vat * 100) / 100}</span>
+                <span>R {Math.round(vat)}</span>
               </div>
               <div className="flex justify-between items-center pt-1.5 border-t border-gray-200 font-semibold">
                 <span>Total</span>
-                <span>R {Math.round(total * 100) / 100}</span>
+                <span>R {Math.round(total)}</span>
               </div>
             </div>
           )}

@@ -1302,7 +1302,7 @@ export default function CartClient() {
                       const lineTotalRaw = activeCartGroup === 'branded' && isBranded(item)
                         ? brandedLinePricing(item, brandingPricing, shopMarginPercent).lineTotalExVat
                         : (item.discounted_price ?? item.base_price ?? 0) * item.quantity * getMarginFactor(shopMarginPercent);
-                      const lineTotal = Math.round(lineTotalRaw * 100) / 100;
+                      const lineTotal = Math.round(lineTotalRaw);
                       return (
                         <div key={itemKey} className="flex items-center gap-4 border rounded p-3">
                           <div className="relative w-20 h-20 rounded bg-gray-50 overflow-hidden">
@@ -1359,7 +1359,7 @@ export default function CartClient() {
                                 Remove
                               </button>
                               <span className="ml-auto text-sm font-semibold tabular-nums">
-                                R {lineTotal.toFixed(2)}
+                                R {lineTotal}
                               </span>
                             </div>
                           </div>
@@ -1584,21 +1584,21 @@ export default function CartClient() {
                   <>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal</span>
-                      <span>R {subtotal.toFixed(2)}</span>
+                      <span>R {Math.round(subtotal)}</span>
                     </div>
                     {delivery > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Delivery (under R1,000)</span>
-                        <span>R {delivery.toFixed(2)}</span>
+                        <span>R {Math.round(delivery)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">VAT (15%)</span>
-                      <span>R {vat.toFixed(2)}</span>
+                      <span>R {Math.round(vat)}</span>
                     </div>
                     <div className="flex justify-between text-base font-semibold border-t border-gray-300 pt-2">
                       <span>Total</span>
-                      <span>R {total.toFixed(2)}</span>
+                      <span>R {Math.round(total)}</span>
                     </div>
                   </>
                 )}
