@@ -47,8 +47,8 @@ async function loginAndGetCookie(): Promise<string> {
     TokenKey: 'T4QzhLB5UP8hygrUeEchBLdz9LtK2nSz',
     username: 'ML(Lt',
     psw: 'BnkyVod3jhc=',
-    EntityName: 'Customer-ML(Lt-65146',
-    entityID: '65146',
+    EntityName: 'Customer-ML(Lt-65142',
+    entityID: '65142',
   });
 
   const response = await fetch(loginUrl, {
@@ -92,7 +92,7 @@ async function getProductPrice(stockId: number, cookie: string, retries = 2): Pr
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const formData = new URLSearchParams({
-        entityID: '65146',
+        entityID: '65142',
         username: 'ML(Lt',
         psw: 'BnkyVod3jhc=',
         ReturnType: 'JSON',

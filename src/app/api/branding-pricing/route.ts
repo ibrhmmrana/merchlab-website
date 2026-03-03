@@ -30,8 +30,8 @@ async function loginAndGetCookie(): Promise<string> {
       TokenKey: 'T4QzhLB5UP8hygrUeEchBLdz9LtK2nSz',
       username: 'ML(Lt',
       psw: 'BnkyVod3jhc=',
-      EntityName: 'Customer-ML(Lt-65146',
-      entityID: '65146',
+      EntityName: 'Customer-ML(Lt-65142',
+      entityID: '65142',
     }),
   });
 
@@ -77,7 +77,7 @@ async function getBrandingPricing(stockHeaderId: number, cookie: string): Promis
         Cookie: cookie,
       },
       body: new URLSearchParams({
-        entityID: '65146',
+        entityID: '65142',
         username: 'ML(Lt',
         psw: 'BnkyVod3jhc=',
         ReturnType: 'JSON',
