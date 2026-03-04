@@ -16,11 +16,9 @@ export async function getRefreshToken(): Promise<string | null> {
       .maybeSingle();
 
     if (!error && data && data.token_value) {
-      // Check if token is expired (if expires_at is set)
       if (data.expires_at) {
         const expiresAt = new Date(data.expires_at);
         const now = new Date();
-        // If token expires in less than 1 day, log a warning
         const daysUntilExpiry = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
         if (daysUntilExpiry < 1) {
           console.warn(`[Barron Token] Refresh token expires in ${daysUntilExpiry.toFixed(1)} days. Consider refreshing soon.`);
@@ -46,11 +44,9 @@ export async function saveRefreshToken(
   try {
     const supabase = getSupabaseAdmin();
     
-    // Calculate expiration date if expiresIn is provided (in seconds)
-    // Refresh tokens typically expire in 14 days (1209600 seconds)
     const expiresAt = expiresIn 
       ? new Date(Date.now() + expiresIn * 1000).toISOString()
-      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(); // Default to 14 days
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
     const { error } = await supabase
       .from('api_tokens')
@@ -65,13 +61,10 @@ export async function saveRefreshToken(
 
     if (error) {
       console.error('[Barron Token] Error saving to Supabase:', error);
-      // Don't throw - we can still use the token from memory/cache
     } else {
       console.log('[Barron Token] Refresh token saved to Supabase successfully');
     }
   } catch (error) {
     console.error('[Barron Token] Exception saving to Supabase:', error);
-    // Don't throw - we can still use the token from memory/cache
   }
 }
-

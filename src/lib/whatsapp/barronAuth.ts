@@ -25,12 +25,10 @@ let accessTokenCache: { token: string; expiresAt: number; refreshToken?: string 
  * Get OAuth2 access token using refresh token
  */
 export async function getAccessToken(): Promise<string> {
-  // Check cache first
   if (accessTokenCache && accessTokenCache.expiresAt > Date.now()) {
     return accessTokenCache.token;
   }
 
-  // Get refresh token from Supabase (persistent storage) or environment variable (fallback)
   const refreshToken = await getRefreshToken() || accessTokenCache?.refreshToken;
 
   if (!refreshToken) {
@@ -51,20 +49,16 @@ export async function getAccessToken(): Promise<string> {
 
     const response = await fetch(config.tokenUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      // If refresh token is invalid/expired, clear cache
       if (response.status === 400 || response.status === 401) {
         accessTokenCache = null;
         throw new Error(
-          `Refresh token is invalid or expired. Please obtain a new refresh token. ` +
-          `Original error: ${response.status} ${errorText}`
+          `Refresh token is invalid or expired. Please obtain a new refresh token. Original error: ${response.status} ${errorText}`
         );
       }
       throw new Error(`Failed to get access token: ${response.status} ${errorText}`);
@@ -72,17 +66,15 @@ export async function getAccessToken(): Promise<string> {
 
     const data = await response.json();
     const accessToken = data.access_token;
-    const newRefreshToken = data.refresh_token || refreshToken; // Use new refresh token if provided
-    const expiresIn = data.expires_in || 3600; // Default to 1 hour if not provided
+    const newRefreshToken = data.refresh_token || refreshToken;
+    const expiresIn = data.expires_in || 3600;
     
-    // Cache the token (expire 5 minutes before actual expiry)
     accessTokenCache = {
       token: accessToken,
       expiresAt: Date.now() + (expiresIn - 300) * 1000,
       refreshToken: newRefreshToken,
     };
 
-    // If we got a new refresh token, save it to Supabase for automatic rotation
     if (data.refresh_token && data.refresh_token !== refreshToken) {
       console.log('[Barron Token] New refresh token received - saving to database for automatic rotation');
       await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
@@ -97,4 +89,3 @@ export async function getAccessToken(): Promise<string> {
     throw error;
   }
 }
-

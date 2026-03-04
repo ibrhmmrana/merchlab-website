@@ -17,7 +17,7 @@ export async function GET(
 
   try {
     const { orderId } = await params;
-    
+
     if (!orderId) {
       return NextResponse.json(
         { error: 'Order ID is required' },
@@ -25,20 +25,15 @@ export async function GET(
       );
     }
 
-    // Format orderId: if it doesn't start with BAR-SO, prepend it
-    // Remove any existing BAR-SO prefix first to avoid duplication
     let formattedOrderId = orderId.trim();
     if (formattedOrderId.startsWith('BAR-SO')) {
       // Already formatted
     } else if (formattedOrderId.startsWith('SO')) {
-      // If it starts with SO, prepend BAR-
       formattedOrderId = `BAR-${formattedOrderId}`;
     } else {
-      // Otherwise, prepend BAR-SO
       formattedOrderId = `BAR-SO${formattedOrderId}`;
     }
 
-    // Get access token
     const accessToken = await getAccessToken();
 
     // Fetch delivery status from Barron API

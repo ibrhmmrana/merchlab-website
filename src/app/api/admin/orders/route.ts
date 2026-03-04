@@ -6,15 +6,22 @@ import { getRefreshToken, saveRefreshToken } from '@/lib/barron/tokenStorage';
 
 export const runtime = 'nodejs';
 
-// OAuth2 configuration
+type EntitySource = 'merchlab' | 'workwearables';
+
+const ENTITIES: Record<EntitySource, { entityId: string; entityName: string }> = {
+  merchlab:       { entityId: '65146', entityName: 'Customer-ML(Lt-65146' },
+  workwearables:  { entityId: '65142', entityName: 'Customer-ML(Lt-65142' },
+};
+
+// OAuth2 configuration (shared between both entities)
 function getBarronOAuthConfig() {
   const clientId = process.env.BARRON_CLIENT_ID;
   const clientSecret = process.env.BARRON_CLIENT_SECRET;
-  
+
   if (!clientId || !clientSecret) {
     throw new Error('BARRON_CLIENT_ID and BARRON_CLIENT_SECRET environment variables are required');
   }
-  
+
   return {
     clientId,
     clientSecret,
@@ -24,17 +31,14 @@ function getBarronOAuthConfig() {
   };
 }
 
-// In-memory token cache (in production, consider using Redis or database)
+// Single in-memory token cache (shared token for both entities)
 let accessTokenCache: { token: string; expiresAt: number; refreshToken?: string } | null = null;
 
-// Get OAuth2 access token using refresh token
 async function getAccessToken(): Promise<string> {
-  // Check cache first
   if (accessTokenCache && accessTokenCache.expiresAt > Date.now()) {
     return accessTokenCache.token;
   }
 
-  // Get refresh token from Supabase (persistent storage) or environment variable (fallback)
   const refreshToken = await getRefreshToken() || accessTokenCache?.refreshToken;
 
   if (!refreshToken) {
@@ -56,27 +60,21 @@ async function getAccessToken(): Promise<string> {
 
     const response = await fetch(config.tokenUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      // If refresh token is invalid/expired, clear cache
       if (response.status === 400 || response.status === 401) {
         accessTokenCache = null;
-        // Parse error to check if it's an expired token
         let errorMessage = 'Refresh token is invalid or expired.';
         try {
           const errorData = JSON.parse(errorText);
           if (errorData.error === 'invalid_grant' && errorData.error_description?.includes('expired')) {
             errorMessage = 'The authentication token has expired. Please contact an administrator to update the refresh token.';
           }
-        } catch {
-          // If parsing fails, use default message
-        }
+        } catch { /* ignore */ }
         throw new Error(errorMessage);
       }
       throw new Error(`Failed to get access token: ${response.status} ${errorText}`);
@@ -84,29 +82,21 @@ async function getAccessToken(): Promise<string> {
 
     const data = await response.json();
     const accessToken = data.access_token;
-    const newRefreshToken = data.refresh_token || refreshToken; // Use new refresh token if provided
-    const expiresIn = data.expires_in || 3600; // Default to 1 hour if not provided
-    
-    // Cache the access token (expire 5 minutes before actual expiry)
+    const newRefreshToken = data.refresh_token || refreshToken;
+    const expiresIn = data.expires_in || 3600;
+
     accessTokenCache = {
       token: accessToken,
       expiresAt: Date.now() + (expiresIn - 300) * 1000,
       refreshToken: newRefreshToken,
     };
 
-    // If we got a new refresh token, save it to Supabase for persistence
-    // This ensures automatic token rotation - no manual updates needed!
     if (data.refresh_token && data.refresh_token !== refreshToken) {
-      console.log('[Barron Token] New refresh token received - saving to database for automatic rotation');
-      // Save to Supabase (this will persist across deployments)
+      console.log('[Barron Token] New refresh token received - saving to database');
       await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
-      // Also update cache
       accessTokenCache.refreshToken = newRefreshToken;
-    } else if (data.refresh_token) {
-      // Even if it's the same token, update the expiration if provided
-      if (data.refresh_token_expires_in) {
-        await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
-      }
+    } else if (data.refresh_token && data.refresh_token_expires_in) {
+      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
     }
 
     return accessToken;
@@ -116,8 +106,7 @@ async function getAccessToken(): Promise<string> {
   }
 }
 
-// Fetch all orders from Barron API (handles pagination)
-async function fetchOrdersFromBarron(): Promise<Array<{
+type BarronOrderRow = {
   orderId: string;
   contactPersonId: string;
   customerReference: string;
@@ -130,16 +119,26 @@ async function fetchOrdersFromBarron(): Promise<Array<{
   hexCode: string;
   orderTaker: string;
   isDelivery: boolean;
-}>> {
-  console.log('Getting access token...');
-  const accessToken = await getAccessToken();
-  console.log('Access token obtained, length:', accessToken.length);
+};
 
+/**
+ * Fetch all orders from Barron for a specific entity (handles pagination).
+ * Passes entityId as a query parameter so the same token can fetch orders for different entities.
+ */
+async function fetchOrdersForEntity(
+  source: EntitySource,
+  accessToken: string
+): Promise<{ orders: BarronOrderRow[]; error?: string }> {
   const config = getBarronOAuthConfig();
-  
-  // Step 1: Fetch page 1 to get total_pages
-  console.log('Fetching page 1 from:', config.ordersApiUrl);
-  const firstPageResponse = await fetch(`${config.ordersApiUrl}?page=1`, {
+  const entity = ENTITIES[source];
+
+  console.log(`[Barron ${source}] Fetching orders (entityId=${entity.entityId})...`);
+
+  const baseUrl = config.ordersApiUrl;
+  const buildUrl = (page: number) =>
+    `${baseUrl}?page=${page}&entityId=${entity.entityId}&entityName=${encodeURIComponent(entity.entityName)}`;
+
+  const firstPageResponse = await fetch(buildUrl(1), {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -147,64 +146,34 @@ async function fetchOrdersFromBarron(): Promise<Array<{
     },
   });
 
-  console.log('Orders API response status:', firstPageResponse.status, firstPageResponse.statusText);
-
   if (!firstPageResponse.ok) {
     const errorText = await firstPageResponse.text();
-    console.error('Orders API error:', errorText);
-    throw new Error(`Failed to fetch orders: ${firstPageResponse.status} ${errorText}`);
+    console.error(`[Barron ${source}] Orders API error:`, firstPageResponse.status, errorText);
+    return { orders: [], error: `Orders API ${firstPageResponse.status}: ${errorText.slice(0, 200)}` };
   }
 
   const firstPageData = await firstPageResponse.json();
-  
-  // Extract total_pages from response
+
   let totalPages = 1;
   let allOrders: any[] = [];
-  
-  // Handle different response structures
+
   if (Array.isArray(firstPageData) && firstPageData.length > 0) {
     const firstItem = firstPageData[0] as any;
-    console.log('Barron API response structure:', {
-      isArray: true,
-      length: firstPageData.length,
-      firstItemKeys: Object.keys(firstItem),
-      hasResults: !!firstItem.results,
-      resultsLength: firstItem.results ? firstItem.results.length : 'N/A',
-      totalPages: firstItem.total_pages,
-    });
-    
-    if (firstItem.total_pages !== undefined) {
-      totalPages = Number(firstItem.total_pages) || 1;
-    }
-    if (firstItem.results && Array.isArray(firstItem.results)) {
-      allOrders = [...firstItem.results];
-    }
+    if (firstItem.total_pages !== undefined) totalPages = Number(firstItem.total_pages) || 1;
+    if (firstItem.results && Array.isArray(firstItem.results)) allOrders = [...firstItem.results];
   } else if (firstPageData && typeof firstPageData === 'object' && !Array.isArray(firstPageData)) {
     const dataObj = firstPageData as any;
-    console.log('Barron API response structure:', {
-      isArray: false,
-      keys: Object.keys(dataObj),
-      hasResults: !!dataObj.results,
-      resultsLength: dataObj.results ? dataObj.results.length : 'N/A',
-      totalPages: dataObj.total_pages,
-    });
-    
-    if (dataObj.total_pages !== undefined) {
-      totalPages = Number(dataObj.total_pages) || 1;
-    }
-    if (dataObj.results && Array.isArray(dataObj.results)) {
-      allOrders = [...dataObj.results];
-    }
+    if (dataObj.total_pages !== undefined) totalPages = Number(dataObj.total_pages) || 1;
+    if (dataObj.results && Array.isArray(dataObj.results)) allOrders = [...dataObj.results];
   }
-  
-  console.log(`Found ${totalPages} total pages. Fetched page 1 with ${allOrders.length} orders.`);
-  
-  // Step 2: Fetch remaining pages (if any)
+
+  console.log(`[Barron ${source}] Page 1: ${allOrders.length} orders, ${totalPages} total pages`);
+
   if (totalPages > 1) {
     const pagePromises = [];
     for (let page = 2; page <= totalPages; page++) {
       pagePromises.push(
-        fetch(`${config.ordersApiUrl}?page=${page}`, {
+        fetch(buildUrl(page), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -212,40 +181,31 @@ async function fetchOrdersFromBarron(): Promise<Array<{
           },
         }).then(async (response) => {
           if (!response.ok) {
-            console.error(`Failed to fetch page ${page}: ${response.status}`);
+            console.error(`[Barron ${source}] Failed to fetch page ${page}: ${response.status}`);
             return [];
           }
           const pageData = await response.json();
-          
-          // Extract results from page
           let pageOrders: any[] = [];
           if (Array.isArray(pageData) && pageData.length > 0) {
             const firstItem = pageData[0] as any;
-            if (firstItem.results && Array.isArray(firstItem.results)) {
-              pageOrders = firstItem.results;
-            }
+            if (firstItem.results && Array.isArray(firstItem.results)) pageOrders = firstItem.results;
           } else if (pageData && typeof pageData === 'object' && !Array.isArray(pageData)) {
             const dataObj = pageData as any;
-            if (dataObj.results && Array.isArray(dataObj.results)) {
-              pageOrders = dataObj.results;
-            }
+            if (dataObj.results && Array.isArray(dataObj.results)) pageOrders = dataObj.results;
           }
-          
-          console.log(`Fetched page ${page} with ${pageOrders.length} orders.`);
           return pageOrders;
         })
       );
     }
-    
-    // Fetch all pages in parallel
-    const remainingPagesResults = await Promise.all(pagePromises);
-    remainingPagesResults.forEach((pageOrders) => {
+
+    const remainingPages = await Promise.all(pagePromises);
+    for (const pageOrders of remainingPages) {
       allOrders = [...allOrders, ...pageOrders];
-    });
+    }
   }
-  
-  console.log(`Total orders fetched across all pages: ${allOrders.length}`);
-  return allOrders;
+
+  console.log(`[Barron ${source}] Total orders fetched: ${allOrders.length}`);
+  return { orders: allOrders };
 }
 
 // Helper to safely extract string from unknown object
@@ -448,32 +408,38 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Fetch all orders from Barron API (salesorders endpoint)
-    // This gets all order IDs and their details in a single call
-    console.log('Step 1: Fetching all orders from salesorders endpoint...');
-    const orders = await fetchOrdersFromBarron();
-    console.log(`Step 1 complete: Fetched ${orders.length} orders from Barron API`);
-    
-    // Extract and log all order IDs for verification
-    const orderIds = orders.map(o => {
-      const id = o.orderId || '';
-      const formattedId = String(id).trim();
-      if (formattedId.startsWith('BAR-SO')) {
-        return formattedId;
-      } else if (formattedId.startsWith('SO')) {
-        return `BAR-${formattedId}`;
-      } else {
-        return `BAR-SO${formattedId}`;
-      }
-    });
-    console.log(`Extracted ${orderIds.length} order IDs (BAR-SO format). Sample IDs:`, orderIds.slice(0, 5));
+    // Step 1: Get a single access token (shared between both entities)
+    console.log('Step 1: Getting Barron access token...');
+    const accessToken = await getAccessToken();
+
+    // Step 2: Fetch orders from both entities in parallel
+    console.log('Step 2: Fetching orders for both entities (MerchLab + WorkWearables)...');
+    const [merchlabResult, workwearablesResult] = await Promise.all([
+      fetchOrdersForEntity('merchlab', accessToken),
+      fetchOrdersForEntity('workwearables', accessToken),
+    ]);
+
+    const merchlabOrders = merchlabResult.orders;
+    const workwearablesOrders = workwearablesResult.orders;
+
+    const orders: (BarronOrderRow & { source: EntitySource })[] = [
+      ...merchlabOrders.map((o) => ({ ...o, source: 'merchlab' as EntitySource })),
+      ...workwearablesOrders.map((o) => ({ ...o, source: 'workwearables' as EntitySource })),
+    ];
+    console.log(`Step 2 complete: ${merchlabOrders.length} MerchLab + ${workwearablesOrders.length} WorkWearables = ${orders.length} total orders`);
+
+    const sources = {
+      merchlab: { count: merchlabOrders.length, error: merchlabResult.error ?? undefined },
+      workwearables: { count: workwearablesOrders.length, error: workwearablesResult.error ?? undefined },
+    };
 
     if (orders.length === 0) {
       return NextResponse.json(
         {
           orders: [],
           total: 0,
-          warning: 'No orders returned from Barron API. Check server logs for details.',
+          sources,
+          warning: 'No orders returned from Barron API. Check server logs and sources for details.',
         },
         {
           headers: {
@@ -534,6 +500,7 @@ export async function GET(request: NextRequest) {
       {
         orders: enrichedOrders,
         total: enrichedOrders.length,
+        sources,
       },
       {
         headers: {

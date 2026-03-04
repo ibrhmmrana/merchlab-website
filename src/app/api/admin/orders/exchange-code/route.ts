@@ -54,9 +54,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(tokenUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
     });
 
@@ -73,14 +71,12 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
 
-    // Automatically save refresh token to Supabase for persistence and automatic rotation
     if (data.refresh_token) {
       try {
         await saveRefreshToken(data.refresh_token, data.refresh_token_expires_in || data.expires_in);
         console.log('[Barron Token] Refresh token automatically saved to database');
       } catch (error) {
         console.error('[Barron Token] Error saving refresh token to database:', error);
-        // Continue anyway - token is still returned to user
       }
     }
 
@@ -110,4 +106,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

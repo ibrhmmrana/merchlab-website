@@ -8,10 +8,10 @@ export const runtime = 'nodejs';
  * 
  * To get a refresh token:
  * 1. Visit the authorization URL returned by this endpoint
- * 2. Sign in with info@merchlab.io / M3rch$h0p
+ * 2. Sign in with the Barron account
  * 3. You'll be redirected to the callback URL with an authorization code
  * 4. Exchange the code for tokens using the /exchange-code endpoint
- * 5. Save the refresh_token as BARRON_REFRESH_TOKEN environment variable
+ * 5. Refresh token is saved automatically to the database
  */
 export async function GET(request: NextRequest) {
   if (!(await isAuthed())) {
@@ -34,7 +34,6 @@ export async function GET(request: NextRequest) {
   const scope = 'openid offline_access https://barronb2c.onmicrosoft.com/4fbb5489-a64f-4ff6-a9f0-05f5fa2f72e5/Orders';
   const authorizationUrl = 'https://barronb2c.b2clogin.com/barronb2c.onmicrosoft.com/B2C_1_SignIn_US/oauth2/v2.0/authorize';
   
-  // Generate a state parameter for security
   const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   
   const authUrl = new URL(authorizationUrl);
@@ -44,19 +43,19 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set('scope', scope);
   authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('response_mode', 'query');
+  authUrl.searchParams.set('access_type', 'offline');
 
   return NextResponse.json(
     {
       authorizationUrl: authUrl.toString(),
       instructions: [
         '1. Visit the authorizationUrl above',
-        '2. Sign in with: info@merchlab.io / M3rch$h0p',
+        '2. Sign in with your Barron account',
         '3. After authorization, you will be redirected with a code parameter',
-        '4. Use that code with the /api/admin/orders/exchange-code endpoint to get tokens',
-        '5. Save the refresh_token as BARRON_REFRESH_TOKEN environment variable',
+        '4. POST { "code": "<code>" } to /api/admin/orders/exchange-code',
+        '5. Refresh token is saved automatically to the database',
       ],
     },
     { headers: noIndexHeaders() }
   );
 }
-
