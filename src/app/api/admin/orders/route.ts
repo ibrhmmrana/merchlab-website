@@ -408,38 +408,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Get a single access token (shared between both entities)
+    // Step 1: Get access token
     console.log('Step 1: Getting Barron access token...');
     const accessToken = await getAccessToken();
 
-    // Step 2: Fetch orders from both entities in parallel
-    console.log('Step 2: Fetching orders for both entities (MerchLab + WorkWearables)...');
-    const [merchlabResult, workwearablesResult] = await Promise.all([
-      fetchOrdersForEntity('merchlab', accessToken),
-      fetchOrdersForEntity('workwearables', accessToken),
-    ]);
+    // Step 2: Fetch all orders (single call -- both entities share one Barron account)
+    console.log('Step 2: Fetching all orders from Barron...');
+    const result = await fetchOrdersForEntity('merchlab', accessToken);
 
-    const merchlabOrders = merchlabResult.orders;
-    const workwearablesOrders = workwearablesResult.orders;
-
-    const orders: (BarronOrderRow & { source: EntitySource })[] = [
-      ...merchlabOrders.map((o) => ({ ...o, source: 'merchlab' as EntitySource })),
-      ...workwearablesOrders.map((o) => ({ ...o, source: 'workwearables' as EntitySource })),
-    ];
-    console.log(`Step 2 complete: ${merchlabOrders.length} MerchLab + ${workwearablesOrders.length} WorkWearables = ${orders.length} total orders`);
-
-    const sources = {
-      merchlab: { count: merchlabOrders.length, error: merchlabResult.error ?? undefined },
-      workwearables: { count: workwearablesOrders.length, error: workwearablesResult.error ?? undefined },
-    };
+    const orders: (BarronOrderRow & { source: EntitySource })[] =
+      result.orders.map((o) => {
+        // TODO: once we know the field that distinguishes entities, tag source here.
+        // For now all orders come from the same Barron account.
+        return { ...o, source: 'merchlab' as EntitySource };
+      });
+    console.log(`Step 2 complete: ${orders.length} total orders`);
 
     if (orders.length === 0) {
       return NextResponse.json(
         {
           orders: [],
           total: 0,
-          sources,
-          warning: 'No orders returned from Barron API. Check server logs and sources for details.',
+          warning: result.error || 'No orders returned from Barron API. Check server logs for details.',
         },
         {
           headers: {
@@ -500,7 +490,6 @@ export async function GET(request: NextRequest) {
       {
         orders: enrichedOrders,
         total: enrichedOrders.length,
-        sources,
       },
       {
         headers: {

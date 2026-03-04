@@ -52,10 +52,6 @@ type OrdersData = {
   orders: Order[];
   total: number;
   warning?: string;
-  sources?: {
-    merchlab: { count: number; error?: string };
-    workwearables: { count: number; error?: string };
-  };
 };
 
 type DeliveryStatus = {
@@ -415,27 +411,7 @@ export default function OrdersClient() {
           </div>
         </CardHeader>
         <CardContent>
-          {data?.sources && (() => {
-            const merchlabFailed = data.sources.merchlab.error != null && (data.sources.merchlab.count ?? 0) === 0;
-            const workwearablesFailed = data.sources.workwearables.error != null && (data.sources.workwearables.count ?? 0) === 0;
-            if (!merchlabFailed && !workwearablesFailed) return null;
-            return (
-              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                <p className="font-medium">One or more Barron accounts could not be loaded:</p>
-                <ul className="mt-1 list-inside list-disc">
-                  {merchlabFailed && (
-                    <li><strong>MerchLab:</strong> {data.sources.merchlab.error}</li>
-                  )}
-                  {workwearablesFailed && (
-                    <li><strong>WorkWearables:</strong> {data.sources.workwearables.error}</li>
-                  )}
-                </ul>
-                <p className="mt-2 text-xs">
-                  Set BARRON_CLIENT_ID, BARRON_CLIENT_SECRET, and a MerchLab refresh token (get-refresh-token then exchange-code) for MerchLab. For WorkWearables use get-refresh-token?account=workwearables and exchange-code with account=workwearables. Tokens can be stored in Supabase api_tokens (barron_refresh_token and barron_refresh_token_workwearables) or in env.
-                </p>
-              </div>
-            );
-          })()}
+          {/* Warning banner is shown inside the empty state below if needed */}
           {data && data.orders.length === 0 ? (
             <div className="text-center py-12">
               <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
