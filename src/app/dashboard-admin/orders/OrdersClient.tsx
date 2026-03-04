@@ -224,7 +224,8 @@ export default function OrdersClient() {
     try {
       const statusPromises = orders.map(async (order) => {
         try {
-          const response = await fetch(`/api/admin/orders/delivery-status/${order.orderId}`);
+          const acctQ = order.source === 'workwearables' ? '?account=workwearables' : '';
+          const response = await fetch(`/api/admin/orders/delivery-status/${order.orderId}${acctQ}`);
           if (!response.ok) {
             return {
               orderId: order.orderId,

@@ -2,63 +2,55 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { parseGrandTotal } from '@/server/admin/metrics';
-import { getRefreshToken, saveRefreshToken } from '@/lib/barron/tokenStorage';
+import { getRefreshToken, saveRefreshToken, type BarronAccount } from '@/lib/barron/tokenStorage';
 
 export const runtime = 'nodejs';
 
-type EntitySource = 'merchlab' | 'workwearables';
-
-const ENTITIES: Record<EntitySource, { entityId: string; entityName: string }> = {
-  merchlab:       { entityId: '65146', entityName: 'Customer-ML(Lt-65146' },
-  workwearables:  { entityId: '65142', entityName: 'Customer-ML(Lt-65142' },
+const BARRON_CONFIG = {
+  tokenUrl: 'https://barronb2c.b2clogin.com/barronb2c.onmicrosoft.com/B2C_1_SignIn_US/oauth2/v2.0/token',
+  scope: 'openid offline_access https://barronb2c.onmicrosoft.com/4fbb5489-a64f-4ff6-a9f0-05f5fa2f72e5/Orders',
+  ordersApiUrl: 'https://integration.barron.com/orders/salesorders',
 };
 
-// OAuth2 configuration (shared between both entities)
-function getBarronOAuthConfig() {
+function getClientCredentials() {
   const clientId = process.env.BARRON_CLIENT_ID;
   const clientSecret = process.env.BARRON_CLIENT_SECRET;
-
   if (!clientId || !clientSecret) {
     throw new Error('BARRON_CLIENT_ID and BARRON_CLIENT_SECRET environment variables are required');
   }
-
-  return {
-    clientId,
-    clientSecret,
-    tokenUrl: 'https://barronb2c.b2clogin.com/barronb2c.onmicrosoft.com/B2C_1_SignIn_US/oauth2/v2.0/token',
-    scope: 'openid offline_access https://barronb2c.onmicrosoft.com/4fbb5489-a64f-4ff6-a9f0-05f5fa2f72e5/Orders',
-    ordersApiUrl: 'https://integration.barron.com/orders/salesorders',
-  };
+  return { clientId, clientSecret };
 }
 
-// Single in-memory token cache (shared token for both entities)
-let accessTokenCache: { token: string; expiresAt: number; refreshToken?: string } | null = null;
+// Per-account in-memory token cache (same client, different user logins)
+const accessTokenCache: Record<BarronAccount, { token: string; expiresAt: number; refreshToken?: string } | null> = {
+  merchlab: null,
+  workwearables: null,
+};
 
-async function getAccessToken(): Promise<string> {
-  if (accessTokenCache && accessTokenCache.expiresAt > Date.now()) {
-    return accessTokenCache.token;
+async function getAccessToken(account: BarronAccount): Promise<string> {
+  if (accessTokenCache[account] && accessTokenCache[account]!.expiresAt > Date.now()) {
+    return accessTokenCache[account]!.token;
   }
 
-  const refreshToken = await getRefreshToken() || accessTokenCache?.refreshToken;
+  const refreshToken = await getRefreshToken(account) || accessTokenCache[account]?.refreshToken;
 
   if (!refreshToken) {
     throw new Error(
-      'BARRON_REFRESH_TOKEN is not set. Please obtain a refresh token by completing the OAuth2 authorization flow. ' +
-      'Use /api/admin/orders/get-refresh-token to get the authorization URL.'
+      `${account} refresh token not set. Use /api/admin/orders/get-refresh-token?account=${account} to authorize.`
     );
   }
 
   try {
-    const config = getBarronOAuthConfig();
+    const { clientId, clientSecret } = getClientCredentials();
     const params = new URLSearchParams({
       grant_type: 'refresh_token',
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: refreshToken,
-      scope: config.scope,
+      scope: BARRON_CONFIG.scope,
     });
 
-    const response = await fetch(config.tokenUrl, {
+    const response = await fetch(BARRON_CONFIG.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
@@ -67,41 +59,40 @@ async function getAccessToken(): Promise<string> {
     if (!response.ok) {
       const errorText = await response.text();
       if (response.status === 400 || response.status === 401) {
-        accessTokenCache = null;
-        let errorMessage = 'Refresh token is invalid or expired.';
+        accessTokenCache[account] = null;
+        let errorMessage = `${account} refresh token is invalid or expired.`;
         try {
           const errorData = JSON.parse(errorText);
           if (errorData.error === 'invalid_grant' && errorData.error_description?.includes('expired')) {
-            errorMessage = 'The authentication token has expired. Please contact an administrator to update the refresh token.';
+            errorMessage = `${account} token expired. Re-authorize via /api/admin/orders/get-refresh-token?account=${account}`;
           }
         } catch { /* ignore */ }
         throw new Error(errorMessage);
       }
-      throw new Error(`Failed to get access token: ${response.status} ${errorText}`);
+      throw new Error(`Failed to get access token for ${account}: ${response.status} ${errorText}`);
     }
 
     const data = await response.json();
-    const accessToken = data.access_token;
     const newRefreshToken = data.refresh_token || refreshToken;
     const expiresIn = data.expires_in || 3600;
 
-    accessTokenCache = {
-      token: accessToken,
+    accessTokenCache[account] = {
+      token: data.access_token,
       expiresAt: Date.now() + (expiresIn - 300) * 1000,
       refreshToken: newRefreshToken,
     };
 
     if (data.refresh_token && data.refresh_token !== refreshToken) {
-      console.log('[Barron Token] New refresh token received - saving to database');
-      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
-      accessTokenCache.refreshToken = newRefreshToken;
+      console.log(`[Barron Token ${account}] New refresh token - saving to database`);
+      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in, account);
+      accessTokenCache[account]!.refreshToken = newRefreshToken;
     } else if (data.refresh_token && data.refresh_token_expires_in) {
-      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in);
+      await saveRefreshToken(newRefreshToken, data.refresh_token_expires_in, account);
     }
 
-    return accessToken;
+    return data.access_token;
   } catch (error) {
-    console.error('Error getting access token:', error);
+    console.error(`Error getting access token (${account}):`, error);
     throw error;
   }
 }
@@ -122,23 +113,25 @@ type BarronOrderRow = {
 };
 
 /**
- * Fetch all orders from Barron for a specific entity (handles pagination).
- * Passes entityId as a query parameter so the same token can fetch orders for different entities.
+ * Fetch all orders for a Barron account (handles pagination).
+ * Each account has its own OAuth user login → its own token → its own orders.
  */
-async function fetchOrdersForEntity(
-  source: EntitySource,
-  accessToken: string
+async function fetchOrdersForAccount(
+  account: BarronAccount
 ): Promise<{ orders: BarronOrderRow[]; error?: string }> {
-  const config = getBarronOAuthConfig();
-  const entity = ENTITIES[source];
+  let accessToken: string;
+  try {
+    accessToken = await getAccessToken(account);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Barron ${account}] Token error:`, msg);
+    return { orders: [], error: msg };
+  }
 
-  console.log(`[Barron ${source}] Fetching orders (entityId=${entity.entityId})...`);
+  console.log(`[Barron ${account}] Fetching orders...`);
+  const baseUrl = BARRON_CONFIG.ordersApiUrl;
 
-  const baseUrl = config.ordersApiUrl;
-  const buildUrl = (page: number) =>
-    `${baseUrl}?page=${page}&entityId=${entity.entityId}&entityName=${encodeURIComponent(entity.entityName)}`;
-
-  const firstPageResponse = await fetch(buildUrl(1), {
+  const firstPageResponse = await fetch(`${baseUrl}?page=1`, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -148,7 +141,7 @@ async function fetchOrdersForEntity(
 
   if (!firstPageResponse.ok) {
     const errorText = await firstPageResponse.text();
-    console.error(`[Barron ${source}] Orders API error:`, firstPageResponse.status, errorText);
+    console.error(`[Barron ${account}] Orders API error:`, firstPageResponse.status, errorText);
     return { orders: [], error: `Orders API ${firstPageResponse.status}: ${errorText.slice(0, 200)}` };
   }
 
@@ -167,13 +160,13 @@ async function fetchOrdersForEntity(
     if (dataObj.results && Array.isArray(dataObj.results)) allOrders = [...dataObj.results];
   }
 
-  console.log(`[Barron ${source}] Page 1: ${allOrders.length} orders, ${totalPages} total pages`);
+  console.log(`[Barron ${account}] Page 1: ${allOrders.length} orders, ${totalPages} total pages`);
 
   if (totalPages > 1) {
     const pagePromises = [];
     for (let page = 2; page <= totalPages; page++) {
       pagePromises.push(
-        fetch(buildUrl(page), {
+        fetch(`${baseUrl}?page=${page}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -181,7 +174,7 @@ async function fetchOrdersForEntity(
           },
         }).then(async (response) => {
           if (!response.ok) {
-            console.error(`[Barron ${source}] Failed to fetch page ${page}: ${response.status}`);
+            console.error(`[Barron ${account}] Failed to fetch page ${page}: ${response.status}`);
             return [];
           }
           const pageData = await response.json();
@@ -204,7 +197,7 @@ async function fetchOrdersForEntity(
     }
   }
 
-  console.log(`[Barron ${source}] Total orders fetched: ${allOrders.length}`);
+  console.log(`[Barron ${account}] Total orders fetched: ${allOrders.length}`);
   return { orders: allOrders };
 }
 
@@ -408,28 +401,29 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Get access token
-    console.log('Step 1: Getting Barron access token...');
-    const accessToken = await getAccessToken();
+    // Fetch orders from both Barron user accounts in parallel
+    console.log('Fetching orders from both Barron accounts (MerchLab + WorkWearables)...');
+    const [merchlabResult, workwearablesResult] = await Promise.all([
+      fetchOrdersForAccount('merchlab'),
+      fetchOrdersForAccount('workwearables'),
+    ]);
 
-    // Step 2: Fetch all orders (single call -- both entities share one Barron account)
-    console.log('Step 2: Fetching all orders from Barron...');
-    const result = await fetchOrdersForEntity('merchlab', accessToken);
-
-    const orders: (BarronOrderRow & { source: EntitySource })[] =
-      result.orders.map((o) => {
-        // TODO: once we know the field that distinguishes entities, tag source here.
-        // For now all orders come from the same Barron account.
-        return { ...o, source: 'merchlab' as EntitySource };
-      });
-    console.log(`Step 2 complete: ${orders.length} total orders`);
+    const orders: (BarronOrderRow & { source: BarronAccount })[] = [
+      ...merchlabResult.orders.map((o) => ({ ...o, source: 'merchlab' as BarronAccount })),
+      ...workwearablesResult.orders.map((o) => ({ ...o, source: 'workwearables' as BarronAccount })),
+    ];
+    console.log(`Fetched: ${merchlabResult.orders.length} MerchLab + ${workwearablesResult.orders.length} WorkWearables = ${orders.length} total`);
 
     if (orders.length === 0) {
+      const warnings = [
+        merchlabResult.error && `MerchLab: ${merchlabResult.error}`,
+        workwearablesResult.error && `WorkWearables: ${workwearablesResult.error}`,
+      ].filter(Boolean).join('; ');
       return NextResponse.json(
         {
           orders: [],
           total: 0,
-          warning: result.error || 'No orders returned from Barron API. Check server logs for details.',
+          warning: warnings || 'No orders returned from Barron API.',
         },
         {
           headers: {

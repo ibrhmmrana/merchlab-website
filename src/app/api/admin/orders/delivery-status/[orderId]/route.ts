@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
 import { getAccessToken } from '@/lib/whatsapp/barronAuth';
+import type { BarronAccount } from '@/lib/barron/tokenStorage';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,9 @@ export async function GET(
 
   try {
     const { orderId } = await params;
+    const { searchParams } = new URL(request.url);
+    const account: BarronAccount =
+      searchParams.get('account') === 'workwearables' ? 'workwearables' : 'merchlab';
 
     if (!orderId) {
       return NextResponse.json(
@@ -34,7 +38,7 @@ export async function GET(
       formattedOrderId = `BAR-SO${formattedOrderId}`;
     }
 
-    const accessToken = await getAccessToken();
+    const accessToken = await getAccessToken(account);
 
     // Fetch delivery status from Barron API
     const deliveryStatusUrl = `https://integration.barron.com/orders/delivery-statuses/${formattedOrderId}`;
