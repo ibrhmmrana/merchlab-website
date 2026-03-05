@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthed, noIndexHeaders } from '@/lib/adminAuth';
 import { getAccessToken, getBarronOAuthConfig } from '@/lib/whatsapp/barronAuth';
+import type { BarronAccount } from '@/lib/barron/tokenStorage';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendFlaggedOrderEmail } from '@/lib/gmail/sender';
 
 export const runtime = 'nodejs';
 
-function formatOrderId(id: string): string {
-  const trimmed = String(id || '').trim();
-  if (trimmed.startsWith('BAR-SO')) return trimmed;
-  if (trimmed.startsWith('SO')) return `BAR-${trimmed}`;
-  return `BAR-SO${trimmed}`;
-}
-
-// Fetch all orders from Barron API (handles pagination)
-async function fetchAllOrders(): Promise<Array<{
+type OrderRow = {
   orderId: string;
   contactPersonId: string;
   customerReference: string;
@@ -27,98 +20,82 @@ async function fetchAllOrders(): Promise<Array<{
   hexCode: string;
   orderTaker: string;
   isDelivery: boolean;
-}>> {
-  const accessToken = await getAccessToken();
+  source: BarronAccount;
+};
+
+function formatOrderId(id: string): string {
+  const trimmed = String(id || '').trim();
+  if (trimmed.startsWith('BAR-SO')) return trimmed;
+  if (trimmed.startsWith('SO')) return `BAR-${trimmed}`;
+  return `BAR-SO${trimmed}`;
+}
+
+// Fetch all orders for one Barron account (handles pagination). Returns [] on error.
+async function fetchOrdersForAccount(account: BarronAccount): Promise<OrderRow[]> {
+  let accessToken: string;
+  try {
+    accessToken = await getAccessToken(account);
+  } catch (err) {
+    console.warn(`[status-counts ${account}] Token error:`, err instanceof Error ? err.message : err);
+    return [];
+  }
+
   const config = getBarronOAuthConfig();
-  
-  // Step 1: Fetch page 1 to get total_pages
   const firstPageResponse = await fetch(`${config.ordersApiUrl}?page=1`, {
     method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
   });
 
   if (!firstPageResponse.ok) {
     const errorText = await firstPageResponse.text();
-    throw new Error(`Failed to fetch orders: ${firstPageResponse.status} ${errorText}`);
+    console.error(`[status-counts ${account}] Orders API error:`, firstPageResponse.status, errorText);
+    return [];
   }
 
   const firstPageData = await firstPageResponse.json();
-  
-  // Extract total_pages from response
   let totalPages = 1;
   let allOrders: any[] = [];
-  
-  // Handle different response structures
+
   if (Array.isArray(firstPageData) && firstPageData.length > 0) {
     const firstItem = firstPageData[0] as any;
-    if (firstItem.total_pages !== undefined) {
-      totalPages = Number(firstItem.total_pages) || 1;
-    }
-    if (firstItem.results && Array.isArray(firstItem.results)) {
-      allOrders = [...firstItem.results];
-    }
+    if (firstItem.total_pages !== undefined) totalPages = Number(firstItem.total_pages) || 1;
+    if (firstItem.results && Array.isArray(firstItem.results)) allOrders = [...firstItem.results];
   } else if (firstPageData && typeof firstPageData === 'object' && !Array.isArray(firstPageData)) {
     const dataObj = firstPageData as any;
-    if (dataObj.total_pages !== undefined) {
-      totalPages = Number(dataObj.total_pages) || 1;
-    }
-    if (dataObj.results && Array.isArray(dataObj.results)) {
-      allOrders = [...dataObj.results];
-    }
+    if (dataObj.total_pages !== undefined) totalPages = Number(dataObj.total_pages) || 1;
+    if (dataObj.results && Array.isArray(dataObj.results)) allOrders = [...dataObj.results];
   }
-  
-  console.log(`Found ${totalPages} total pages. Fetched page 1 with ${allOrders.length} orders.`);
-  
-  // Step 2: Fetch remaining pages (if any)
+
   if (totalPages > 1) {
     const pagePromises = [];
     for (let page = 2; page <= totalPages; page++) {
       pagePromises.push(
         fetch(`${config.ordersApiUrl}?page=${page}`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         }).then(async (response) => {
-          if (!response.ok) {
-            console.error(`Failed to fetch page ${page}: ${response.status}`);
-            return [];
-          }
+          if (!response.ok) return [];
           const pageData = await response.json();
-          
-          // Extract results from page
           let pageOrders: any[] = [];
           if (Array.isArray(pageData) && pageData.length > 0) {
             const firstItem = pageData[0] as any;
-            if (firstItem.results && Array.isArray(firstItem.results)) {
-              pageOrders = firstItem.results;
-            }
+            if (firstItem.results && Array.isArray(firstItem.results)) pageOrders = firstItem.results;
           } else if (pageData && typeof pageData === 'object' && !Array.isArray(pageData)) {
             const dataObj = pageData as any;
-            if (dataObj.results && Array.isArray(dataObj.results)) {
-              pageOrders = dataObj.results;
-            }
+            if (dataObj.results && Array.isArray(dataObj.results)) pageOrders = dataObj.results;
           }
-          
-          console.log(`Fetched page ${page} with ${pageOrders.length} orders.`);
           return pageOrders;
         })
       );
     }
-    
-    // Fetch all pages in parallel
-    const remainingPagesResults = await Promise.all(pagePromises);
-    remainingPagesResults.forEach((pageOrders, index) => {
+    const remainingPages = await Promise.all(pagePromises);
+    for (const pageOrders of remainingPages) {
       allOrders = [...allOrders, ...pageOrders];
-    });
+    }
   }
-  
-  console.log(`Total orders fetched across all pages: ${allOrders.length}`);
-  return allOrders;
+
+  console.log(`[status-counts ${account}] Fetched ${allOrders.length} orders`);
+  return allOrders.map((o) => ({ ...o, source: account }));
 }
 
 // Get delivery status for a specific order ID
@@ -385,11 +362,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Get all orders from salesorders endpoint (single call)
-    console.log('Step 1: Fetching all orders from salesorders endpoint...');
-    const orders = await fetchAllOrders();
-    console.log(`Found ${orders.length} orders`);
-    
+    // Step 1: Fetch orders from both Barron accounts in parallel
+    console.log('Step 1: Fetching orders from both Barron accounts...');
+    const [merchlabOrders, workwearablesOrders] = await Promise.all([
+      fetchOrdersForAccount('merchlab'),
+      fetchOrdersForAccount('workwearables'),
+    ]);
+    const orders = [...merchlabOrders, ...workwearablesOrders];
+    console.log(`Found ${orders.length} orders (${merchlabOrders.length} ML + ${workwearablesOrders.length} WW)`);
+
     if (orders.length === 0) {
       return NextResponse.json(
         {
@@ -400,26 +381,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Step 2: Extract all order IDs (BAR-SO format) and get access token
-    const accessToken = await getAccessToken();
+    // Step 2: Get access tokens for both accounts (for delivery status lookups)
+    const accessTokens: Record<BarronAccount, string | null> = { merchlab: null, workwearables: null };
+    try { accessTokens.merchlab = await getAccessToken('merchlab'); } catch { /* skip */ }
+    try { accessTokens.workwearables = await getAccessToken('workwearables'); } catch { /* skip */ }
     
-    // Format order IDs to BAR-SO format
-    const orderIdMap = new Map<string, typeof orders[0]>();
+    const orderIdMap = new Map<string, OrderRow>();
     orders.forEach(order => {
-      const id = order.orderId || '';
-      let formattedId = String(id).trim();
-      if (formattedId.startsWith('BAR-SO')) {
-        formattedId = formattedId;
-      } else if (formattedId.startsWith('SO')) {
-        formattedId = `BAR-${formattedId}`;
-      } else {
-        formattedId = `BAR-SO${formattedId}`;
-      }
-      orderIdMap.set(formattedId, order);
+      orderIdMap.set(formatOrderId(order.orderId), order);
     });
-    
+
     const orderIds = Array.from(orderIdMap.keys());
-    console.log(`Step 2: Extracted ${orderIds.length} order IDs (BAR-SO format)`);
+    console.log(`Step 2: Extracted ${orderIds.length} order IDs`);
     
     // Initialize status counts with new stage names
     const statusCounts: Record<string, { count: number; orders: any[]; hasStuckOrders: boolean }> = {
@@ -441,8 +414,11 @@ export async function GET(request: NextRequest) {
       const stagePromises = batch.map(async (orderId) => {
         const order = orderIdMap.get(orderId);
         if (!order) return null;
-        
-        const deliveryStage = await getDeliveryStageForOrder(orderId, accessToken);
+
+        const token = accessTokens[order.source];
+        if (!token) return null;
+
+        const deliveryStage = await getDeliveryStageForOrder(orderId, token);
         return {
           order,
           deliveryStage: deliveryStage.stage,
