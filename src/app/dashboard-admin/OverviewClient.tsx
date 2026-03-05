@@ -99,6 +99,7 @@ type OrderStatusData = {
     orderTaker: string;
     isDelivery: boolean;
     isStuck: boolean;
+    source?: 'merchlab' | 'workwearables';
   }>>;
 };
 
