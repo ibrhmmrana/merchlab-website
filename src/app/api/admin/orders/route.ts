@@ -484,6 +484,10 @@ export async function GET(request: NextRequest) {
       {
         orders: enrichedOrders,
         total: enrichedOrders.length,
+        _debug: {
+          merchlab: { count: merchlabResult.orders.length, error: merchlabResult.error || null },
+          workwearables: { count: workwearablesResult.orders.length, error: workwearablesResult.error || null },
+        },
       },
       {
         headers: {
